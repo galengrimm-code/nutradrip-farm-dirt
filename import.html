@@ -243,6 +243,11 @@
         
         saveLocalData(); updateSummary(); showStatus(`✓ Imported ${total} field(s)`, true);
         document.getElementById('boundaryFiles').value = ''; document.getElementById('boundaryFieldName').value = '';
+        // Auto-sync to Google Sheets if signed in
+        if (SheetsAPI.isSignedIn) {
+          showStatus('Syncing to Google Sheets...', true);
+          await syncToSheets();
+        }
       } catch (e) { showStatus('Error: ' + e.message, false); console.error(e); }
     }
 
@@ -300,6 +305,11 @@
         if (Object.keys(fieldBoundaries).length > 0) assignSamplesToFields();
         saveLocalData(); updateSummary(); showStatus(`✓ Imported ${samples.length} samples`, true);
         document.getElementById('sampleFiles').value = ''; document.getElementById('sampleYear').value = '';
+        // Auto-sync to Google Sheets if signed in
+        if (SheetsAPI.isSignedIn) {
+          showStatus('Syncing to Google Sheets...', true);
+          await syncToSheets();
+        }
       } catch (e) { showStatus('Error: ' + e.message, false); console.error(e); }
     }
 

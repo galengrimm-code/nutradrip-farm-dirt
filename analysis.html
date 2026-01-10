@@ -20,29 +20,29 @@
     .sign-in-btn { padding: 0.5rem 1rem; background: #4285f4; color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer; }
     .sign-in-btn.signed-in { background: #22c55e; }
     .sign-in-btn.signed-in:hover { background: #16a34a; }
-    .analysis-container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    .analysis-container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
     .field-selector { background: white; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .field-selector label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #475569; }
-    .field-selector select { width: 100%; max-width: 300px; padding: 0.75rem; font-size: 1rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; }
-    .summary-card { background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; }
-    .summary-card h3 { margin: 0 0 0.5rem 0; color: #1e293b; }
-    .summary-card p { margin: 0; color: #64748b; font-size: 0.875rem; }
-    .trend-card { background: white; border: 2px solid; border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1.25rem; }
+    .field-selector select { width: 100%; max-width: 400px; padding: 0.75rem; font-size: 1rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; }
+    .summary-card { background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1.5rem; }
+    .summary-card h3 { margin: 0 0 0.5rem 0; color: #1e293b; font-size: 1.25rem; }
+    .summary-card p { margin: 0; color: #64748b; font-size: 1rem; }
+    .trend-card { background: white; border: 2px solid; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem; }
     .trend-card.positive { background: #f0fdf4; border-color: #22c55e; }
     .trend-card.negative { background: #fef2f2; border-color: #ef4444; }
     .trend-card.neutral { background: #f8fafc; border-color: #94a3b8; }
-    .trend-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
-    .trend-title { font-size: 1.125rem; font-weight: 600; color: #1e293b; margin: 0; }
-    .trend-percent { font-size: 1.5rem; font-weight: 700; text-align: right; }
-    .trend-subtitle { font-size: 0.75rem; color: #64748b; }
-    .trend-content { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
-    .trend-values { flex: 0 0 140px; min-width: 120px; }
-    .trend-values-header { font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; }
-    .trend-value-row { display: flex; justify-content: space-between; padding: 0.375rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.9375rem; }
+    .trend-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
+    .trend-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin: 0; }
+    .trend-percent { font-size: 1.75rem; font-weight: 700; text-align: right; }
+    .trend-subtitle { font-size: 0.875rem; color: #64748b; }
+    .trend-content { display: flex; gap: 2rem; flex-wrap: wrap; align-items: center; }
+    .trend-values { flex: 0 0 180px; min-width: 150px; }
+    .trend-values-header { font-size: 0.8125rem; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; }
+    .trend-value-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0; font-size: 1rem; }
     .trend-value-row .year { color: #64748b; }
     .trend-value-row .value { font-weight: 600; color: #1e293b; }
-    .trend-change { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 2px solid; font-size: 0.875rem; }
-    .trend-graph { flex: 1; min-width: 250px; min-height: 120px; }
+    .trend-change { margin-top: 1rem; padding-top: 1rem; border-top: 2px solid; font-size: 1rem; }
+    .trend-graph { flex: 1; min-width: 400px; min-height: 160px; }
     .no-data { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 2rem; text-align: center; color: #92400e; }
     #statusMessage { display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 0.75rem 1rem; border-radius: 0.375rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     @media (max-width: 639px) { .analysis-container { padding: 1rem; } .trend-content { flex-direction: column; } .trend-values { flex: none; width: 100%; } }
@@ -224,10 +224,10 @@
       const sortedYears = Object.keys(yearlyData).sort(), values = sortedYears.map(y => yearlyData[y]);
       if (values.length < 2) return '';
       const minVal = Math.min(...values) * 0.9, maxVal = Math.max(...values) * 1.1, range = maxVal - minVal || 1;
-      const width = 350, height = 150, padding = 15, graphWidth = width - padding * 2, graphHeight = height - padding * 2 - 25;
+      const width = 600, height = 180, padding = 20, graphWidth = width - padding * 2, graphHeight = height - padding * 2 - 30;
       const points = values.map((v, i) => { const x = padding + (i / (values.length - 1)) * graphWidth, y = padding + graphHeight - ((v - minVal) / range) * graphHeight; return `${x},${y}`; }).join(' ');
-      let dots = ''; values.forEach((v, i) => { const x = padding + (i / (values.length - 1)) * graphWidth, y = padding + graphHeight - ((v - minVal) / range) * graphHeight; dots += `<circle cx="${x}" cy="${y}" r="7" fill="${color}" stroke="white" stroke-width="2"/><text x="${x}" y="${height - 5}" text-anchor="middle" font-size="12" fill="#64748b" font-weight="500">${sortedYears[i]}</text><text x="${x}" y="${y - 14}" text-anchor="middle" font-size="13" fill="#1e293b" font-weight="700">${v.toFixed(1)}</text>`; });
-      return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" style="max-width:450px;"><line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding-25}" stroke="#e2e8f0"/><line x1="${padding}" y1="${height-padding-25}" x2="${width-padding}" y2="${height-padding-25}" stroke="#e2e8f0"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+      let dots = ''; values.forEach((v, i) => { const x = padding + (i / (values.length - 1)) * graphWidth, y = padding + graphHeight - ((v - minVal) / range) * graphHeight; dots += `<circle cx="${x}" cy="${y}" r="8" fill="${color}" stroke="white" stroke-width="2"/><text x="${x}" y="${height - 5}" text-anchor="middle" font-size="14" fill="#64748b" font-weight="600">${sortedYears[i]}</text><text x="${x}" y="${y - 16}" text-anchor="middle" font-size="15" fill="#1e293b" font-weight="700">${v.toFixed(1)}</text>`; });
+      return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet"><line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding-30}" stroke="#e2e8f0" stroke-width="2"/><line x1="${padding}" y1="${height-padding-30}" x2="${width-padding}" y2="${height-padding-30}" stroke="#e2e8f0" stroke-width="2"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
     }
 
     function showStatus(msg, isSuccess) { const el = document.getElementById('statusMessage'); el.textContent = msg; el.style.display = 'block'; el.style.background = isSuccess ? '#dcfce7' : '#fee2e2'; el.style.color = isSuccess ? '#166534' : '#991b1b'; setTimeout(() => el.style.display = 'none', 4000); }

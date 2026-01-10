@@ -455,7 +455,21 @@
         const st = localStorage.getItem('soilSettings');
         if (s) sampleData = JSON.parse(s);
         if (b) fieldBoundaries = JSON.parse(b);
-        if (st) settings = JSON.parse(st);
+        if (st) {
+          const rawSettings = JSON.parse(st);
+          // Convert flat settings (pH_min, pH_max) to nested format ({pH: {min, max}})
+          settings = {
+            pH: { min: rawSettings.pH_min || 6.3, max: rawSettings.pH_max || 6.9 },
+            P: { min: rawSettings.P_min || 20, max: null },
+            K: { min: rawSettings.K_min || 150, max: null },
+            OM: { min: rawSettings.OM_min || 3.0, max: null },
+            Ca_sat: { min: rawSettings.Ca_sat_min || 65, max: rawSettings.Ca_sat_max || 75 },
+            Mg_sat: { min: rawSettings.Mg_sat_min || null, max: rawSettings.Mg_sat_max || 15 },
+            K_Sat: { min: rawSettings.K_sat_min || 3.0, max: null },
+            H_Sat: { min: null, max: rawSettings.H_sat_max || 5.0 },
+            bufferPercent: rawSettings.bufferPercent || 25
+          };
+        }
         updateFieldSelector();
         updateYearSelector();
         updateMap();
@@ -514,7 +528,8 @@
         filtered.forEach(sample => {
           const value = sample[selectedAttribute];
           if (value === undefined || value === null) return;
-          const color = Utils.getColor(value, selectedAttribute, settings);
+          const bufferPct = settings.bufferPercent || 25;
+          const color = Utils.getColor(value, selectedAttribute, settings, bufferPct);
           const size = fieldModeActive ? 44 : 32;
           const fontSize = fieldModeActive ? 14 : 11;
           const displayVal = Utils.formatNumber(value, selectedAttribute === 'pH' ? 1 : 0);
@@ -531,7 +546,8 @@
         Object.entries(groups).forEach(([fieldName, samples]) => {
           const avg = Utils.calculateFieldAverage(samples, selectedAttribute);
           if (avg === null) return;
-          const color = Utils.getColor(avg, selectedAttribute, settings);
+          const bufferPct = settings.bufferPercent || 25;
+          const color = Utils.getColor(avg, selectedAttribute, settings, bufferPct);
           let center;
           if (fieldBoundaries[fieldName]) {
             const polys = fieldBoundaries[fieldName];
