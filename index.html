@@ -520,7 +520,7 @@
       // Filter samples
       let filtered = sampleData.filter(s => {
         if (selectedField !== 'all' && s.field !== selectedField) return false;
-        if (selectedYear !== 'all' && s.year != selectedYear) return false;
+        if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
         return true;
       });
       

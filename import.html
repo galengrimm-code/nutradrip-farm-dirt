@@ -257,10 +257,18 @@
         if (!f.geometry) return;
         const type = f.geometry.type;
         if (type !== 'Polygon' && type !== 'MultiPolygon') return;
-        const props = f.properties || {}, name = defaultName || props.FIELD_NAME || props.field_name || props.name || props.Name || 'Unknown';
-        if (!boundaries[name]) boundaries[name] = [];
-        if (type === 'Polygon') { boundaries[name].push(f.geometry.coordinates[0].map(c => [c[1], c[0]])); }
-        else { f.geometry.coordinates.forEach(poly => { boundaries[name].push(poly[0].map(c => [c[1], c[0]])); }); }
+        const props = f.properties || {};
+        
+        // Get field name - try FIELD_NAME first, then extract last part from other name fields
+        let fieldName = defaultName || props.FIELD_NAME || props.Field_Name || props.field_name;
+        if (!fieldName) {
+          const rawName = props.name || props.Name || props.Field || props.field || 'Unknown';
+          fieldName = rawName.includes('_') ? rawName.split('_').pop() : rawName;
+        }
+        
+        if (!boundaries[fieldName]) boundaries[fieldName] = [];
+        if (type === 'Polygon') { boundaries[fieldName].push(f.geometry.coordinates[0].map(c => [c[1], c[0]])); }
+        else { f.geometry.coordinates.forEach(poly => { boundaries[fieldName].push(poly[0].map(c => [c[1], c[0]])); }); }
       });
       return boundaries;
     }
@@ -318,9 +326,19 @@
       features.forEach((f, idx) => {
         if (!f.geometry || f.geometry.type !== 'Point') return;
         const [lon, lat] = f.geometry.coordinates, props = f.properties || {};
+        
+        // Get field name - try FIELD_NAME first, then extract last part from other name fields
+        let fieldName = props.FIELD_NAME || props.Field_Name || props.field_name;
+        if (!fieldName) {
+          // Fallback: get from name/Field and extract last part after underscores
+          const rawName = props.name || props.Name || props.Field || props.field || 'Unknown';
+          // Extract last part after underscore (e.g., "Precision Farms_Precision Farms_WCG" -> "WCG")
+          fieldName = rawName.includes('_') ? rawName.split('_').pop() : rawName;
+        }
+        
         const sample = { 
           sampleId: props.SampleID || props.sampleId || props.ID || props.ORG_ID || (idx + 1), 
-          field: props.FIELD_NAME || props.Field_Name || props.field_name || props.Field || props.field || 'Unknown', 
+          field: fieldName, 
           lat, 
           lon, 
           year: assignedYear || parseYear(props.CropYear || props.Year || props.year || props.date) 
