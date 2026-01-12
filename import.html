@@ -90,9 +90,16 @@
 
     <div class="import-section green">
       <h3>🔬 Import Samples</h3>
-      <div class="form-group">
-        <label>Sample Year (optional)</label>
-        <input type="text" id="sampleYear" placeholder="e.g., 2024" style="width: 120px;">
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="form-group">
+          <label>Sample Year (optional)</label>
+          <input type="text" id="sampleYear" placeholder="e.g., 2024" style="width: 120px;">
+        </div>
+        <div class="form-group">
+          <label>Sample Depth</label>
+          <input type="text" id="sampleDepth" value="6" style="width: 80px;"> 
+          <small>inches</small>
+        </div>
       </div>
       <div class="form-group">
         <label>Sample File(s)</label>
@@ -316,6 +323,7 @@
     async function uploadSamples() {
       const files = Array.from(document.getElementById('sampleFiles').files);
       const year = document.getElementById('sampleYear').value.trim() || null;
+      const depth = document.getElementById('sampleDepth').value.trim() || '6';
       if (files.length === 0) { showStatus('Please select file(s)', false); return; }
       showStatus('Processing...', true);
       try {
@@ -330,20 +338,20 @@
           // Single zip file
           const arrayBuffer = await files[0].arrayBuffer();
           const geojson = await shp(arrayBuffer);
-          samples = geojsonToSamples(geojson, year);
+          samples = geojsonToSamples(geojson, year, depth);
         } else if (shpFile && dbfFile) {
           // Multiple shapefile components - combine them
           const shpBuffer = await shpFile.arrayBuffer();
           const dbfBuffer = await dbfFile.arrayBuffer();
           const geojson = await shp({ shp: shpBuffer, dbf: dbfBuffer });
-          samples = geojsonToSamples(geojson, year);
+          samples = geojsonToSamples(geojson, year, depth);
         } else if (csvFile) {
           const text = await csvFile.text();
-          samples = parseCSV(text, year);
+          samples = parseCSV(text, year, depth);
         } else if (jsonFile) {
           const text = await jsonFile.text();
           const geojson = JSON.parse(text);
-          samples = geojsonToSamples(geojson, year);
+          samples = geojsonToSamples(geojson, year, depth);
         } else {
           throw new Error('Please select a ZIP, Shapefile (.shp + .dbf), CSV, or GeoJSON');
         }
@@ -364,13 +372,13 @@
     // Normalize column names from different data formats
     function normalizeNutrientData(sample) {
       const mappings = {
-        'P': ['P', 'P (M3)', 'P_M3', 'Phosphorus'],
-        'pH': ['pH', 'pH (1_1)', 'pH_1_1', 'ph'],
-        'K': ['K', 'K (M3)', 'K_M3', 'Potassium'],
+        'P': ['P', 'P (M3)', 'P_M3', 'Phosphorus', 'Bray_P1', 'Mehlich2_P'],
+        'pH': ['pH', 'pH (1_1)', 'pH_1_1', 'ph', 'Soil_pH'],
+        'K': ['K', 'K (M3)', 'K_M3', 'Potassium', 'ExchK'],
         'OM': ['OM', 'OM (LOI)', 'OM_LOI', 'Organic_Matter'],
         'CEC': ['CEC', 'CEC (Calc)', 'CEC_Calc', 'CEC (Cal_1'],
-        'Ca_sat': ['Ca_sat', 'BS-Ca', 'BS_Ca', 'Ca_Base_Sat'],
-        'Mg_sat': ['Mg_sat', 'BS-Mg', 'BS_Mg', 'Mg_Base_Sat'],
+        'Ca_sat': ['Ca_sat', 'BS-Ca', 'BS_Ca', 'Ca_Base_Sat', 'Ca_Sat'],
+        'Mg_sat': ['Mg_sat', 'BS-Mg', 'BS_Mg', 'Mg_Base_Sat', 'Mg_Sat'],
         'K_Sat': ['K_Sat', 'BS-K', 'BS_K', 'K_Base_Sat'],
         'H_Sat': ['H_Sat', 'BS-H', 'BS_H', 'H_Base_Sat'],
         'Zn': ['Zn', 'Zn (M3)', 'Zn_M3', 'Zinc'],
@@ -378,7 +386,7 @@
         'Mn': ['Mn', 'Mn (M3)', 'Mn_M3', 'Manganese'],
         'Fe': ['Fe', 'Fe (M3)', 'Fe_M3', 'Iron'],
         'Boron': ['Boron', 'B (M3)', 'B_M3', 'B'],
-        'S': ['S', 'S (M3)', 'S_M3', 'Sulfur']
+        'S': ['S', 'S (M3)', 'S_M3', 'Sulfur', 'SO4']
       };
       
       for (const [standard, alternatives] of Object.entries(mappings)) {
@@ -395,7 +403,7 @@
       return sample;
     }
 
-    function geojsonToSamples(geojson, assignedYear) {
+    function geojsonToSamples(geojson, assignedYear, assignedDepth) {
       const samples = [], features = geojson.features || [geojson];
       
       // Debug
@@ -429,12 +437,16 @@
           }
         }
         
+        // Get depth from file or use assigned depth
+        const fileDepth = props.Depth || props.depth || props.DEPTH || props.DepthUnits;
+        
         const sample = { 
           sampleId: props.SampleID || props.sampleId || props.ID || props.ORG_ID || (idx + 1), 
           field: fieldName, 
           lat, 
           lon, 
-          year: assignedYear || parseYear(props.CropYear || props.Year || props.year || props.date) 
+          year: assignedYear || parseYear(props.CropYear || props.Year || props.year || props.date),
+          depth: assignedDepth || fileDepth || '6'
         };
         Object.entries(props).forEach(([k, v]) => { if (sample[k] === undefined && v !== null) { const n = parseFloat(v); sample[k] = isNaN(n) ? v : n; } });
         
@@ -446,7 +458,7 @@
       return samples;
     }
 
-    function parseCSV(text, assignedYear) {
+    function parseCSV(text, assignedYear, assignedDepth) {
       const lines = text.trim().split('\n'); if (lines.length < 2) return [];
       const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '')), samples = [];
       for (let i = 1; i < lines.length; i++) {
@@ -454,6 +466,7 @@
         headers.forEach((h, idx) => { const v = values[idx]; if (v) { const n = parseFloat(v); sample[h] = isNaN(n) ? v : n; } });
         sample.lat = sample.lat || sample.Lat || sample.LAT; sample.lon = sample.lon || sample.Lon || sample.LON || sample.lng;
         sample.field = sample.field || sample.Field || 'Unknown'; sample.year = assignedYear || parseYear(sample.year || sample.Year);
+        sample.depth = assignedDepth || sample.depth || sample.Depth || '6';
         sample.sampleId = sample.sampleId || sample.SampleID || sample.ID || i;
         if (sample.lat && sample.lon) samples.push(sample);
       }
