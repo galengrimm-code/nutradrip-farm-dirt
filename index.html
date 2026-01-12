@@ -218,6 +218,8 @@
                 accessToken = savedToken;
                 tokenExpiry = parseInt(savedExpiry);
                 this.isSignedIn = true;
+                // Set the token for gapi client
+                gapi.client.setToken({ access_token: accessToken });
                 this.onSignInChange(true);
               }
               
