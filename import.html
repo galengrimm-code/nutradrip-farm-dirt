@@ -390,9 +390,21 @@
         }
         
         if (samples.length === 0) throw new Error('No samples found in file');
-        sampleData = [...sampleData, ...samples];
+        
+        // Prevent duplicates - check by sampleId + year + field
+        const existingKeys = new Set(sampleData.map(s => `${s.sampleId}-${s.year}-${s.field}`));
+        const newSamples = samples.filter(s => !existingKeys.has(`${s.sampleId}-${s.year}-${s.field}`));
+        
+        if (newSamples.length === 0) {
+          showStatus('All samples already exist (duplicates skipped)', false);
+          return;
+        }
+        
+        const skipped = samples.length - newSamples.length;
+        sampleData = [...sampleData, ...newSamples];
         if (Object.keys(fieldBoundaries).length > 0) assignSamplesToFields();
-        saveLocalData(); updateSummary(); showStatus(`✓ Imported ${samples.length} samples`, true);
+        saveLocalData(); updateSummary(); 
+        showStatus(`✓ Imported ${newSamples.length} samples${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
         document.getElementById('sampleFiles').value = ''; document.getElementById('sampleYear').value = '';
         // Auto-sync to Google Sheets if signed in
         if (SheetsAPI.isSignedIn) {
