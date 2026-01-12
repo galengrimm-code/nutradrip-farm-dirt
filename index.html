@@ -133,7 +133,7 @@
     
     <div class="main-content" style="position: relative;">
       <div id="map"></div>
-      <div id="statsBox" style="position: absolute; top: 10px; right: 60px; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; font-size: 13px; min-width: 140px;">
+      <div id="statsBox" style="position: absolute; top: 80px; right: 10px; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; font-size: 13px; min-width: 140px;">
         <div style="font-weight: 600; margin-bottom: 6px; color: #374151;" id="statsTitle">Field Attribute Stats</div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">Avg:</span> <span id="statsAvg" style="font-weight: 600;">-</span></div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">High:</span> <span id="statsHigh" style="font-weight: 600; color: #22c55e;">-</span></div>
@@ -173,6 +173,7 @@
     // ========== SHEETS API ==========
     let tokenClient;
     let accessToken = null;
+    let tokenExpiry = null;
     
     const SheetsAPI = {
       isInitialized: false,
@@ -200,10 +201,28 @@
                     return;
                   }
                   accessToken = response.access_token;
+                  // Token expires in 1 hour, set expiry with buffer
+                  tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
+                  // Save token to localStorage
+                  localStorage.setItem('googleAccessToken', accessToken);
+                  localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
               });
+              
+              // Check for saved token
+              const savedToken = localStorage.getItem('googleAccessToken');
+              const savedExpiry = localStorage.getItem('googleTokenExpiry');
+              if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
+                accessToken = savedToken;
+                tokenExpiry = parseInt(savedExpiry);
+                this.isSignedIn = true;
+                this.onSignInChange(true);
+              }
+              
+              // Set up token refresh check every 5 minutes
+              setInterval(() => this.checkTokenRefresh(), 300000);
               
               resolve(true);
             } catch (error) {
@@ -214,6 +233,14 @@
         });
       },
       
+      checkTokenRefresh() {
+        // If token expires in less than 10 minutes, refresh it silently
+        if (this.isSignedIn && tokenExpiry && Date.now() > tokenExpiry - 600000) {
+          console.log('Token expiring soon, refreshing...');
+          tokenClient.requestAccessToken({ prompt: '' }); // Silent refresh
+        }
+      },
+      
       async signIn() { 
         tokenClient.requestAccessToken({ prompt: 'consent' }); 
       },
@@ -221,7 +248,10 @@
         if (accessToken) {
           google.accounts.oauth2.revoke(accessToken);
           accessToken = null;
+          tokenExpiry = null;
         }
+        localStorage.removeItem('googleAccessToken');
+        localStorage.removeItem('googleTokenExpiry');
         this.isSignedIn = false;
         this.onSignInChange(false);
       },
