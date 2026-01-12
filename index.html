@@ -574,7 +574,8 @@
         userInfo.textContent = 'Connected';
         authBtn.textContent = '✓ Signed In';
         authBtn.classList.add('signed-in');
-        loadData();
+        // Load from Google Sheets (the database)
+        loadFromSheets();
       } else {
         userInfo.textContent = '';
         authBtn.textContent = 'Sign In with Google';
@@ -582,8 +583,7 @@
       }
     }
 
-    async function loadData() {
-      if (!SheetsAPI.isSignedIn) { loadLocalData(); return; }
+    async function loadFromSheets() {
       Utils.showStatus('Loading from Google Sheets...', true);
       try {
         const fields = await SheetsAPI.getFields();
@@ -594,11 +594,20 @@
         updateFieldSelector();
         updateYearSelector();
         updateMap();
+        // Also save to localStorage as cache
         saveLocalData();
         Utils.showStatus(`✓ Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
       } catch (e) {
         console.error(e);
-        Utils.showStatus('Error loading from Sheets', false);
+        Utils.showStatus('Error loading from Sheets - using local cache', false);
+        loadLocalData();
+      }
+    }
+
+    async function loadData() {
+      if (SheetsAPI.isSignedIn) {
+        await loadFromSheets();
+      } else {
         loadLocalData();
       }
     }
