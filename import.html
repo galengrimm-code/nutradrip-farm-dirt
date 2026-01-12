@@ -321,6 +321,39 @@
       } catch (e) { showStatus('Error: ' + e.message, false); console.error(e); }
     }
 
+    // Normalize column names from different data formats
+    function normalizeNutrientData(sample) {
+      const mappings = {
+        'P': ['P', 'P (M3)', 'P_M3', 'Phosphorus'],
+        'pH': ['pH', 'pH (1_1)', 'pH_1_1', 'ph'],
+        'K': ['K', 'K (M3)', 'K_M3', 'Potassium'],
+        'OM': ['OM', 'OM (LOI)', 'OM_LOI', 'Organic_Matter'],
+        'Ca_sat': ['Ca_sat', 'BS-Ca', 'BS_Ca', 'Ca_Base_Sat'],
+        'Mg_sat': ['Mg_sat', 'BS-Mg', 'BS_Mg', 'Mg_Base_Sat'],
+        'K_Sat': ['K_Sat', 'BS-K', 'BS_K', 'K_Base_Sat'],
+        'H_Sat': ['H_Sat', 'BS-H', 'BS_H', 'H_Base_Sat'],
+        'Zn': ['Zn', 'Zn (M3)', 'Zn_M3', 'Zinc'],
+        'Cu': ['Cu', 'Cu (M3)', 'Cu_M3', 'Copper'],
+        'Mn': ['Mn', 'Mn (M3)', 'Mn_M3', 'Manganese'],
+        'Fe': ['Fe', 'Fe (M3)', 'Fe_M3', 'Iron'],
+        'Boron': ['Boron', 'B (M3)', 'B_M3', 'B'],
+        'S': ['S', 'S (M3)', 'S_M3', 'Sulfur']
+      };
+      
+      for (const [standard, alternatives] of Object.entries(mappings)) {
+        if (sample[standard] === undefined) {
+          for (const alt of alternatives) {
+            if (sample[alt] !== undefined && sample[alt] !== null && sample[alt] !== '') {
+              const num = parseFloat(sample[alt]);
+              sample[standard] = isNaN(num) ? sample[alt] : num;
+              break;
+            }
+          }
+        }
+      }
+      return sample;
+    }
+
     function geojsonToSamples(geojson, assignedYear) {
       const samples = [], features = geojson.features || [geojson];
       features.forEach((f, idx) => {
@@ -344,6 +377,10 @@
           year: assignedYear || parseYear(props.CropYear || props.Year || props.year || props.date) 
         };
         Object.entries(props).forEach(([k, v]) => { if (sample[k] === undefined && v !== null) { const n = parseFloat(v); sample[k] = isNaN(n) ? v : n; } });
+        
+        // Normalize nutrient column names
+        normalizeNutrientData(sample);
+        
         samples.push(sample);
       });
       return samples;
