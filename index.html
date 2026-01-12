@@ -508,7 +508,13 @@
         updateMap(); 
       });
       document.getElementById('fieldModeBtn').addEventListener('click', toggleFieldMode);
-      document.getElementById('refreshBtn').addEventListener('click', loadData);
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        // Reload data from localStorage (in case it was changed on another page)
+        sampleData = [];
+        fieldBoundaries = {};
+        loadLocalData();
+        Utils.showStatus('Data refreshed', true);
+      });
     }
     
     function updateCompareYearOptions() {
