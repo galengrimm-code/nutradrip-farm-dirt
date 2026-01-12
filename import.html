@@ -464,47 +464,60 @@
 
     function assignSamplesToFields() {
       sampleData.forEach(sample => {
-        // Skip if sample already has a valid field name (not Unknown)
+        // Skip if sample already has a valid field name from FIELD_NAME property (not Unknown)
         if (sample.field && sample.field !== 'Unknown') return;
         
+        let assigned = false;
         for (const [name, polys] of Object.entries(fieldBoundaries)) {
+          if (assigned) break;
           const arr = Array.isArray(polys[0]?.[0]) ? polys : [polys];
           for (const poly of arr) { 
-            if (isPointInPolygon([sample.lat, sample.lon], poly)) { 
+            if (isPointInOrNearPolygon([sample.lat, sample.lon], poly)) { 
               sample.field = name; 
-              return; // Exit once found
+              assigned = true;
+              break;
             } 
           }
         }
       });
     }
 
-    function isPointInPolygon(point, polygon) {
+    function isPointInOrNearPolygon(point, polygon) {
       const [lat, lon] = point; 
       let inside = false;
-      const epsilon = 0.00001; // Small buffer for edge cases
+      const epsilon = 0.0001; // Larger buffer (~10 meters) for edge cases
       
+      // First check: is point very close to any vertex?
+      for (let i = 0; i < polygon.length; i++) {
+        const [plat, plon] = polygon[i];
+        if (Math.abs(lat - plat) < epsilon && Math.abs(lon - plon) < epsilon) {
+          return true;
+        }
+      }
+      
+      // Second check: is point very close to any edge?
       for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
         const [lat1, lon1] = polygon[i], [lat2, lon2] = polygon[j];
         
-        // Check if point is on a vertex
-        if ((Math.abs(lat - lat1) < epsilon && Math.abs(lon - lon1) < epsilon) ||
-            (Math.abs(lat - lat2) < epsilon && Math.abs(lon - lon2) < epsilon)) {
-          return true;
-        }
+        // Distance from point to line segment
+        const dx = lat2 - lat1;
+        const dy = lon2 - lon1;
+        const len2 = dx * dx + dy * dy;
         
-        // Check if point is on an edge
-        if (lon1 !== lon2) {
-          const t = (lon - lon1) / (lon2 - lon1);
-          if (t >= 0 && t <= 1) {
-            const latOnEdge = lat1 + t * (lat2 - lat1);
-            if (Math.abs(lat - latOnEdge) < epsilon) {
-              return true;
-            }
+        if (len2 > 0) {
+          let t = Math.max(0, Math.min(1, ((lat - lat1) * dx + (lon - lon1) * dy) / len2));
+          const nearestLat = lat1 + t * dx;
+          const nearestLon = lon1 + t * dy;
+          const dist = Math.sqrt((lat - nearestLat) ** 2 + (lon - nearestLon) ** 2);
+          if (dist < epsilon) {
+            return true;
           }
         }
-        
-        // Standard ray casting
+      }
+      
+      // Third check: standard ray casting for inside
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [lat1, lon1] = polygon[i], [lat2, lon2] = polygon[j];
         if (((lon1 > lon) !== (lon2 > lon)) && (lat < (lat2 - lat1) * (lon - lon1) / (lon2 - lon1) + lat1)) {
           inside = !inside;
         }
