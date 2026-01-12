@@ -118,13 +118,6 @@
           <label>COMPARE TO</label>
           <select id="compareYearSelect"><option value="">Select Year</option></select>
         </div>
-        <div class="control-group">
-          <label>VIEW MODE</label>
-          <div class="toggle-group">
-            <button class="toggle-btn active" id="pointViewBtn">Point Detail</button>
-            <button class="toggle-btn" id="fieldViewBtn">Field Average</button>
-          </div>
-        </div>
       </div>
       <div class="controls-right">
         <button class="button" id="fieldModeBtn">📱 Field Mode</button>
@@ -138,8 +131,14 @@
       <span id="legendText">Low → High</span>
     </div>
     
-    <div class="main-content">
+    <div class="main-content" style="position: relative;">
       <div id="map"></div>
+      <div id="statsBox" style="position: absolute; top: 10px; right: 60px; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; font-size: 13px; min-width: 140px;">
+        <div style="font-weight: 600; margin-bottom: 6px; color: #374151;" id="statsTitle">Field Attribute Stats</div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">Avg:</span> <span id="statsAvg" style="font-weight: 600;">-</span></div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">High:</span> <span id="statsHigh" style="font-weight: 600; color: #22c55e;">-</span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #64748b;">Low:</span> <span id="statsLow" style="font-weight: 600; color: #ef4444;">-</span></div>
+      </div>
     </div>
     
     <div id="statusMessage"></div>
@@ -299,18 +298,30 @@
         setTimeout(() => el.style.display = 'none', 4000);
       },
       
-      // Get median-based color (for CEC and micronutrients)
+      // Get median-based color using IQR to handle outliers
       getMedianBasedColor(value, values) {
         if (!values || values.length === 0) return '#94a3b8';
         const sorted = [...values].sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        const min = sorted[0];
-        const max = sorted[sorted.length - 1];
-        const range = max - min;
+        const len = sorted.length;
+        
+        // Calculate quartiles
+        const q1 = sorted[Math.floor(len * 0.25)];
+        const median = sorted[Math.floor(len * 0.5)];
+        const q3 = sorted[Math.floor(len * 0.75)];
+        const iqr = q3 - q1;
+        
+        // Use IQR-based bounds (ignore outliers beyond 1.5*IQR)
+        const lowerBound = Math.max(sorted[0], q1 - 1.5 * iqr);
+        const upperBound = Math.min(sorted[len - 1], q3 + 1.5 * iqr);
+        const range = upperBound - lowerBound;
+        
         if (range === 0) return '#eab308'; // All same value = yellow
         
         const red = '#ef4444', yellow = '#eab308', green = '#22c55e';
-        const position = (value - min) / range; // 0 to 1
+        
+        // Clamp value to bounds for color calculation
+        const clampedValue = Math.max(lowerBound, Math.min(upperBound, value));
+        const position = (clampedValue - lowerBound) / range; // 0 to 1
         
         if (position < 0.33) return red;
         if (position < 0.66) return yellow;
@@ -416,7 +427,6 @@
     let selectedYear = 'all';
     let compareYear = '';
     let compareMode = false;
-    let viewMode = 'point';
     let fieldModeActive = false;
     let gpsMarker = null, gpsCircle = null, gpsWatchId = null;
 
@@ -448,8 +458,6 @@
       document.getElementById('attributeSelect').addEventListener('change', (e) => { selectedAttribute = e.target.value; updateMap(); updateLegend(); });
       document.getElementById('yearSelect').addEventListener('change', (e) => { selectedYear = e.target.value; updateCompareYearOptions(); updateMap(); });
       document.getElementById('compareYearSelect').addEventListener('change', (e) => { compareYear = e.target.value; updateMap(); });
-      document.getElementById('pointViewBtn').addEventListener('click', () => { viewMode = 'point'; document.getElementById('pointViewBtn').classList.add('active'); document.getElementById('fieldViewBtn').classList.remove('active'); updateMap(); });
-      document.getElementById('fieldViewBtn').addEventListener('click', () => { viewMode = 'field'; document.getElementById('fieldViewBtn').classList.add('active'); document.getElementById('pointViewBtn').classList.remove('active'); updateMap(); });
       document.getElementById('singleYearBtn').addEventListener('click', () => { 
         compareMode = false; 
         document.getElementById('singleYearBtn').classList.add('active'); 
@@ -487,6 +495,33 @@
         legendText.textContent = 'Low → High';
         document.querySelector('#legendBar div').style.background = 'linear-gradient(to right, #ef4444, #eab308, #22c55e)';
       }
+    }
+    
+    function updateStats(values) {
+      const statsTitle = document.getElementById('statsTitle');
+      const statsAvg = document.getElementById('statsAvg');
+      const statsHigh = document.getElementById('statsHigh');
+      const statsLow = document.getElementById('statsLow');
+      
+      const attrName = CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute;
+      const unit = CONFIG.NUTRIENT_UNITS[selectedAttribute] || '';
+      statsTitle.textContent = attrName;
+      
+      if (!values || values.length === 0) {
+        statsAvg.textContent = '-';
+        statsHigh.textContent = '-';
+        statsLow.textContent = '-';
+        return;
+      }
+      
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      const high = Math.max(...values);
+      const low = Math.min(...values);
+      const decimals = selectedAttribute === 'pH' ? 2 : 1;
+      
+      statsAvg.textContent = avg.toFixed(decimals) + (unit ? ' ' + unit : '');
+      statsHigh.textContent = high.toFixed(decimals) + (unit ? ' ' + unit : '');
+      statsLow.textContent = low.toFixed(decimals) + (unit ? ' ' + unit : '');
     }
 
     async function handleAuth() {
@@ -612,55 +647,29 @@
         return true;
       });
       
-      // Get all values for median-based coloring
+      // Get all values for median-based coloring and stats
       const allValues = filtered.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
       
-      if (viewMode === 'point') {
-        filtered.forEach(sample => {
-          const value = sample[selectedAttribute];
-          if (value === undefined || value === null) return;
-          const bufferPct = settings.bufferPercent || 25;
-          const color = Utils.getColor(value, selectedAttribute, settings, bufferPct, allValues);
-          const size = fieldModeActive ? 44 : 32;
-          const fontSize = fieldModeActive ? 14 : 11;
-          const displayVal = Utils.formatNumber(value, selectedAttribute === 'pH' ? 1 : 0);
-          const icon = L.divIcon({
-            html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
-            className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
-          });
-          const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(map);
-          marker.bindPopup(`<strong>Sample ${sample.sampleId || ''}</strong><br>Field: ${sample.field || 'Unknown'}<br>Year: ${sample.year || ''}<br>${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${displayVal} ${CONFIG.NUTRIENT_UNITS[selectedAttribute] || ''}`);
-          currentLayers.push(marker);
+      // Update stats box
+      updateStats(allValues);
+      
+      // Render point markers
+      filtered.forEach(sample => {
+        const value = sample[selectedAttribute];
+        if (value === undefined || value === null) return;
+        const bufferPct = settings.bufferPercent || 25;
+        const color = Utils.getColor(value, selectedAttribute, settings, bufferPct, allValues);
+        const size = fieldModeActive ? 44 : 32;
+        const fontSize = fieldModeActive ? 14 : 11;
+        const displayVal = Utils.formatNumber(value, selectedAttribute === 'pH' ? 1 : 0);
+        const icon = L.divIcon({
+          html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
+          className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
         });
-      } else {
-        const groups = Utils.groupByField(filtered);
-        const avgValues = Object.values(groups).map(samples => Utils.calculateFieldAverage(samples, selectedAttribute)).filter(v => v !== null);
-        
-        Object.entries(groups).forEach(([fieldName, samples]) => {
-          const avg = Utils.calculateFieldAverage(samples, selectedAttribute);
-          if (avg === null) return;
-          const bufferPct = settings.bufferPercent || 25;
-          const color = Utils.getColor(avg, selectedAttribute, settings, bufferPct, avgValues);
-          let center;
-          if (fieldBoundaries[fieldName]) {
-            const polys = fieldBoundaries[fieldName];
-            const allPts = Array.isArray(polys[0]?.[0]) ? polys.flat() : polys;
-            const lats = allPts.map(p => p[0]), lons = allPts.map(p => p[1]);
-            center = [(Math.min(...lats)+Math.max(...lats))/2, (Math.min(...lons)+Math.max(...lons))/2];
-          } else {
-            const lats = samples.map(s => s.lat), lons = samples.map(s => s.lon);
-            center = [(Math.min(...lats)+Math.max(...lats))/2, (Math.min(...lons)+Math.max(...lons))/2];
-          }
-          const displayVal = Utils.formatNumber(avg, 1);
-          const icon = L.divIcon({
-            html: `<div class="sample-marker" style="width:60px;height:60px;background:${color};font-size:16px;line-height:60px;">${displayVal}</div>`,
-            className: '', iconSize: [60,60], iconAnchor: [30,30]
-          });
-          const marker = L.marker(center, { icon }).addTo(map);
-          marker.bindPopup(`<strong>${fieldName}</strong><br>Avg ${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${displayVal}`);
-          currentLayers.push(marker);
-        });
-      }
+        const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(map);
+        marker.bindPopup(`<strong>Sample ${sample.sampleId || ''}</strong><br>Field: ${sample.field || 'Unknown'}<br>Year: ${sample.year || ''}<br>${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${displayVal} ${CONFIG.NUTRIENT_UNITS[selectedAttribute] || ''}`);
+        currentLayers.push(marker);
+      });
     }
     
     function renderCompareMode() {
@@ -678,17 +687,19 @@
         return String(s.year) === String(earlierYear);
       });
       
-      if (viewMode === 'point') {
-        // For each later sample, find nearest earlier sample and show change
-        laterSamples.forEach(laterSample => {
-          const value = laterSample[selectedAttribute];
-          if (value === undefined || value === null) return;
-          
-          // Find nearest earlier sample (same field or closest by location)
-          let earlierSample = earlierSamples.find(s => s.field === laterSample.field && s.sampleId === laterSample.sampleId);
-          if (!earlierSample) {
-            // Find closest by location within same field
-            const fieldEarlier = earlierSamples.filter(s => s.field === laterSample.field);
+      // Calculate change stats
+      const changes = [];
+      
+      // For each later sample, find nearest earlier sample and show change
+      laterSamples.forEach(laterSample => {
+        const value = laterSample[selectedAttribute];
+        if (value === undefined || value === null) return;
+        
+        // Find nearest earlier sample (same field or closest by location)
+        let earlierSample = earlierSamples.find(s => s.field === laterSample.field && s.sampleId === laterSample.sampleId);
+        if (!earlierSample) {
+          // Find closest by location within same field
+          const fieldEarlier = earlierSamples.filter(s => s.field === laterSample.field);
             if (fieldEarlier.length > 0) {
               let minDist = Infinity;
               fieldEarlier.forEach(s => {
@@ -725,59 +736,21 @@
           popupText += `<br>${laterYear}: ${Utils.formatNumber(value, 1)}`;
           if (change !== null) {
             popupText += `<br><strong>Change: ${change >= 0 ? '+' : ''}${Utils.formatNumber(change, 1)} (${percentChange >= 0 ? '+' : ''}${Utils.formatNumber(percentChange, 0)}%)</strong>`;
+            changes.push(change);
           }
           marker.bindPopup(popupText);
           currentLayers.push(marker);
         });
-      } else {
-        // Field average comparison
-        const laterGroups = Utils.groupByField(laterSamples);
-        const earlierGroups = Utils.groupByField(earlierSamples);
-        
-        Object.entries(laterGroups).forEach(([fieldName, samples]) => {
-          const laterAvg = Utils.calculateFieldAverage(samples, selectedAttribute);
-          if (laterAvg === null) return;
-          
-          const earlierAvg = earlierGroups[fieldName] ? Utils.calculateFieldAverage(earlierGroups[fieldName], selectedAttribute) : null;
-          const change = earlierAvg !== null ? laterAvg - earlierAvg : null;
-          const percentChange = earlierAvg && earlierAvg !== 0 ? ((laterAvg - earlierAvg) / earlierAvg) * 100 : 0;
-          
-          const color = change !== null ? Utils.getChangeColor(change, percentChange) : '#94a3b8';
-          
-          let center;
-          if (fieldBoundaries[fieldName]) {
-            const polys = fieldBoundaries[fieldName];
-            const allPts = Array.isArray(polys[0]?.[0]) ? polys.flat() : polys;
-            const lats = allPts.map(p => p[0]), lons = allPts.map(p => p[1]);
-            center = [(Math.min(...lats)+Math.max(...lats))/2, (Math.min(...lons)+Math.max(...lons))/2];
-          } else {
-            const lats = samples.map(s => s.lat), lons = samples.map(s => s.lon);
-            center = [(Math.min(...lats)+Math.max(...lats))/2, (Math.min(...lons)+Math.max(...lons))/2];
-          }
-          
-          let displayVal;
-          if (change !== null) {
-            const sign = change >= 0 ? '+' : '';
-            displayVal = sign + Utils.formatNumber(change, 1);
-          } else {
-            displayVal = Utils.formatNumber(laterAvg, 1);
-          }
-          
-          const icon = L.divIcon({
-            html: `<div class="sample-marker" style="width:60px;height:60px;background:${color};font-size:14px;line-height:60px;">${displayVal}</div>`,
-            className: '', iconSize: [60,60], iconAnchor: [30,30]
-          });
-          const marker = L.marker(center, { icon }).addTo(map);
-          
-          let popupText = `<strong>${fieldName}</strong>`;
-          popupText += `<br>${earlierYear} Avg: ${earlierAvg !== null ? Utils.formatNumber(earlierAvg, 1) : 'N/A'}`;
-          popupText += `<br>${laterYear} Avg: ${Utils.formatNumber(laterAvg, 1)}`;
-          if (change !== null) {
-            popupText += `<br><strong>Change: ${change >= 0 ? '+' : ''}${Utils.formatNumber(change, 1)} (${percentChange >= 0 ? '+' : ''}${Utils.formatNumber(percentChange, 0)}%)</strong>`;
-          }
-          marker.bindPopup(popupText);
-          currentLayers.push(marker);
-        });
+      
+      // Update stats for compare mode
+      if (changes.length > 0) {
+        const avg = changes.reduce((a, b) => a + b, 0) / changes.length;
+        const high = Math.max(...changes);
+        const low = Math.min(...changes);
+        document.getElementById('statsTitle').textContent = 'Change Stats';
+        document.getElementById('statsAvg').textContent = (avg >= 0 ? '+' : '') + avg.toFixed(1);
+        document.getElementById('statsHigh').textContent = (high >= 0 ? '+' : '') + high.toFixed(1);
+        document.getElementById('statsLow').textContent = (low >= 0 ? '+' : '') + low.toFixed(1);
       }
     }
 
