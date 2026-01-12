@@ -113,7 +113,11 @@
       <h3>🔄 Data Management</h3>
       <div class="btn-row">
         <button class="button primary" id="syncBtn">☁️ Sync to Google Sheets</button>
-        <button class="button danger" id="clearBtn">🗑️ Clear All Data</button>
+      </div>
+      <div class="btn-row" style="margin-top: 0.75rem;">
+        <button class="button danger" id="clearSamplesBtn">🗑️ Clear Samples</button>
+        <button class="button danger" id="clearBoundariesBtn">🗑️ Clear Boundaries</button>
+        <button class="button danger" id="clearAllBtn">🗑️ Clear All</button>
       </div>
       <small style="display:block; margin-top:0.75rem; color:#64748b;">Data is saved locally and synced to Google Sheets when signed in.</small>
     </div>
@@ -197,7 +201,9 @@
       document.getElementById('uploadBoundaryBtn').addEventListener('click', uploadBoundaries);
       document.getElementById('uploadSampleBtn').addEventListener('click', uploadSamples);
       document.getElementById('syncBtn').addEventListener('click', syncToSheets);
-      document.getElementById('clearBtn').addEventListener('click', clearAllData);
+      document.getElementById('clearSamplesBtn').addEventListener('click', clearSamples);
+      document.getElementById('clearBoundariesBtn').addEventListener('click', clearBoundaries);
+      document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
     });
 
     async function handleAuth() { if (SheetsAPI.isSignedIn) await SheetsAPI.signOut(); else await SheetsAPI.signIn(); }
@@ -549,9 +555,19 @@
       } catch (e) { showStatus('Sync error: ' + e.message, false); console.error(e); }
     }
 
+    function clearSamples() {
+      if (!confirm('Clear all samples? Boundaries will be kept.')) return;
+      sampleData = []; saveLocalData(); updateSummary(); showStatus('✓ Samples cleared', true);
+    }
+
+    function clearBoundaries() {
+      if (!confirm('Clear all field boundaries? Samples will be kept.')) return;
+      fieldBoundaries = {}; saveLocalData(); updateSummary(); showStatus('✓ Boundaries cleared', true);
+    }
+
     function clearAllData() {
-      if (!confirm('Clear all local data?')) return;
-      sampleData = []; fieldBoundaries = {}; saveLocalData(); updateSummary(); showStatus('✓ Cleared', true);
+      if (!confirm('Clear ALL local data (samples and boundaries)?')) return;
+      sampleData = []; fieldBoundaries = {}; saveLocalData(); updateSummary(); showStatus('✓ All data cleared', true);
     }
 
     function showStatus(msg, isSuccess) { const el = document.getElementById('statusMessage'); el.textContent = msg; el.style.display = 'block'; el.style.background = isSuccess ? '#dcfce7' : '#fee2e2'; el.style.color = isSuccess ? '#166534' : '#991b1b'; setTimeout(() => el.style.display = 'none', 4000); }
