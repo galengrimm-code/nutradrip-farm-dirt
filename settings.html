@@ -82,6 +82,16 @@
         <div class="threshold-row"><span class="name">Buffer Zone</span><div class="inputs"><input type="number" id="bufferPercent" value="25"><span class="unit">%</span></div><span class="note">Yellow warning zone width</span></div>
       </div>
     </div>
+    
+    <div class="settings-card">
+      <h3>📋 Column Aliases</h3>
+      <p style="color: #64748b; margin-bottom: 1rem; font-size: 0.875rem;">Custom mappings saved during import. These help recognize column names from your lab files.</p>
+      <div id="aliasesList" style="max-height: 300px; overflow-y: auto;"></div>
+      <div class="btn-row" style="margin-top: 1rem;">
+        <button class="button secondary" onclick="clearAllAliases()">🗑️ Clear All Custom Aliases</button>
+      </div>
+    </div>
+    
     <div class="btn-row">
       <button class="button primary" id="saveBtn">💾 Save Settings</button>
       <button class="button secondary" id="resetBtn">🔄 Reset to Defaults</button>
@@ -160,7 +170,49 @@
       if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
       else { userInfo.textContent = ''; authBtn.textContent = 'Sign In with Google'; authBtn.classList.remove('signed-in'); }
     }
-    function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); } catch (e) {} }
+    function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); loadAliases(); } catch (e) {} }
+    
+    function loadAliases() {
+      const aliases = JSON.parse(localStorage.getItem('columnAliases') || '{}');
+      const container = document.getElementById('aliasesList');
+      
+      if (Object.keys(aliases).length === 0) {
+        container.innerHTML = '<p style="color: #94a3b8; font-style: italic;">No custom aliases saved yet. Aliases are created when you map unrecognized columns during import.</p>';
+        return;
+      }
+      
+      let html = '';
+      for (const [standard, aliasList] of Object.entries(aliases)) {
+        html += `<div class="threshold-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+          <strong style="color: #3b82f6;">${standard}</strong>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            ${aliasList.map(a => `<span style="background: #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem;">
+              ${a} <button onclick="removeAlias('${standard}', '${a}')" style="background: none; border: none; cursor: pointer; color: #ef4444; font-weight: bold;">×</button>
+            </span>`).join('')}
+          </div>
+        </div>`;
+      }
+      container.innerHTML = html;
+    }
+    
+    function removeAlias(standard, alias) {
+      const aliases = JSON.parse(localStorage.getItem('columnAliases') || '{}');
+      if (aliases[standard]) {
+        aliases[standard] = aliases[standard].filter(a => a !== alias);
+        if (aliases[standard].length === 0) delete aliases[standard];
+        localStorage.setItem('columnAliases', JSON.stringify(aliases));
+        loadAliases();
+        showStatus('Alias removed', true);
+      }
+    }
+    
+    function clearAllAliases() {
+      if (!confirm('Clear all custom column aliases?')) return;
+      localStorage.removeItem('columnAliases');
+      loadAliases();
+      showStatus('All custom aliases cleared', true);
+    }
+    
     function saveSettings() { const settings = {}; Object.keys(defaults).forEach(k => { const i = document.getElementById(k); if (i) settings[k] = parseFloat(i.value) || defaults[k]; }); localStorage.setItem('soilSettings', JSON.stringify(settings)); showStatus('✓ Settings saved', true); }
     function resetSettings() { if (!confirm('Reset all settings to defaults?')) return; Object.entries(defaults).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); localStorage.setItem('soilSettings', JSON.stringify(defaults)); showStatus('✓ Settings reset', true); }
     function showStatus(msg, ok) { const el = document.getElementById('statusMessage'); el.textContent = msg; el.style.display = 'block'; el.style.background = ok ? '#dcfce7' : '#fee2e2'; el.style.color = ok ? '#166534' : '#991b1b'; setTimeout(() => el.style.display = 'none', 4000); }
