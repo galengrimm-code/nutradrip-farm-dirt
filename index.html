@@ -312,6 +312,51 @@
           tokenClient.requestAccessToken({ prompt: '' }); // Silent refresh
         }
       },
+
+      // Validate token by making a lightweight API call
+      async validateToken() {
+        try {
+          // Try to get spreadsheet metadata (lightweight call)
+          await gapi.client.sheets.spreadsheets.get({
+            spreadsheetId: CONFIG.SHEET_ID,
+            fields: 'spreadsheetId'  // Only request minimal data
+          });
+          return true;
+        } catch (e) {
+          console.log('Token validation failed:', e?.result?.error?.code || e.message);
+          return false;
+        }
+      },
+
+      // Attempt to refresh token and retry the operation
+      async refreshTokenAndRetry(operation) {
+        return new Promise((resolve, reject) => {
+          console.log('Attempting token refresh...');
+          const originalCallback = tokenClient.callback;
+          tokenClient.callback = async (response) => {
+            if (response.error) {
+              console.error('Token refresh failed:', response);
+              tokenClient.callback = originalCallback;
+              reject(new Error('Token refresh failed'));
+              return;
+            }
+            accessToken = response.access_token;
+            tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
+            localStorage.setItem('googleAccessToken', accessToken);
+            localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
+            gapi.client.setToken({ access_token: accessToken });
+            tokenClient.callback = originalCallback;
+
+            try {
+              const result = await operation();
+              resolve(result);
+            } catch (e) {
+              reject(e);
+            }
+          };
+          tokenClient.requestAccessToken({ prompt: '' });
+        });
+      },
       
       async signIn() { 
         tokenClient.requestAccessToken({ prompt: 'consent' }); 
@@ -789,9 +834,10 @@
       updateMobileAuthBtn();
     }
 
-    async function loadFromSheets() {
+    async function loadFromSheets(isRetry = false) {
       Utils.showStatus('Loading from Google Sheets...', true);
-      try {
+
+      const doLoad = async () => {
         console.log('Attempting to load from sheet ID:', CONFIG.SHEET_ID);
         const fields = await SheetsAPI.getFields();
         fieldBoundaries = {};
@@ -801,12 +847,53 @@
         updateFieldSelector();
         updateYearSelector();
         updateMap();
-        // Also save to localStorage as cache
         saveLocalData();
         Utils.showStatus(`✓ Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
+      };
+
+      try {
+        await doLoad();
       } catch (e) {
         console.error('loadFromSheets error:', e);
+        const errorCode = e.result?.error?.code;
         const errorMsg = e.result?.error?.message || e.message || 'Unknown error';
+
+        // Handle 401 (unauthorized) - token may be expired/revoked
+        if (errorCode === 401 && !isRetry) {
+          console.log('Got 401, attempting token refresh and retry...');
+          Utils.showStatus('Refreshing authentication...', true);
+          try {
+            await SheetsAPI.refreshTokenAndRetry(doLoad);
+            Utils.showStatus(`✓ Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
+            return;
+          } catch (retryError) {
+            console.error('Retry after refresh failed:', retryError);
+            // Clear invalid token and fall through to error handling
+            localStorage.removeItem('googleAccessToken');
+            localStorage.removeItem('googleTokenExpiry');
+            SheetsAPI.isSignedIn = false;
+            handleSignInChange(false);
+            Utils.showStatus('Session expired - please sign in again', false);
+            loadLocalData();
+            return;
+          }
+        }
+
+        // Handle 403 (forbidden) - no access to sheet
+        if (errorCode === 403) {
+          Utils.showStatus('No access to this Google Sheet - check sharing settings', false);
+          loadLocalData();
+          return;
+        }
+
+        // Handle 404 (not found) - sheet doesn't exist
+        if (errorCode === 404) {
+          Utils.showStatus('Google Sheet not found - check Sheet ID in Settings', false);
+          loadLocalData();
+          return;
+        }
+
+        // Generic error
         Utils.showStatus(`Error loading from Sheets: ${errorMsg} - using local cache`, false);
         loadLocalData();
       }
