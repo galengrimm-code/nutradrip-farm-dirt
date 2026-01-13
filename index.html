@@ -755,7 +755,10 @@
         const color = Utils.getColor(value, selectedAttribute, settings, bufferPct, allValues);
         const size = fieldModeActive ? 44 : 32;
         const fontSize = fieldModeActive ? 14 : 11;
-        const displayVal = Utils.formatNumber(value, selectedAttribute === 'pH' ? 1 : 0);
+        // For sampleId, display as-is; for other attributes, format as number
+        const displayVal = selectedAttribute === 'sampleId' 
+          ? value 
+          : Utils.formatNumber(value, selectedAttribute === 'pH' ? 1 : 0);
         const icon = L.divIcon({
           html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
           className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
