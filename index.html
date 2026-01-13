@@ -466,30 +466,38 @@
       },
 
       // Get median-based color using IQR to handle outliers
-      getMedianBasedColor(value, values) {
+      // isLowerBetter: if true, lower values get green, higher get red (for Mg_sat, H_Sat, etc.)
+      getMedianBasedColor(value, values, isLowerBetter = false) {
         if (!values || values.length === 0) return '#94a3b8';
         const sorted = [...values].sort((a, b) => a - b);
         const len = sorted.length;
-        
+
         // Calculate quartiles
         const q1 = sorted[Math.floor(len * 0.25)];
         const median = sorted[Math.floor(len * 0.5)];
         const q3 = sorted[Math.floor(len * 0.75)];
         const iqr = q3 - q1;
-        
+
         // Use IQR-based bounds (ignore outliers beyond 1.5*IQR)
         const lowerBound = Math.max(sorted[0], q1 - 1.5 * iqr);
         const upperBound = Math.min(sorted[len - 1], q3 + 1.5 * iqr);
         const range = upperBound - lowerBound;
-        
+
         if (range === 0) return '#eab308'; // All same value = yellow
-        
+
         const red = '#ef4444', yellow = '#eab308', green = '#22c55e';
-        
+
         // Clamp value to bounds for color calculation
         const clampedValue = Math.max(lowerBound, Math.min(upperBound, value));
         const position = (clampedValue - lowerBound) / range; // 0 to 1
-        
+
+        // For "lower is better" attributes, invert the scale
+        if (isLowerBetter) {
+          if (position > 0.66) return red;
+          if (position > 0.33) return yellow;
+          return green;
+        }
+
         if (position < 0.33) return red;
         if (position < 0.66) return yellow;
         return green;
@@ -1067,9 +1075,19 @@
         }
       });
       
-      // Calculate colors based on field averages
+      // Calculate colors based on field averages using relative coloring
+      // This ensures fields are colored relative to each other, not just absolute thresholds
       Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
-        const color = Utils.getColor(stats.avg, selectedAttribute, settings, bufferPct, allFieldAvgs);
+        // Use median-based (relative) coloring for field shading so differences are visible
+        const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(selectedAttribute);
+        let color;
+        if (allFieldAvgs.length > 1) {
+          // Use relative coloring when we have multiple fields to compare
+          color = Utils.getMedianBasedColor(stats.avg, allFieldAvgs, isLowerBetter);
+        } else {
+          // Fall back to threshold-based for single field
+          color = Utils.getColor(stats.avg, selectedAttribute, settings, bufferPct, allFieldAvgs);
+        }
         fieldColors[fieldName] = color;
         fieldColors[fieldName + '_stats'] = stats;
       });
