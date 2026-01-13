@@ -95,7 +95,7 @@
         <div class="summary-item"><div class="number" id="fieldCount">0</div><div class="label">Fields</div></div>
         <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Samples</div></div>
         <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div></div>
-        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Yield Records</div></div>
+        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div></div>
       </div>
     </div>
 
@@ -333,13 +333,15 @@
       }
     }
 
-    function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'), y = localStorage.getItem('yieldData'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); if (y) yieldData = JSON.parse(y); } catch (e) {} }
-    function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); localStorage.setItem('yieldData', JSON.stringify(yieldData)); }
+    function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); } catch (e) {} }
+    function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); }
     function updateSummary() {
       document.getElementById('fieldCount').textContent = Object.keys(fieldBoundaries).length;
       document.getElementById('sampleCount').textContent = sampleData.length;
       document.getElementById('yearCount').textContent = [...new Set(sampleData.map(s => s.year).filter(y => y))].length;
-      document.getElementById('yieldCount').textContent = yieldData.length;
+      // Count samples with yield correlations instead of raw yield points
+      const samplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).length;
+      document.getElementById('yieldCount').textContent = samplesWithYield;
     }
 
     async function uploadBoundaries() {
@@ -462,10 +464,21 @@
         const jsonFile = files.find(f => f.name.toLowerCase().match(/\.(geo)?json$/));
         
         if (isZip) {
-          // Single zip file
+          // Zip file - may contain multiple shapefiles
           const arrayBuffer = await files[0].arrayBuffer();
-          const geojson = await shp(arrayBuffer);
-          samples = geojsonToSamples(geojson, year, depth);
+          const result = await shp(arrayBuffer);
+
+          // shp() returns array if multiple shapefiles in zip, single object if one
+          if (Array.isArray(result)) {
+            console.log(`Found ${result.length} shapefiles in zip`);
+            result.forEach((geojson, i) => {
+              console.log(`Processing shapefile ${i + 1}: ${geojson.fileName || 'unnamed'}`);
+              const fileSamples = geojsonToSamples(geojson, year, depth);
+              samples = [...samples, ...fileSamples];
+            });
+          } else {
+            samples = geojsonToSamples(result, year, depth);
+          }
         } else if (shpFile && dbfFile) {
           // Multiple shapefile components - combine them
           const shpBuffer = await shpFile.arrayBuffer();
@@ -738,18 +751,22 @@
 
     function geojsonToSamples(geojson, assignedYear, assignedDepth) {
       const samples = [], features = geojson.features || [geojson];
-      
+
+      // Get shapefile name for fallback field name (from multi-file zips)
+      const shapefileName = geojson.fileName || geojson.name || null;
+
       // Debug
       console.log('Sample GeoJSON:', geojson);
+      console.log('Shapefile name:', shapefileName);
       if (features[0]) console.log('First sample properties:', features[0].properties);
-      
+
       features.forEach((f, idx) => {
         if (!f.geometry || f.geometry.type !== 'Point') return;
         const [lon, lat] = f.geometry.coordinates, props = f.properties || {};
-        
+
         // Get field name - prioritize FIELD_NAME from properties
         let fieldName = null;
-        
+
         if (props.FIELD_NAME) {
           fieldName = props.FIELD_NAME;
         }
@@ -759,9 +776,14 @@
         else if (props.field_name) {
           fieldName = props.field_name;
         }
+        else if (shapefileName) {
+          // Use shapefile name (good for multi-field zips where each file is a field)
+          // Remove .shp extension and path, get just the name
+          fieldName = shapefileName.replace(/\.shp$/i, '').split('/').pop().split('\\').pop();
+        }
         else {
           // Fallback: get from name/Field and extract last part after underscores
-          const rawName = props.name || props.Name || props.Field || props.field || geojson.name || 'Unknown';
+          const rawName = props.name || props.Name || props.Field || props.field || 'Unknown';
           // Extract last part after underscore (e.g., "Precision Farms_Precision Farms_WCG" -> "WCG")
           if (rawName.includes('_')) {
             fieldName = rawName.split('_').pop();
@@ -962,11 +984,15 @@
         statusEl.innerHTML += '<br><span style="color: #3b82f6;">⏳ Correlating with soil samples...</span>';
         
         const correlationResults = correlateYieldToSamples(yieldYear, radiusFeet);
-        
+
+        // Clear raw yield data after correlation - only keep correlated summary on samples
+        yieldData = [];
+        localStorage.removeItem('yieldData');
+
         saveLocalData();
         updateSummary();
-        
-        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length} yield points<br>✓ Matched ${correlationResults.matched} of ${correlationResults.total} soil samples with yield data</span>`;
+
+        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Processed ${newPoints.length} yield points<br>✓ Matched ${correlationResults.matched} of ${correlationResults.total} soil samples<br>✓ Raw yield data cleared (correlated data saved on samples)</span>`;
         
         fileInput.value = '';
         
@@ -1288,10 +1314,7 @@
     }
 
     async function clearYieldData() {
-      if (!confirm('Clear all yield data and correlations?')) return;
-
-      // Clear yield data array
-      yieldData = [];
+      if (!confirm('Clear all yield correlations from samples?')) return;
 
       // Remove yield correlations from all samples
       sampleData.forEach(s => {
@@ -1300,7 +1323,7 @@
 
       saveLocalData();
       updateSummary();
-      showStatus('✓ Yield data cleared', true);
+      showStatus('✓ Yield correlations cleared', true);
     }
 
     async function clearAllData() {
@@ -1308,7 +1331,6 @@
 
       sampleData = [];
       fieldBoundaries = {};
-      yieldData = [];
       saveLocalData();
       updateSummary(); 
       
