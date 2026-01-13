@@ -458,7 +458,12 @@
         el.style.color = isSuccess ? '#166534' : '#991b1b';
         setTimeout(() => el.style.display = 'none', 4000);
       },
-      
+
+      // Return the global settings object
+      loadSettings() {
+        return settings;
+      },
+
       // Get median-based color using IQR to handle outliers
       getMedianBasedColor(value, values) {
         if (!values || values.length === 0) return '#94a3b8';
@@ -832,6 +837,11 @@
         authBtn.classList.remove('signed-in');
       }
       updateMobileAuthBtn();
+    }
+
+    function updateMobileAuthBtn() {
+      // Mobile toolbar doesn't have a dedicated auth button
+      // The refresh button can be used to sync when signed in
     }
 
     async function loadFromSheets(isRetry = false) {
