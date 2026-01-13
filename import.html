@@ -483,19 +483,21 @@
     }
 
     // Standard fields we care about
-    const STANDARD_FIELDS = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4'];
+    const STANDARD_FIELDS = ['pH', 'P', 'P2', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'];
     
     // Default aliases (built-in)
     const DEFAULT_ALIASES = {
-      'P': ['P', 'P (M3)', 'P_M3', 'Phosphorus', 'Bray_P1', 'Mehlich2_P', 'Mehlich P', 'M3P', 'Olsen P', 'P1', 'P ppm'],
+      'P': ['P', 'P (M3)', 'P_M3', 'Phosphorus', 'Bray_P1', 'Bray P1', 'Mehlich2_P', 'Mehlich P', 'M3P', 'Olsen P', 'P1', 'P ppm'],
+      'P2': ['P2', 'Bray_P2', 'Bray P2', 'P2 ppm'],
       'pH': ['pH', 'pH (1_1)', 'pH_1_1', 'ph', 'Soil_pH', 'pH 1:1', 'pH_s', 'soil pH'],
-      'K': ['K', 'K (M3)', 'K_M3', 'Potassium', 'ExchK', 'Mehlich K', 'M3K', 'K ppm'],
+      'K': ['K', 'K (M3)', 'K_M3', 'Potassium', 'ExchK', 'Exch K', 'Mehlich K', 'M3K', 'K ppm'],
       'OM': ['OM', 'OM (LOI)', 'OM_LOI', 'Organic_Matter', 'Organic Matter', 'O.M.', 'OM %', 'SOM'],
       'CEC': ['CEC', 'CEC (Calc)', 'CEC_Calc', 'CEC (Cal_1', 'CEC meq'],
       'Ca_sat': ['Ca_sat', 'BS-Ca', 'BS_Ca', 'Ca_Base_Sat', 'Ca_Sat', 'Ca %', 'Ca Sat', '% Ca'],
       'Mg_sat': ['Mg_sat', 'BS-Mg', 'BS_Mg', 'Mg_Base_Sat', 'Mg_Sat', 'Mg %', 'Mg Sat', '% Mg'],
       'K_Sat': ['K_Sat', 'BS-K', 'BS_K', 'K_Base_Sat', 'K %', 'K Sat', '% K'],
       'H_Sat': ['H_Sat', 'BS-H', 'BS_H', 'H_Base_Sat', 'H %', 'H Sat', '% H'],
+      'Na_Sat': ['Na_Sat', 'BS-Na', 'BS_Na', 'Na_Base_Sat', 'Na %', 'Na Sat', '% Na'],
       'Zn': ['Zn', 'Zn (M3)', 'Zn_M3', 'Zinc', 'Mehlich Zn'],
       'Cu': ['Cu', 'Cu (M3)', 'Cu_M3', 'Copper', 'Mehlich Cu'],
       'Mn': ['Mn', 'Mn (M3)', 'Mn_M3', 'Manganese', 'Mehlich Mn'],
@@ -503,9 +505,13 @@
       'Boron': ['Boron', 'B (M3)', 'B_M3', 'B'],
       'S': ['S', 'S (M3)', 'S_M3', 'Sulfur', 'SO4', 'SO4-S'],
       'Buffer_pH': ['Buffer_pH', 'BpH', 'Buffer pH', 'SMP', 'SMP pH', 'Buffer'],
-      'Na': ['Na', 'Sodium', 'Na (M3)'],
-      'Ca': ['Ca', 'Calcium', 'Ca (M3)', 'Exch Ca'],
-      'Mg': ['Mg', 'Magnesium', 'Mg (M3)', 'Exch Mg']
+      'Na': ['Na', 'Sodium', 'Na (M3)', 'ExchNa', 'Exch Na'],
+      'Ca': ['Ca', 'Calcium', 'Ca (M3)', 'ExchCa', 'Exch Ca'],
+      'Mg': ['Mg', 'Magnesium', 'Mg (M3)', 'ExchMg', 'Exch Mg'],
+      'NO3': ['NO3', 'NO3-N', 'Nitrate', 'Nitrate-N', 'N03'],
+      'NH4': ['NH4', 'NH4-N', 'Ammonium', 'Ammonium-N'],
+      'Soluble_Salts': ['Soluble_Salts', 'Soluble_Sal', 'Sol_Salts', 'Salts', 'SS'],
+      'EC': ['EC', 'EC (1:1)', 'Electrical Conductivity']
     };
     
     // Get combined aliases (default + user-saved)
@@ -604,7 +610,10 @@
       // Show unmatched with dropdown
       if (analysis.unmatched.length > 0) {
         const options = ['(skip)', ...STANDARD_FIELDS].map(f => `<option value="${f}">${f}</option>`).join('');
-        unmatchedDiv.innerHTML = analysis.unmatched.map(u => `
+        unmatchedDiv.innerHTML = analysis.unmatched.map(u => {
+          // Initialize to skip by default
+          pendingMappings[u.fileCol] = '(skip)';
+          return `
           <div class="mapping-row unmatched">
             <span class="file-col">${u.fileCol}</span>
             <span class="arrow">→</span>
@@ -612,7 +621,7 @@
               ${options}
             </select>
           </div>
-        `).join('');
+        `}).join('');
         document.getElementById('unmatchedSection').style.display = 'block';
       } else {
         document.getElementById('unmatchedSection').style.display = 'none';
@@ -628,7 +637,10 @@
     }
     
     async function proceedWithImport() {
-      if (!pendingImportData) return;
+      if (!pendingImportData) {
+        showStatus('No data to import', false);
+        return;
+      }
       
       const saveAliases = document.getElementById('saveNewAliases').checked;
       
@@ -650,10 +662,18 @@
         }
       }
       
+      // Store samples before closing modal
+      const samplesToImport = pendingImportData;
+      
       closeMappingModal();
       
       // Continue with import
-      await finishSampleImport(pendingImportData);
+      try {
+        await finishSampleImport(samplesToImport);
+      } catch (e) {
+        showStatus('Import error: ' + e.message, false);
+        console.error(e);
+      }
     }
     
     // Normalize column names from different data formats (using aliases)
