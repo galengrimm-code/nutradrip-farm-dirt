@@ -50,15 +50,30 @@
     .field-mode .controls-left { display: none; }
     .field-mode .legend { display: none; }
     @media (max-width: 639px) {
-      .top-bar { padding: 0.75rem 1rem; }
-      .top-bar h1 { font-size: 1.125rem; }
-      .top-bar p { display: none; }
-      .controls-bar { flex-direction: column; gap: 0.5rem; padding: 0.5rem; }
-      .controls-left, .controls-right { width: 100%; justify-content: space-between; }
-      .nav-links { width: 100%; justify-content: center; }
-      select, input { font-size: 16px !important; }
-      .legend { padding: 0.25rem 0.5rem; font-size: 0.625rem; }
+      .top-bar { padding: 0.5rem 0.75rem; }
+      .top-bar h1 { font-size: 1rem; }
+      .top-bar > div:first-child { display: none; }
+      .nav-links { width: 100%; justify-content: center; order: -1; }
+      .nav-link { padding: 0.4rem 0.6rem; font-size: 0.75rem; }
+      .auth-section { display: none; }
+      
+      /* Simplified mobile controls */
+      .controls-bar { padding: 0.5rem; gap: 0.5rem; flex-direction: column; }
+      .controls-left { display: flex; flex-wrap: wrap; gap: 0.5rem; width: 100%; }
+      .control-group { flex: 1; min-width: calc(50% - 0.25rem); }
+      .control-group label { font-size: 0.6rem; }
+      .control-group.compare-mode { display: none; } /* Hide on mobile - use bottom bar */
+      .controls-right { display: none; }
+      select, input { font-size: 14px !important; padding: 0.5rem; min-width: 0; width: 100%; }
+      .legend { display: none; } /* Hide legend on mobile */
+      .mobile-toolbar { display: flex !important; }
+      .stats-box { bottom: 60px !important; right: 0.5rem !important; font-size: 0.75rem !important; padding: 0.5rem !important; min-width: 100px !important; }
+      .stats-box h4 { font-size: 0.7rem !important; }
+      #compareYearGroup { display: none !important; } /* Hide compare year on mobile */
     }
+    .mobile-toolbar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e2e8f0; padding: 0.5rem; z-index: 1000; justify-content: space-around; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+    .mobile-toolbar button { flex: 1; margin: 0 0.25rem; padding: 0.6rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; background: white; font-size: 0.7rem; cursor: pointer; font-weight: 500; }
+    .mobile-toolbar button.active { background: #3b82f6; color: white; border-color: #3b82f6; }
   </style>
 </head>
 <body>
@@ -66,7 +81,7 @@
     <div class="top-bar">
       <div>
         <h1>🌱 Soil Sample Analysis</h1>
-        <p>Precision Farms Field Management</p>
+        <p id="operationSubtitle">Precision Farms Field Management</p>
       </div>
       <nav class="nav-links">
         <a href="index.html" class="nav-link active">📍 Map</a>
@@ -94,7 +109,7 @@
           <label>YEAR</label>
           <select id="yearSelect"><option value="all">All Years</option></select>
         </div>
-        <div class="control-group">
+        <div class="control-group compare-mode">
           <label>COMPARE MODE</label>
           <div class="toggle-group">
             <button class="toggle-btn active" id="singleYearBtn">Single Year</button>
@@ -116,6 +131,13 @@
       <span class="legend-label">Legend:</span>
       <div style="width: 100px; height: 16px; background: linear-gradient(to right, #ef4444, #eab308, #22c55e); border-radius: 8px; border: 1px solid #cbd5e1;"></div>
       <span id="legendText">Low → High</span>
+    </div>
+    
+    <!-- Mobile bottom toolbar -->
+    <div class="mobile-toolbar">
+      <button id="mobileFieldModeBtn">📱 Field</button>
+      <button id="mobileCompareBtn">📊 Compare</button>
+      <button id="mobileRefreshBtn">🔄 Refresh</button>
     </div>
     
     <div class="main-content" style="position: relative;">
@@ -140,7 +162,7 @@
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      SHEET_ID: '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY',
+      get SHEET_ID() { return localStorage.getItem('googleSheetId') || '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY'; },
       DEFAULT_LAT: 39.8528,
       DEFAULT_LON: -95.5347,
       DEFAULT_ZOOM: 13,
@@ -521,10 +543,19 @@
       setupEventListeners();
       loadLocalData();
       
+      // Load operation name
+      const opName = localStorage.getItem('operationName');
+      if (opName) {
+        document.getElementById('operationSubtitle').textContent = opName;
+      }
+      
       // Listen for visibility changes from settings page
       window.addEventListener('storage', (e) => {
         if (e.key === 'nutrientVisibility') {
           populateAttributeDropdown();
+        }
+        if (e.key === 'operationName') {
+          document.getElementById('operationSubtitle').textContent = e.newValue || 'Precision Farms Field Management';
         }
       });
     });
@@ -624,6 +655,43 @@
         loadLocalData();
         Utils.showStatus('Data refreshed', true);
       });
+      
+      // Mobile toolbar buttons
+      document.getElementById('mobileFieldModeBtn').addEventListener('click', toggleFieldMode);
+      document.getElementById('mobileRefreshBtn').addEventListener('click', () => {
+        sampleData = [];
+        fieldBoundaries = {};
+        loadLocalData();
+        Utils.showStatus('Data refreshed', true);
+      });
+      document.getElementById('mobileCompareBtn').addEventListener('click', toggleMobileCompare);
+    }
+    
+    function toggleMobileCompare() {
+      const btn = document.getElementById('mobileCompareBtn');
+      compareMode = !compareMode;
+      
+      if (compareMode) {
+        btn.textContent = '📊 Compare ON';
+        btn.classList.add('active');
+        document.getElementById('compareYearsBtn').classList.add('active');
+        document.getElementById('singleYearBtn').classList.remove('active');
+        updateCompareYearOptions();
+        // Auto-select first available compare year
+        const sel = document.getElementById('compareYearSelect');
+        if (sel.options.length > 1) {
+          sel.selectedIndex = 1;
+          compareYear = sel.value;
+        }
+      } else {
+        btn.textContent = '📊 Compare';
+        btn.classList.remove('active');
+        document.getElementById('singleYearBtn').classList.add('active');
+        document.getElementById('compareYearsBtn').classList.remove('active');
+        compareYear = '';
+      }
+      updateLegend();
+      updateMap();
     }
     
     function updateCompareYearOptions() {
@@ -690,6 +758,7 @@
         authBtn.textContent = 'Sign In with Google';
         authBtn.classList.remove('signed-in');
       }
+      updateMobileAuthBtn();
     }
 
     async function loadFromSheets() {
@@ -929,14 +998,19 @@
     function toggleFieldMode() {
       fieldModeActive = !fieldModeActive;
       const btn = document.getElementById('fieldModeBtn');
+      const mobileBtn = document.getElementById('mobileFieldModeBtn');
       if (fieldModeActive) {
         btn.classList.add('active');
         btn.textContent = '📱 Field Mode ON';
+        mobileBtn.classList.add('active');
+        mobileBtn.textContent = '📱 ON';
         document.body.classList.add('field-mode');
         startGPS();
       } else {
         btn.classList.remove('active');
         btn.textContent = '📱 Field Mode';
+        mobileBtn.classList.remove('active');
+        mobileBtn.textContent = '📱 Field Mode';
         document.body.classList.remove('field-mode');
         stopGPS();
       }

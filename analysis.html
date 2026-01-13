@@ -122,7 +122,7 @@
   
   <div class="analysis-container">
     <div class="tabs">
-      <div class="tab active" data-tab="comparison">📊 Year Comparison</div>
+      <div class="tab active" data-tab="comparison">📊 Operation Year-Over-Year</div>
       <div class="tab" data-tab="history">📈 Field History</div>
       <div class="tab" data-tab="rankings">🏆 Field Rankings</div>
     </div>
@@ -177,7 +177,7 @@
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      SHEET_ID: '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY',
+      get SHEET_ID() { return localStorage.getItem('googleSheetId') || '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY'; },
       
       NUTRIENTS: ['pH', 'P', 'P2', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'],
       
