@@ -1118,8 +1118,23 @@
         minLat: Math.min(...yieldLats), maxLat: Math.max(...yieldLats),
         minLon: Math.min(...yieldLons), maxLon: Math.max(...yieldLons)
       };
-      console.log('Yield data bounds:', yieldBounds);
-      console.log('Sample years:', [...new Set(sampleData.map(s => s.year))]);
+
+      // Get sample bounds for comparison
+      const sampleLats = sampleData.map(s => s.lat).filter(v => v);
+      const sampleLons = sampleData.map(s => s.lon).filter(v => v);
+      const sampleBounds = sampleLats.length > 0 ? {
+        minLat: Math.min(...sampleLats), maxLat: Math.max(...sampleLats),
+        minLon: Math.min(...sampleLons), maxLon: Math.max(...sampleLons)
+      } : null;
+
+      console.log('=== YIELD CORRELATION DEBUG ===');
+      console.log('Yield points:', yearYield.length);
+      console.log('Yield bounds:', yieldBounds);
+      console.log('Sample count:', sampleData.length);
+      console.log('Sample bounds:', sampleBounds);
+      console.log('Radius (ft):', radiusFeet, '→ Lat deg:', radiusLatDeg.toFixed(6), 'Lon deg:', radiusLonDeg.toFixed(6));
+      console.log('First yield point:', yearYield[0]);
+      console.log('First sample:', sampleData[0]);
 
       sampleData.forEach(sample => {
         // Match yield to ALL soil samples regardless of year (correlate by location)
