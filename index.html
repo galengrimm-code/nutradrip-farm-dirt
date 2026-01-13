@@ -46,6 +46,7 @@
     .gps-pulse { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; background: rgba(59,130,246,0.4); border-radius: 50%; animation: gpsPulse 2s ease-out infinite; }
     @keyframes gpsPulse { 0% { width: 16px; height: 16px; opacity: 1; } 100% { width: 50px; height: 50px; opacity: 0; } }
     #statusMessage { display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9999; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 0.75rem 1rem; border-radius: 0.375rem; }
+    .field-tooltip { background: white; border: 2px solid #1e293b; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .field-mode .sample-marker { min-width: 44px !important; min-height: 44px !important; font-size: 14px !important; }
     .field-mode .controls-left { display: none; }
     .field-mode .legend { display: none; }
@@ -230,9 +231,12 @@
         `<option value="${n.key}">${n.name}</option>`
       ).join('');
       
-      // Restore previous selection if still visible
+      // Restore previous selection if still visible, otherwise default to P
       if (visible.some(n => n.key === currentValue)) {
         select.value = currentValue;
+      } else if (visible.some(n => n.key === 'P')) {
+        select.value = 'P';
+        selectedAttribute = 'P';
       }
     }
 
@@ -567,6 +571,11 @@
       satellite.addTo(map); // Default to satellite
       L.control.layers({ "Street": street, "Satellite": satellite }).addTo(map);
       
+      // Listen for zoom changes to switch between field view and sample view
+      map.on('zoomend', function() {
+        updateMap();
+      });
+      
       // Add "Center on Me" button for mobile
       const centerControl = L.control({ position: 'topleft' });
       centerControl.onAdd = function() {
@@ -867,22 +876,105 @@
       currentLayers.forEach(l => map.removeLayer(l));
       currentLayers = [];
       
-      // Draw boundaries
+      const zoomLevel = map.getZoom();
+      const isZoomedOut = zoomLevel < 13; // Threshold for switching to field view
+      
+      // Compare mode - show year-over-year change (always show samples)
+      if (compareMode && selectedYear !== 'all' && compareYear) {
+        drawBoundaries(false);
+        renderCompareMode();
+        return;
+      }
+      
+      // Zoomed out: show field-level shading
+      if (isZoomedOut && Object.keys(fieldBoundaries).length > 0 && selectedAttribute !== 'sampleId') {
+        drawFieldShading();
+        return;
+      }
+      
+      // Zoomed in: show individual samples
+      drawBoundaries(false);
+      drawSampleMarkers();
+    }
+    
+    function drawBoundaries(withShading, fieldColors = {}) {
       Object.entries(fieldBoundaries).forEach(([name, polys]) => {
         if (selectedField !== 'all' && selectedField !== name) return;
         const arr = Array.isArray(polys[0]?.[0]) ? polys : [polys];
         arr.forEach(coords => {
-          const poly = L.polygon(coords, { color: '#22c55e', weight: 3, fillOpacity: 0.1, fillColor: '#22c55e' }).addTo(map);
-          poly.bindTooltip(name, { permanent: false, direction: 'center' });
+          const color = fieldColors[name] || '#22c55e';
+          const fillOpacity = withShading ? 0.6 : 0.1;
+          const poly = L.polygon(coords, { 
+            color: withShading ? color : '#22c55e', 
+            weight: withShading ? 2 : 3, 
+            fillOpacity: fillOpacity, 
+            fillColor: color 
+          }).addTo(map);
+          
+          if (withShading && fieldColors[name]) {
+            const fieldStats = fieldColors[name + '_stats'];
+            if (fieldStats) {
+              poly.bindTooltip(`<strong>${name}</strong><br>Avg ${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${fieldStats.avg.toFixed(1)} ${CONFIG.NUTRIENT_UNITS[selectedAttribute] || ''}`, 
+                { permanent: false, direction: 'center', className: 'field-tooltip' });
+            }
+          } else {
+            poly.bindTooltip(name, { permanent: false, direction: 'center' });
+          }
           currentLayers.push(poly);
         });
       });
+    }
+    
+    function drawFieldShading() {
+      const settings = Utils.loadSettings();
+      const bufferPct = settings.bufferPercent || 25;
       
-      // Compare mode - show year-over-year change
-      if (compareMode && selectedYear !== 'all' && compareYear) {
-        renderCompareMode();
-        return;
-      }
+      // Calculate average for each field
+      const fieldAverages = {};
+      const fieldColors = {};
+      
+      // Get all values for context (for relative coloring)
+      let allFieldAvgs = [];
+      
+      Object.keys(fieldBoundaries).forEach(fieldName => {
+        if (selectedField !== 'all' && selectedField !== fieldName) return;
+        
+        let fieldSamples = sampleData.filter(s => s.field === fieldName);
+        if (selectedYear !== 'all') {
+          fieldSamples = fieldSamples.filter(s => String(s.year) === String(selectedYear));
+        }
+        
+        const values = fieldSamples.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
+        
+        if (values.length > 0) {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          fieldAverages[fieldName] = { avg, count: values.length };
+          allFieldAvgs.push(avg);
+        }
+      });
+      
+      // Calculate colors based on field averages
+      Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
+        const color = Utils.getColor(stats.avg, selectedAttribute, settings, bufferPct, allFieldAvgs);
+        fieldColors[fieldName] = color;
+        fieldColors[fieldName + '_stats'] = stats;
+      });
+      
+      // Update stats box with all samples
+      let filtered = sampleData.filter(s => {
+        if (selectedField !== 'all' && s.field !== selectedField) return false;
+        if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
+        return true;
+      });
+      const allValues = filtered.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
+      updateStats(allValues);
+      
+      // Draw boundaries with shading
+      drawBoundaries(true, fieldColors);
+    }
+    
+    function drawSampleMarkers() {
+      const settings = Utils.loadSettings();
       
       // Filter samples for selected year
       let filtered = sampleData.filter(s => {

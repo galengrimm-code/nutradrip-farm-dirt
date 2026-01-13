@@ -125,6 +125,7 @@
       <div class="tab active" data-tab="comparison">📊 Operation Year-Over-Year</div>
       <div class="tab" data-tab="history">📈 Field Trends</div>
       <div class="tab" data-tab="rankings">🏆 Field Rankings</div>
+      <div class="tab" data-tab="yield">🌾 Yield Correlation</div>
     </div>
     
     <!-- Tab 1: Year Comparison (Operation-wide) -->
@@ -141,7 +142,7 @@
       </div>
       
       <!-- Year Stats Section -->
-      <div id="yearStats" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+      <div id="yearStats" style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
         <div id="fromYearStats" style="flex: 1; min-width: 250px; background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 0.5rem; padding: 1rem;">
           <h4 style="margin: 0 0 0.5rem 0; color: #64748b; font-size: 0.875rem;">From Year Stats</h4>
           <div id="fromYearInfo"></div>
@@ -150,6 +151,19 @@
           <h4 style="margin: 0 0 0.5rem 0; color: #166534; font-size: 0.875rem;">To Year Stats</h4>
           <div id="toYearInfo"></div>
         </div>
+      </div>
+      
+      <!-- Field Selection & Mismatch Warning -->
+      <div id="fieldSelectionSection" style="background: white; border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <h4 style="margin: 0; color: #475569; font-size: 0.875rem;">📋 Fields Included in Comparison</h4>
+          <div>
+            <button onclick="selectAllComparisonFields()" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; background: white; cursor: pointer; margin-right: 0.25rem;">Select All</button>
+            <button onclick="selectNoneComparisonFields()" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; background: white; cursor: pointer;">Select None</button>
+          </div>
+        </div>
+        <div id="fieldCheckboxes" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+        <div id="fieldMismatchWarning" style="margin-top: 0.75rem;"></div>
       </div>
       
       <div id="comparisonGrid" class="nutrient-grid"></div>
@@ -179,6 +193,33 @@
         </div>
       </div>
       <div id="rankingsContent"></div>
+    </div>
+    
+    <!-- Tab 4: Yield Correlation -->
+    <div id="yield" class="tab-content">
+      <div class="controls-bar">
+        <div class="control-group">
+          <label>Crop</label>
+          <select id="yieldCropSelect">
+            <option value="all">All Crops</option>
+            <option value="corn">🌽 Corn</option>
+            <option value="soybeans">🫘 Soybeans</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Year</label>
+          <select id="yieldYearSelect"></select>
+        </div>
+        <div class="control-group">
+          <label>Field</label>
+          <select id="yieldFieldSelect">
+            <option value="all">All Fields</option>
+          </select>
+        </div>
+      </div>
+      <div id="yieldContent">
+        <div class="no-data">No yield data available. Import yield maps on the Import page to see correlations.</div>
+      </div>
     </div>
   </div>
   
@@ -227,6 +268,7 @@
     let tokenClient, accessToken = null;
     let sampleData = [];
     let year1 = null, year2 = null;
+    let selectedComparisonFields = new Set(); // Track which fields are included in comparison
     
     const SheetsAPI = {
       isSignedIn: false,
@@ -323,6 +365,26 @@
       const rankYearSel = document.getElementById('rankingYearSelect');
       rankYearSel.innerHTML = '<option value="most_recent" selected>Most Recent</option>';
       years.forEach(y => { rankYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+      
+      // Yield selectors
+      const yieldYearSel = document.getElementById('yieldYearSelect');
+      const yieldYears = getYieldYears();
+      yieldYearSel.innerHTML = '<option value="all">All Years</option>';
+      yieldYears.forEach(y => { yieldYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+      
+      const yieldFieldSel = document.getElementById('yieldFieldSelect');
+      yieldFieldSel.innerHTML = '<option value="all">All Fields</option>';
+      fields.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+    }
+    
+    function getYieldYears() {
+      const years = new Set();
+      sampleData.forEach(s => {
+        if (s.yieldCorrelations) {
+          Object.keys(s.yieldCorrelations).forEach(y => years.add(parseInt(y)));
+        }
+      });
+      return [...years].sort((a, b) => b - a);
     }
 
     function setupTabs() {
@@ -337,11 +399,14 @@
     }
 
     function setupEventListeners() {
-      document.getElementById('year1Select').addEventListener('change', (e) => { year1 = e.target.value; updateComparison(); });
-      document.getElementById('year2Select').addEventListener('change', (e) => { year2 = e.target.value; updateComparison(); });
+      document.getElementById('year1Select').addEventListener('change', (e) => { year1 = e.target.value; selectedComparisonFields.clear(); updateComparison(); });
+      document.getElementById('year2Select').addEventListener('change', (e) => { year2 = e.target.value; selectedComparisonFields.clear(); updateComparison(); });
       document.getElementById('historyFieldSelect').addEventListener('change', (e) => { updateHistory(e.target.value); });
       document.getElementById('rankingAttrSelect').addEventListener('change', updateRankings);
       document.getElementById('rankingYearSelect').addEventListener('change', updateRankings);
+      document.getElementById('yieldCropSelect').addEventListener('change', updateYieldAnalysis);
+      document.getElementById('yieldYearSelect').addEventListener('change', updateYieldAnalysis);
+      document.getElementById('yieldFieldSelect').addEventListener('change', updateYieldAnalysis);
     }
 
     function getStats(samples, attr) {
@@ -381,6 +446,30 @@
       
       container.innerHTML = html;
     }
+    
+    function toggleComparisonField(field) {
+      if (selectedComparisonFields.has(field)) {
+        selectedComparisonFields.delete(field);
+      } else {
+        selectedComparisonFields.add(field);
+      }
+      updateComparison();
+    }
+    
+    function selectAllComparisonFields() {
+      const allSamplesFrom = year1 ? sampleData.filter(s => String(s.year) === String(year1)) : [];
+      const allSamplesTo = sampleData.filter(s => String(s.year) === String(year2));
+      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      const allFields = [...new Set([...fieldsFrom, ...fieldsTo])];
+      allFields.forEach(f => selectedComparisonFields.add(f));
+      updateComparison();
+    }
+    
+    function selectNoneComparisonFields() {
+      selectedComparisonFields.clear();
+      updateComparison();
+    }
 
     // ========== TAB 1: Year Comparison ==========
     // year1 = FROM (earlier year), year2 = TO (later year)
@@ -389,23 +478,78 @@
       const grid = document.getElementById('comparisonGrid');
       const fromYearInfo = document.getElementById('fromYearInfo');
       const toYearInfo = document.getElementById('toYearInfo');
+      const fieldCheckboxes = document.getElementById('fieldCheckboxes');
+      const mismatchWarning = document.getElementById('fieldMismatchWarning');
       
       if (!year2 || sampleData.length === 0) {
         grid.innerHTML = '<div class="no-data">No data available. Import soil samples to see analysis.</div>';
         fromYearInfo.innerHTML = '';
         toYearInfo.innerHTML = '';
+        fieldCheckboxes.innerHTML = '';
+        mismatchWarning.innerHTML = '';
         return;
       }
       
-      const samplesFrom = year1 ? sampleData.filter(s => String(s.year) === String(year1)) : [];
-      const samplesTo = sampleData.filter(s => String(s.year) === String(year2));
+      const allSamplesFrom = year1 ? sampleData.filter(s => String(s.year) === String(year1)) : [];
+      const allSamplesTo = sampleData.filter(s => String(s.year) === String(year2));
+      
+      // Get all fields from both years
+      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      const allFields = [...new Set([...fieldsFrom, ...fieldsTo])].sort();
+      
+      // Initialize selectedComparisonFields if empty
+      if (selectedComparisonFields.size === 0) {
+        allFields.forEach(f => selectedComparisonFields.add(f));
+      }
+      
+      // Update field checkboxes
+      fieldCheckboxes.innerHTML = allFields.map(field => {
+        const inFrom = fieldsFrom.has(field);
+        const inTo = fieldsTo.has(field);
+        const checked = selectedComparisonFields.has(field);
+        const mismatch = (inFrom && !inTo) || (!inFrom && inTo);
+        const bgColor = mismatch ? '#fef3c7' : (checked ? '#dcfce7' : '#f8fafc');
+        const borderColor = mismatch ? '#f59e0b' : (checked ? '#22c55e' : '#cbd5e1');
+        
+        return `
+          <label style="display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 0.375rem; cursor: pointer; font-size: 0.8125rem;">
+            <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleComparisonField('${field}')" style="cursor: pointer;">
+            <span>${field}</span>
+            ${mismatch ? '<span style="color: #f59e0b;" title="Not in both years">⚠️</span>' : ''}
+          </label>
+        `;
+      }).join('');
+      
+      // Check for mismatches
+      const onlyInFrom = [...fieldsFrom].filter(f => !fieldsTo.has(f));
+      const onlyInTo = [...fieldsTo].filter(f => !fieldsFrom.has(f));
+      
+      if (onlyInFrom.length > 0 || onlyInTo.length > 0) {
+        let warningHtml = '<div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem; padding: 0.75rem; font-size: 0.8125rem;">';
+        warningHtml += '<strong style="color: #92400e;">⚠️ Field Mismatch Detected</strong><br>';
+        if (onlyInFrom.length > 0) {
+          warningHtml += `<span style="color: #92400e;">Only in ${year1}: ${onlyInFrom.join(', ')}</span><br>`;
+        }
+        if (onlyInTo.length > 0) {
+          warningHtml += `<span style="color: #92400e;">Only in ${year2}: ${onlyInTo.join(', ')}</span>`;
+        }
+        warningHtml += '</div>';
+        mismatchWarning.innerHTML = warningHtml;
+      } else {
+        mismatchWarning.innerHTML = '';
+      }
+      
+      // Filter samples by selected fields
+      const samplesFrom = allSamplesFrom.filter(s => selectedComparisonFields.has(s.field));
+      const samplesTo = allSamplesTo.filter(s => selectedComparisonFields.has(s.field));
       
       // Update year stats boxes
       updateYearStatsBox(fromYearInfo, year1, samplesFrom);
       updateYearStatsBox(toYearInfo, year2, samplesTo);
       
       if (samplesTo.length === 0) {
-        grid.innerHTML = `<div class="no-data">No samples found for ${year2}</div>`;
+        grid.innerHTML = `<div class="no-data">No samples found for ${year2} with selected fields</div>`;
         return;
       }
       
@@ -610,6 +754,175 @@
       
       html += '</tbody></table>';
       container.innerHTML = fieldStats.length > 0 ? html : '<div class="no-data">No data available</div>';
+    }
+    
+    // ========== TAB 4: Yield Correlation ==========
+    function updateYieldAnalysis() {
+      const container = document.getElementById('yieldContent');
+      const cropFilter = document.getElementById('yieldCropSelect').value;
+      const yearFilter = document.getElementById('yieldYearSelect').value;
+      const fieldFilter = document.getElementById('yieldFieldSelect').value;
+      
+      // Get samples with yield correlations
+      let samplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0);
+      
+      if (samplesWithYield.length === 0) {
+        container.innerHTML = '<div class="no-data">No yield data available. Import yield maps on the Import page to see correlations.</div>';
+        return;
+      }
+      
+      // Filter by field
+      if (fieldFilter !== 'all') {
+        samplesWithYield = samplesWithYield.filter(s => s.field === fieldFilter);
+      }
+      
+      // Build correlation data points
+      const dataPoints = [];
+      samplesWithYield.forEach(sample => {
+        Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
+          if (yearFilter !== 'all' && String(year) !== String(yearFilter)) return;
+          if (cropFilter !== 'all' && yieldInfo.crop !== cropFilter) return;
+          
+          dataPoints.push({
+            ...sample,
+            yieldYear: parseInt(year),
+            avgYield: yieldInfo.avgYield,
+            crop: yieldInfo.crop,
+            yieldPointCount: yieldInfo.pointCount
+          });
+        });
+      });
+      
+      if (dataPoints.length === 0) {
+        container.innerHTML = '<div class="no-data">No matching yield data for selected filters.</div>';
+        return;
+      }
+      
+      // Calculate correlations for each nutrient
+      const visibleNutrients = getVisibleNutrients();
+      const correlations = [];
+      
+      visibleNutrients.forEach(nutrient => {
+        const pairs = dataPoints.filter(d => d[nutrient] !== undefined && d[nutrient] !== null && !isNaN(d[nutrient]));
+        if (pairs.length < 5) return; // Need at least 5 points
+        
+        const correlation = calculateCorrelation(
+          pairs.map(p => p[nutrient]),
+          pairs.map(p => p.avgYield)
+        );
+        
+        if (correlation !== null && !isNaN(correlation.r)) {
+          correlations.push({
+            nutrient,
+            name: CONFIG.NUTRIENT_NAMES[nutrient] || nutrient,
+            r: correlation.r,
+            r2: correlation.r2,
+            n: pairs.length,
+            significance: getSignificance(correlation.r, pairs.length)
+          });
+        }
+      });
+      
+      // Sort by absolute correlation value
+      correlations.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+      
+      // Get summary stats
+      const avgYield = dataPoints.reduce((sum, d) => sum + d.avgYield, 0) / dataPoints.length;
+      const crops = [...new Set(dataPoints.map(d => d.crop))];
+      const years = [...new Set(dataPoints.map(d => d.yieldYear))].sort();
+      
+      let html = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #92400e;">${dataPoints.length}</div>
+            <div style="color: #92400e; font-size: 0.875rem;">Sample-Yield Pairs</div>
+          </div>
+          <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 700; color: #166534;">${avgYield.toFixed(1)}</div>
+            <div style="color: #166534; font-size: 0.875rem;">Avg Yield (bu/ac)</div>
+          </div>
+          <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.5rem; padding: 1rem; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 600; color: #1e40af;">${crops.map(c => c === 'corn' ? '🌽' : '🫘').join(' ')}</div>
+            <div style="color: #1e40af; font-size: 0.875rem;">Years: ${years.join(', ')}</div>
+          </div>
+        </div>
+        
+        <h3 style="margin: 0 0 1rem 0; color: #1e293b;">Nutrient-Yield Correlations</h3>
+        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;">Shows how each nutrient relates to yield. Higher |r| = stronger relationship.</p>
+        
+        <table class="rankings-table">
+          <thead>
+            <tr>
+              <th>Nutrient</th>
+              <th>Correlation (r)</th>
+              <th>R²</th>
+              <th>Significance</th>
+              <th>Samples</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      correlations.forEach(c => {
+        const color = c.r > 0 ? '#22c55e' : '#ef4444';
+        const barWidth = Math.abs(c.r) * 100;
+        const significance = c.significance === 'high' ? '⭐⭐⭐' : c.significance === 'medium' ? '⭐⭐' : c.significance === 'low' ? '⭐' : '—';
+        const sigColor = c.significance === 'high' ? '#22c55e' : c.significance === 'medium' ? '#f59e0b' : '#94a3b8';
+        
+        html += `
+          <tr>
+            <td class="field">${c.name}</td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 80px; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden;">
+                  <div style="width: ${barWidth}%; height: 100%; background: ${color}; ${c.r < 0 ? 'margin-left: auto;' : ''}"></div>
+                </div>
+                <span style="font-weight: 600; color: ${color};">${c.r > 0 ? '+' : ''}${c.r.toFixed(3)}</span>
+              </div>
+            </td>
+            <td>${(c.r2 * 100).toFixed(1)}%</td>
+            <td style="color: ${sigColor};">${significance}</td>
+            <td>${c.n}</td>
+          </tr>
+        `;
+      });
+      
+      html += '</tbody></table>';
+      
+      if (correlations.length === 0) {
+        html = '<div class="no-data">Not enough data points to calculate correlations. Need at least 5 samples with yield data.</div>';
+      }
+      
+      container.innerHTML = html;
+    }
+    
+    function calculateCorrelation(x, y) {
+      const n = x.length;
+      if (n < 3) return null;
+      
+      const sumX = x.reduce((a, b) => a + b, 0);
+      const sumY = y.reduce((a, b) => a + b, 0);
+      const sumXY = x.reduce((total, xi, i) => total + xi * y[i], 0);
+      const sumX2 = x.reduce((total, xi) => total + xi * xi, 0);
+      const sumY2 = y.reduce((total, yi) => total + yi * yi, 0);
+      
+      const numerator = n * sumXY - sumX * sumY;
+      const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+      
+      if (denominator === 0) return null;
+      
+      const r = numerator / denominator;
+      return { r, r2: r * r };
+    }
+    
+    function getSignificance(r, n) {
+      // Simplified significance based on r value and sample size
+      const absR = Math.abs(r);
+      if (n < 10) return 'insufficient';
+      if (absR > 0.7) return 'high';
+      if (absR > 0.4) return 'medium';
+      if (absR > 0.2) return 'low';
+      return 'none';
     }
 
     function showStatus(msg, ok) {

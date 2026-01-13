@@ -95,6 +95,7 @@
         <div class="summary-item"><div class="number" id="fieldCount">0</div><div class="label">Fields</div></div>
         <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Samples</div></div>
         <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div></div>
+        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Yield Records</div></div>
       </div>
     </div>
 
@@ -131,6 +132,39 @@
         <small>CSV, Shapefile, or GeoJSON • Auto-assigns to fields by GPS</small>
       </div>
       <button class="button success" id="uploadSampleBtn">Upload Samples</button>
+    </div>
+
+    <div class="import-section" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: #f59e0b;">
+      <h3>🌾 Import Yield Data</h3>
+      <p style="color: #92400e; font-size: 0.875rem; margin-bottom: 1rem;">Upload yield maps to correlate soil nutrients with crop performance.</p>
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="form-group">
+          <label>Crop Year</label>
+          <input type="text" id="yieldYear" placeholder="e.g., 2024" style="width: 120px;">
+        </div>
+        <div class="form-group">
+          <label>Crop Type</label>
+          <select id="yieldCrop" style="width: 140px;">
+            <option value="corn">🌽 Corn</option>
+            <option value="soybeans">🫘 Soybeans</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sample Radius</label>
+          <select id="yieldRadius" style="width: 100px;">
+            <option value="30">30 ft</option>
+            <option value="60" selected>60 ft</option>
+            <option value="90">90 ft</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Yield File (Shapefile)</label>
+        <input type="file" id="yieldFiles" multiple accept=".shp,.dbf,.prj,.shx,.zip">
+        <small>John Deere or Climate FieldView shapefile export • ZIP or individual files</small>
+      </div>
+      <button class="button" id="uploadYieldBtn" style="background: #f59e0b; color: white;">Upload Yield Data</button>
+      <div id="yieldStatus" style="margin-top: 0.75rem;"></div>
     </div>
 
     <div class="import-section red">
@@ -268,13 +302,14 @@
       }
     };
 
-    let sampleData = [], fieldBoundaries = {};
+    let sampleData = [], fieldBoundaries = {}, yieldData = [];
 
     document.addEventListener('DOMContentLoaded', async () => {
       loadLocalData(); updateSummary();
       try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) { console.warn(e); }
       document.getElementById('uploadBoundaryBtn').addEventListener('click', uploadBoundaries);
       document.getElementById('uploadSampleBtn').addEventListener('click', uploadSamples);
+      document.getElementById('uploadYieldBtn').addEventListener('click', uploadYield);
       document.getElementById('syncBtn').addEventListener('click', syncToSheets);
       document.getElementById('clearSamplesBtn').addEventListener('click', clearSamples);
       document.getElementById('clearBoundariesBtn').addEventListener('click', clearBoundaries);
@@ -296,12 +331,13 @@
       }
     }
 
-    function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); } catch (e) {} }
-    function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); }
+    function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'), y = localStorage.getItem('yieldData'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); if (y) yieldData = JSON.parse(y); } catch (e) {} }
+    function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); localStorage.setItem('yieldData', JSON.stringify(yieldData)); }
     function updateSummary() {
       document.getElementById('fieldCount').textContent = Object.keys(fieldBoundaries).length;
       document.getElementById('sampleCount').textContent = sampleData.length;
       document.getElementById('yearCount').textContent = [...new Set(sampleData.map(s => s.year).filter(y => y))].length;
+      document.getElementById('yieldCount').textContent = yieldData.length;
     }
 
     async function uploadBoundaries() {
@@ -873,6 +909,250 @@
         }
       }
       return inside;
+    }
+
+    // ========== YIELD DATA FUNCTIONS ==========
+    
+    async function uploadYield() {
+      const fileInput = document.getElementById('yieldFiles');
+      const files = fileInput.files;
+      const yieldYear = document.getElementById('yieldYear').value.trim();
+      const yieldCrop = document.getElementById('yieldCrop').value;
+      const radiusFeet = parseInt(document.getElementById('yieldRadius').value);
+      const statusEl = document.getElementById('yieldStatus');
+      
+      if (!files.length) { showStatus('Please select yield file(s)', false); return; }
+      if (!yieldYear) { showStatus('Please enter the crop year', false); return; }
+      
+      statusEl.innerHTML = '<span style="color: #3b82f6;">⏳ Processing yield data...</span>';
+      
+      try {
+        let yieldPoints = [];
+        
+        // Check if ZIP file
+        const zipFile = Array.from(files).find(f => f.name.toLowerCase().endsWith('.zip'));
+        
+        if (zipFile) {
+          yieldPoints = await parseYieldFromZip(zipFile);
+        } else {
+          yieldPoints = await parseYieldFromShapefiles(files);
+        }
+        
+        if (yieldPoints.length === 0) {
+          statusEl.innerHTML = '<span style="color: #ef4444;">❌ No yield points found in file</span>';
+          return;
+        }
+        
+        // Add metadata to each point
+        yieldPoints.forEach(p => {
+          p.year = parseInt(yieldYear);
+          p.crop = yieldCrop;
+        });
+        
+        // Store yield data
+        const existingKeys = new Set(yieldData.map(y => `${y.lat}-${y.lon}-${y.year}`));
+        const newPoints = yieldPoints.filter(p => !existingKeys.has(`${p.lat}-${p.lon}-${p.year}`));
+        yieldData = [...yieldData, ...newPoints];
+        
+        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length} yield points</span>`;
+        
+        // Now correlate with soil samples
+        statusEl.innerHTML += '<br><span style="color: #3b82f6;">⏳ Correlating with soil samples...</span>';
+        
+        const correlationResults = correlateYieldToSamples(yieldYear, radiusFeet);
+        
+        saveLocalData();
+        updateSummary();
+        
+        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length} yield points<br>✓ Matched ${correlationResults.matched} of ${correlationResults.total} soil samples with yield data</span>`;
+        
+        fileInput.value = '';
+        
+      } catch (e) {
+        console.error('Yield upload error:', e);
+        statusEl.innerHTML = `<span style="color: #ef4444;">❌ Error: ${e.message}</span>`;
+      }
+    }
+    
+    async function parseYieldFromZip(zipFile) {
+      const JSZip = window.JSZip || (await loadJSZip());
+      const zip = await JSZip.loadAsync(zipFile);
+      
+      let shpFile, dbfFile;
+      for (const [name, file] of Object.entries(zip.files)) {
+        const lower = name.toLowerCase();
+        if (lower.endsWith('.shp')) shpFile = file;
+        if (lower.endsWith('.dbf')) dbfFile = file;
+      }
+      
+      if (!shpFile || !dbfFile) throw new Error('ZIP must contain .shp and .dbf files');
+      
+      const shpBuffer = await shpFile.async('arraybuffer');
+      const dbfBuffer = await dbfFile.async('arraybuffer');
+      
+      return parseYieldShapefile(shpBuffer, dbfBuffer);
+    }
+    
+    async function parseYieldFromShapefiles(files) {
+      const fileMap = {};
+      for (const f of files) {
+        const ext = f.name.split('.').pop().toLowerCase();
+        fileMap[ext] = await f.arrayBuffer();
+      }
+      
+      if (!fileMap.shp || !fileMap.dbf) throw new Error('Need both .shp and .dbf files');
+      
+      return parseYieldShapefile(fileMap.shp, fileMap.dbf);
+    }
+    
+    function parseYieldShapefile(shpBuffer, dbfBuffer) {
+      const points = [];
+      
+      // Parse DBF for attributes
+      const dbfView = new DataView(dbfBuffer);
+      const numRecords = dbfView.getUint32(4, true);
+      const headerSize = dbfView.getUint16(8, true);
+      const recordSize = dbfView.getUint16(10, true);
+      
+      // Parse field descriptors
+      const fields = [];
+      let offset = 32;
+      while (offset < headerSize - 1) {
+        const fieldName = String.fromCharCode(...new Uint8Array(dbfBuffer.slice(offset, offset + 11))).replace(/\0/g, '').trim();
+        if (!fieldName) break;
+        const fieldType = String.fromCharCode(dbfView.getUint8(offset + 11));
+        const fieldLen = dbfView.getUint8(offset + 16);
+        fields.push({ name: fieldName, type: fieldType, length: fieldLen });
+        offset += 32;
+      }
+      
+      // Find yield field - common names from JD and Climate
+      const yieldFieldNames = ['VRYIELDVO', 'Yld_Vol_Dr', 'YLD_VOL_DR', 'YIELD', 'DryYield', 'Dry_Yield', 'YldVolDry', 'YldMassDry', 'VRYIELDMA', 'Yld_Mass_D'];
+      let yieldField = fields.find(f => yieldFieldNames.includes(f.name));
+      if (!yieldField) {
+        // Try partial match
+        yieldField = fields.find(f => f.name.toLowerCase().includes('yield') || f.name.toLowerCase().includes('yld'));
+      }
+      
+      if (!yieldField) {
+        console.warn('Available fields:', fields.map(f => f.name));
+        throw new Error('Could not find yield field. Available: ' + fields.map(f => f.name).join(', '));
+      }
+      
+      // Parse SHP for coordinates
+      const shpView = new DataView(shpBuffer);
+      let shpOffset = 100; // Skip header
+      
+      const records = [];
+      while (shpOffset < shpBuffer.byteLength - 8) {
+        const recordNum = shpView.getInt32(shpOffset, false);
+        const contentLen = shpView.getInt32(shpOffset + 4, false) * 2;
+        const shapeType = shpView.getInt32(shpOffset + 8, true);
+        
+        if (shapeType === 1 || shapeType === 11) { // Point or PointZ
+          const x = shpView.getFloat64(shpOffset + 12, true); // Longitude
+          const y = shpView.getFloat64(shpOffset + 20, true); // Latitude
+          records.push({ lon: x, lat: y });
+        }
+        
+        shpOffset += 8 + contentLen;
+      }
+      
+      // Parse DBF records and match with coordinates
+      let dbfOffset = headerSize;
+      for (let i = 0; i < Math.min(numRecords, records.length); i++) {
+        dbfOffset++; // Skip deletion flag
+        
+        let fieldOffset = 0;
+        let yieldValue = null;
+        
+        for (const field of fields) {
+          const rawValue = String.fromCharCode(...new Uint8Array(dbfBuffer.slice(dbfOffset + fieldOffset, dbfOffset + fieldOffset + field.length))).trim();
+          
+          if (field.name === yieldField.name) {
+            yieldValue = parseFloat(rawValue);
+          }
+          
+          fieldOffset += field.length;
+        }
+        
+        dbfOffset += recordSize - 1;
+        
+        if (records[i] && yieldValue && !isNaN(yieldValue) && yieldValue > 0) {
+          points.push({
+            lat: records[i].lat,
+            lon: records[i].lon,
+            yield: yieldValue
+          });
+        }
+      }
+      
+      return points;
+    }
+    
+    function correlateYieldToSamples(yieldYear, radiusFeet) {
+      // Convert feet to approximate degrees (at ~40° latitude)
+      // 1 degree latitude ≈ 364,000 feet
+      // 1 degree longitude ≈ 288,000 feet (at 40°N)
+      const radiusLatDeg = radiusFeet / 364000;
+      const radiusLonDeg = radiusFeet / 288000;
+      
+      let matched = 0;
+      const yieldYear_int = parseInt(yieldYear);
+      
+      // Filter yield data for this year
+      const yearYield = yieldData.filter(y => y.year === yieldYear_int);
+      
+      if (yearYield.length === 0) {
+        return { matched: 0, total: sampleData.length };
+      }
+      
+      sampleData.forEach(sample => {
+        // Find closest soil sample year to yield year
+        const sampleYear = parseInt(sample.year);
+        if (Math.abs(sampleYear - yieldYear_int) > 2) return; // Skip if soil sample is more than 2 years from yield
+        
+        // Find all yield points within radius
+        const nearbyYields = yearYield.filter(y => {
+          const latDiff = Math.abs(y.lat - sample.lat);
+          const lonDiff = Math.abs(y.lon - sample.lon);
+          return latDiff <= radiusLatDeg && lonDiff <= radiusLonDeg;
+        });
+        
+        if (nearbyYields.length > 0) {
+          // Calculate average yield
+          const avgYield = nearbyYields.reduce((sum, y) => sum + y.yield, 0) / nearbyYields.length;
+          const crop = nearbyYields[0].crop;
+          
+          // Store on sample
+          if (!sample.yieldCorrelations) sample.yieldCorrelations = {};
+          sample.yieldCorrelations[yieldYear_int] = {
+            avgYield: Math.round(avgYield * 10) / 10,
+            pointCount: nearbyYields.length,
+            crop: crop,
+            radiusFt: radiusFeet
+          };
+          
+          matched++;
+        }
+      });
+      
+      // Save updated samples
+      saveLocalData();
+      
+      return { matched, total: sampleData.length };
+    }
+    
+    async function loadJSZip() {
+      // JSZip should already be loaded from earlier script
+      if (window.JSZip) return window.JSZip;
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = () => resolve(window.JSZip);
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
     }
 
     async function syncToSheets() {
