@@ -455,34 +455,36 @@
       container.innerHTML = html;
     }
     
-    function toggleComparisonField(field) {
+    window.toggleComparisonField = function(field) {
       if (selectedComparisonFields.has(field)) {
         selectedComparisonFields.delete(field);
       } else {
         selectedComparisonFields.add(field);
       }
       updateComparison();
-    }
+    };
     
-    function selectAllComparisonFields() {
+    window.selectAllComparisonFields = function() {
       const allSamplesFrom = year1 ? sampleData.filter(s => String(s.year) === String(year1)) : [];
       const allSamplesTo = sampleData.filter(s => String(s.year) === String(year2));
-      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && f !== 'Unknown'));
-      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      const excludeFields = ['Unknown', 'Unassigned', 'unknown', 'unassigned', null, undefined, ''];
+      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && !excludeFields.includes(f)));
+      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && !excludeFields.includes(f)));
       const allFields = [...new Set([...fieldsFrom, ...fieldsTo])];
-      // Only select fields that have data in both years (matching fields)
+      // Clear first, then only select fields that have data in both years (matching fields)
+      selectedComparisonFields.clear();
       allFields.forEach(f => {
         if (fieldsFrom.has(f) && fieldsTo.has(f)) {
           selectedComparisonFields.add(f);
         }
       });
       updateComparison();
-    }
-    
-    function selectNoneComparisonFields() {
+    };
+
+    window.selectNoneComparisonFields = function() {
       selectedComparisonFields.clear();
       updateComparison();
-    }
+    };
 
     // ========== TAB 1: Year Comparison ==========
     // year1 = FROM (earlier year), year2 = TO (later year)
@@ -506,9 +508,10 @@
       const allSamplesFrom = year1 ? sampleData.filter(s => String(s.year) === String(year1)) : [];
       const allSamplesTo = sampleData.filter(s => String(s.year) === String(year2));
       
-      // Get all fields from both years
-      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && f !== 'Unknown'));
-      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && f !== 'Unknown'));
+      // Get all fields from both years (exclude Unknown and Unassigned)
+      const excludeFields = ['Unknown', 'Unassigned', 'unknown', 'unassigned', null, undefined, ''];
+      const fieldsFrom = new Set(allSamplesFrom.map(s => s.field).filter(f => f && !excludeFields.includes(f)));
+      const fieldsTo = new Set(allSamplesTo.map(s => s.field).filter(f => f && !excludeFields.includes(f)));
       const allFields = [...new Set([...fieldsFrom, ...fieldsTo])].sort();
       
       // Initialize selectedComparisonFields if empty - only select fields in BOTH years by default
@@ -567,7 +570,13 @@
       updateYearStatsBox(toYearInfo, year2, samplesTo);
       
       if (samplesTo.length === 0) {
-        grid.innerHTML = `<div class="no-data">No samples found for ${year2} with selected fields</div>`;
+        // Check if the issue is no matching fields
+        const matchingFields = allFields.filter(f => fieldsFrom.has(f) && fieldsTo.has(f));
+        if (matchingFields.length === 0 && allFields.length > 0) {
+          grid.innerHTML = `<div class="no-data">No matching fields between ${year1} and ${year2}.<br><small style="color: #64748b;">Fields may have different names. Try "Reassign samples to boundaries" on the Import page, or select fields manually above.</small></div>`;
+        } else {
+          grid.innerHTML = `<div class="no-data">No samples found for ${year2} with selected fields.<br><small style="color: #64748b;">Select fields above to include in comparison.</small></div>`;
+        }
         return;
       }
       
