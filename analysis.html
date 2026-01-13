@@ -19,6 +19,7 @@
     .user-info { font-size: 0.875rem; color: rgba(255,255,255,0.9); }
     .sign-in-btn { padding: 0.5rem 1rem; background: #4285f4; color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer; }
     .sign-in-btn.signed-in { background: #22c55e; }
+    
     .analysis-container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
     
     .controls-bar { background: white; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-end; }
@@ -26,93 +27,55 @@
     .control-group label { font-size: 0.75rem; font-weight: 600; color: #64748b; text-transform: uppercase; }
     .control-group select { padding: 0.5rem 0.75rem; font-size: 0.875rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; min-width: 140px; }
     
-    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-    .tab { padding: 0.75rem 1.5rem; background: white; border: 1px solid #cbd5e1; border-radius: 0.375rem; cursor: pointer; font-weight: 500; }
-    .tab:hover { background: #f1f5f9; }
-    .tab.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+    .nutrient-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
     
-    .section { background: white; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .section h2 { font-size: 1.25rem; margin-bottom: 1rem; color: #1e293b; }
+    .nutrient-card { background: white; border-radius: 0.5rem; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #94a3b8; }
+    .nutrient-card.positive { border-left-color: #22c55e; background: linear-gradient(to right, #f0fdf4, white); }
+    .nutrient-card.negative { border-left-color: #ef4444; background: linear-gradient(to right, #fef2f2, white); }
+    .nutrient-card.neutral { border-left-color: #94a3b8; }
     
-    .comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-    .comparison-card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; }
-    .comparison-card.positive { background: #f0fdf4; border-color: #22c55e; }
-    .comparison-card.negative { background: #fef2f2; border-color: #ef4444; }
-    .comparison-card .nutrient { font-weight: 600; color: #475569; margin-bottom: 0.5rem; }
-    .comparison-card .values { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem; }
-    .comparison-card .change { font-size: 1.25rem; font-weight: 700; }
-    .comparison-card .change.positive { color: #22c55e; }
-    .comparison-card .change.negative { color: #ef4444; }
+    .nutrient-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .nutrient-name { font-size: 1rem; font-weight: 700; color: #1e293b; }
+    .nutrient-change { font-size: 1.125rem; font-weight: 700; }
+    .nutrient-change.positive { color: #22c55e; }
+    .nutrient-change.negative { color: #ef4444; }
+    .nutrient-change.neutral { color: #64748b; }
     
-    .field-table { width: 100%; border-collapse: collapse; }
-    .field-table th, .field-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
-    .field-table th { background: #f8fafc; font-weight: 600; color: #475569; cursor: pointer; user-select: none; }
-    .field-table th:hover { background: #f1f5f9; }
-    .field-table th.sorted { color: #3b82f6; }
-    .field-table th .sort-icon { margin-left: 0.5rem; }
-    .field-table tr:hover { background: #f8fafc; }
-    .field-table .rank { font-weight: 600; color: #64748b; width: 50px; }
-    .field-table .field-name { font-weight: 500; }
-    .field-table .value { font-weight: 600; }
-    .field-table .value.high { color: #22c55e; }
-    .field-table .value.low { color: #ef4444; }
+    .nutrient-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; }
+    .stat-box { background: #f8fafc; border-radius: 0.375rem; padding: 0.5rem; text-align: center; }
+    .stat-box .label { font-size: 0.625rem; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 0.125rem; }
+    .stat-box .value { font-size: 1rem; font-weight: 700; color: #1e293b; }
     
-    .summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stat-card { background: #f8fafc; border-radius: 0.5rem; padding: 1rem; text-align: center; }
-    .stat-card .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; margin-bottom: 0.25rem; }
-    .stat-card .value { font-size: 1.5rem; font-weight: 700; color: #1e293b; }
-    .stat-card .change { font-size: 0.875rem; margin-top: 0.25rem; }
-    .stat-card .change.positive { color: #22c55e; }
-    .stat-card .change.negative { color: #ef4444; }
+    .year-comparison { display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; border-radius: 0.375rem; padding: 0.5rem 0.75rem; }
+    .year-value { text-align: center; }
+    .year-value .year { font-size: 0.625rem; font-weight: 600; color: #64748b; text-transform: uppercase; }
+    .year-value .val { font-size: 1.125rem; font-weight: 700; color: #1e293b; }
+    .year-arrow { font-size: 1.25rem; color: #94a3b8; }
+    .year-arrow.positive { color: #22c55e; }
+    .year-arrow.negative { color: #ef4444; }
+    
+    .change-details { display: flex; justify-content: center; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: #64748b; }
+    .change-details span { display: flex; align-items: center; gap: 0.25rem; }
+    .change-details .change-value { font-weight: 600; }
+    .change-details .change-value.positive { color: #22c55e; }
+    .change-details .change-value.negative { color: #ef4444; }
     
     .no-data { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 2rem; text-align: center; color: #92400e; }
     #statusMessage { display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 0.75rem 1rem; border-radius: 0.375rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     
-    /* Historical trend styles */
-    .trend-card { background: white; border: 2px solid; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; }
-    .trend-card.positive { background: #f0fdf4; border-color: #22c55e; }
-    .trend-card.negative { background: #fef2f2; border-color: #ef4444; }
-    .trend-card.neutral { background: #f8fafc; border-color: #94a3b8; }
-    .trend-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
-    .trend-title { font-size: 1.125rem; font-weight: 600; color: #1e293b; }
-    .trend-percent { font-size: 1.5rem; font-weight: 700; }
-    .trend-percent.positive { color: #22c55e; }
-    .trend-percent.negative { color: #ef4444; }
-    .trend-content { display: flex; gap: 2rem; flex-wrap: wrap; }
-    .trend-values { min-width: 150px; }
-    .trend-value-row { display: flex; justify-content: space-between; padding: 0.375rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.875rem; }
-    .trend-value-row .year { color: #64748b; }
-    .trend-value-row .value { font-weight: 600; }
-    .trend-bar-container { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.5rem; }
-    .trend-bar-row { display: flex; align-items: center; gap: 0.5rem; }
-    .trend-bar-label { width: 50px; font-size: 0.75rem; color: #64748b; }
-    .trend-bar { height: 20px; background: #e2e8f0; border-radius: 4px; flex: 1; position: relative; }
-    .trend-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
-    .trend-bar-value { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; font-weight: 600; }
-    .field-selector-inline { margin-bottom: 1rem; }
-    .field-selector-inline select { padding: 0.5rem 0.75rem; font-size: 0.875rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; min-width: 200px; }
-    
-    /* Line graph styles */
-    .trend-graph-card { background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1rem; }
-    .trend-graph-card h3 { font-size: 1rem; font-weight: 600; color: #1e293b; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; }
-    .trend-graph-card .change-badge { font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
-    .trend-graph-card .change-badge.positive { background: #dcfce7; color: #166534; }
-    .trend-graph-card .change-badge.negative { background: #fee2e2; color: #991b1b; }
-    .line-graph { width: 100%; height: 120px; position: relative; }
-    .line-graph-svg { width: 100%; height: 100%; }
-    .graph-line { fill: none; stroke-width: 2; }
-    .graph-point { cursor: pointer; }
-    .graph-label { font-size: 10px; fill: #64748b; }
-    .graph-value-label { font-size: 11px; font-weight: 600; fill: #1e293b; }
-    .graph-grid-line { stroke: #e2e8f0; stroke-width: 1; }
+    @media (max-width: 639px) {
+      .nutrient-grid { grid-template-columns: 1fr; }
+      .controls-bar { flex-direction: column; align-items: stretch; }
+      .control-group select { width: 100%; }
+    }
   </style>
 </head>
 <body>
   <div class="app-container">
     <div class="top-bar">
       <div>
-        <h1>📊 Soil Analysis</h1>
-        <p>Operation Comparison & Field Rankings</p>
+        <h1>📊 Year Comparison</h1>
+        <p>Compare soil nutrients across years</p>
       </div>
       <nav class="nav-links">
         <a href="index.html" class="nav-link">📍 Map</a>
@@ -127,89 +90,30 @@
     </div>
     
     <div class="analysis-container">
-      <div class="controls-bar" id="controlsBar">
-        <div class="control-group" id="attributeGroup">
-          <label>Attribute</label>
-          <select id="attributeSelect">
-            <option value="P">Phosphorus (P)</option>
-            <option value="pH">pH</option>
-            <option value="K">Potassium (K)</option>
-            <option value="OM">Organic Matter</option>
-            <option value="CEC">CEC</option>
-            <option value="Ca_sat">Calcium %</option>
-            <option value="Mg_sat">Magnesium %</option>
-            <option value="K_Sat">K Base Sat %</option>
-            <option value="H_Sat">H Base Sat %</option>
-            <option value="Zn">Zinc</option>
-            <option value="Cu">Copper</option>
-            <option value="Mn">Manganese</option>
-            <option value="Fe">Iron</option>
-            <option value="Boron">Boron</option>
-            <option value="S">Sulfur</option>
+      <div class="controls-bar">
+        <div class="control-group">
+          <label>Field</label>
+          <select id="fieldSelect">
+            <option value="all">All Fields (Operation Average)</option>
           </select>
         </div>
-        <div class="control-group" id="yearGroup">
-          <label>Year</label>
-          <select id="yearSelect"><option value="">All Years</option></select>
+        <div class="control-group">
+          <label>Compare Year</label>
+          <select id="year1Select"></select>
         </div>
-        <div class="control-group" id="compareYearGroup">
-          <label>Compare To</label>
-          <select id="compareYearSelect"><option value="">Select Year</option></select>
-        </div>
-      </div>
-      
-      <div class="tabs">
-        <div class="tab active" data-tab="comparison">Year Comparison</div>
-        <div class="tab" data-tab="ranking">Field Rankings</div>
-        <div class="tab" data-tab="history">Historical Field Trend</div>
-      </div>
-      
-      <div id="comparisonTab">
-        <div class="section">
-          <h2>Operation Summary</h2>
-          <div class="summary-stats" id="summaryStats"></div>
-        </div>
-        
-        <div class="section">
-          <h2>All Nutrients Comparison</h2>
-          <div class="comparison-grid" id="comparisonGrid"></div>
+        <div class="control-group">
+          <label>To Year</label>
+          <select id="year2Select"></select>
         </div>
       </div>
       
-      <div id="rankingTab" style="display: none;">
-        <div class="section">
-          <h2>Field Rankings by <span id="rankingAttrName">Phosphorus</span></h2>
-          <table class="field-table">
-            <thead>
-              <tr>
-                <th class="rank">#</th>
-                <th data-sort="field">Field</th>
-                <th data-sort="avg" class="sorted">Average ↓</th>
-                <th data-sort="high">High</th>
-                <th data-sort="low">Low</th>
-                <th data-sort="samples">Samples</th>
-              </tr>
-            </thead>
-            <tbody id="fieldTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-      
-      <div id="historyTab" style="display: none;">
-        <div class="section">
-          <h2>Historical Field Nutrient Trends</h2>
-          <div class="field-selector-inline">
-            <label style="margin-right: 0.5rem; font-weight: 500;">Select Field:</label>
-            <select id="historyFieldSelect"><option value="">Select a field...</option></select>
-          </div>
-          <div id="historyContent">
-            <div class="no-data">Select a field to view nutrient trends over time</div>
-          </div>
-        </div>
+      <div id="nutrientGrid" class="nutrient-grid">
+        <div class="no-data">Loading data...</div>
       </div>
     </div>
-    <div id="statusMessage"></div>
   </div>
+  
+  <div id="statusMessage"></div>
 
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
@@ -218,18 +122,28 @@
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
       SHEET_ID: '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY',
-      NUTRIENT_ORDER: ['pH', 'OM', 'P', 'K', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S'],
-      LOWER_IS_BETTER: ['Mg_sat', 'H_Sat'],
-      NUTRIENT_NAMES: { pH: 'pH', OM: 'Organic Matter', P: 'Phosphorus', K: 'Potassium', CEC: 'CEC', Ca_sat: 'Calcium %', Mg_sat: 'Magnesium %', K_Sat: 'K Base Sat', H_Sat: 'H Base Sat', Zn: 'Zinc', Cu: 'Copper', Mn: 'Manganese', Fe: 'Iron', Boron: 'Boron', S: 'Sulfur' },
-      NUTRIENT_UNITS: { pH: '', OM: '%', P: 'ppm', K: 'ppm', CEC: 'meq/100g', Ca_sat: '%', Mg_sat: '%', K_Sat: '%', H_Sat: '%', Zn: 'ppm', Cu: 'ppm', Mn: 'ppm', Fe: 'ppm', Boron: 'ppm', S: 'ppm' }
+      
+      NUTRIENTS: ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH'],
+      
+      NUTRIENT_NAMES: {
+        pH: 'pH', P: 'Phosphorus (P)', K: 'Potassium (K)', OM: 'Organic Matter',
+        CEC: 'CEC', Ca_sat: 'Calcium Sat %', Mg_sat: 'Magnesium Sat %',
+        K_Sat: 'K Base Sat %', H_Sat: 'H Base Sat %', Zn: 'Zinc', Cu: 'Copper',
+        Mn: 'Manganese', Fe: 'Iron', Boron: 'Boron', S: 'Sulfur', Buffer_pH: 'Buffer pH'
+      },
+      
+      NUTRIENT_UNITS: {
+        pH: '', P: 'ppm', K: 'ppm', OM: '%', CEC: 'meq/100g',
+        Ca_sat: '%', Mg_sat: '%', K_Sat: '%', H_Sat: '%',
+        Zn: 'ppm', Cu: 'ppm', Mn: 'ppm', Fe: 'ppm', Boron: 'ppm', S: 'ppm', Buffer_pH: ''
+      },
+      
+      // Nutrients where lower values are better
+      LOWER_IS_BETTER: ['Mg_sat', 'H_Sat']
     };
 
-    let tokenClient, accessToken = null;
-    let sampleData = [];
-    let selectedAttribute = 'P';
-    let selectedYear = '';
-    let compareYear = '';
-    let currentSort = { field: 'avg', direction: 'desc' };
+    let tokenClient, accessToken = null, tokenExpiry = null;
+    let sampleData = [], selectedField = 'all', year1 = null, year2 = null;
     
     const SheetsAPI = {
       isSignedIn: false,
@@ -244,17 +158,19 @@
                 callback: (response) => {
                   if (response.error) return;
                   accessToken = response.access_token;
+                  tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
                   localStorage.setItem('googleAccessToken', accessToken);
-                  localStorage.setItem('googleTokenExpiry', (Date.now() + 3600000).toString());
+                  localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
               });
-              // Check saved token
               const savedToken = localStorage.getItem('googleAccessToken');
               const savedExpiry = localStorage.getItem('googleTokenExpiry');
               if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
                 accessToken = savedToken;
+                tokenExpiry = parseInt(savedExpiry);
+                gapi.client.setToken({ access_token: accessToken });
                 this.isSignedIn = true;
                 this.onSignInChange(true);
               }
@@ -266,7 +182,7 @@
       async signIn() { tokenClient.requestAccessToken({ prompt: 'consent' }); },
       async signOut() { 
         if (accessToken) google.accounts.oauth2.revoke(accessToken);
-        accessToken = null;
+        accessToken = null; tokenExpiry = null;
         localStorage.removeItem('googleAccessToken');
         localStorage.removeItem('googleTokenExpiry');
         this.isSignedIn = false;
@@ -276,397 +192,187 @@
     };
 
     document.addEventListener('DOMContentLoaded', async () => {
+      try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) {}
       loadLocalData();
-      try {
-        await SheetsAPI.init();
-        SheetsAPI.onSignInChange = handleSignInChange;
-        handleSignInChange(SheetsAPI.isSignedIn);
-      } catch (e) { console.warn(e); }
-      
-      document.getElementById('attributeSelect').addEventListener('change', (e) => { selectedAttribute = e.target.value; updateAnalysis(); });
-      document.getElementById('yearSelect').addEventListener('change', (e) => { selectedYear = e.target.value; updateCompareYearOptions(); updateAnalysis(); });
-      document.getElementById('compareYearSelect').addEventListener('change', (e) => { compareYear = e.target.value; updateAnalysis(); });
-      document.getElementById('historyFieldSelect').addEventListener('change', (e) => { updateHistoricalTrends(e.target.value); });
-      
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-          const tabName = tab.dataset.tab;
-          document.getElementById('comparisonTab').style.display = tabName === 'comparison' ? 'block' : 'none';
-          document.getElementById('rankingTab').style.display = tabName === 'ranking' ? 'block' : 'none';
-          document.getElementById('historyTab').style.display = tabName === 'history' ? 'block' : 'none';
-          
-          // Show/hide controls based on tab
-          // Comparison: show all (attribute, year, compare to)
-          // Ranking: show attribute and year only
-          // History: hide all controls
-          document.getElementById('attributeGroup').style.display = tabName === 'history' ? 'none' : 'block';
-          document.getElementById('yearGroup').style.display = tabName === 'history' ? 'none' : 'block';
-          document.getElementById('compareYearGroup').style.display = tabName === 'comparison' ? 'block' : 'none';
-          
-          if (tabName === 'history') updateHistoryFieldSelector();
-        });
-      });
-      
-      document.querySelectorAll('.field-table th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-          const sortField = th.dataset.sort;
-          if (currentSort.field === sortField) {
-            currentSort.direction = currentSort.direction === 'desc' ? 'asc' : 'desc';
-          } else {
-            currentSort.field = sortField;
-            currentSort.direction = 'desc';
-          }
-          updateFieldRanking();
-        });
-      });
-      
-      updateYearSelectors();
-      updateAnalysis();
+      setupEventListeners();
     });
-
-    function loadLocalData() {
-      try {
-        const s = localStorage.getItem('soilSamples');
-        if (s) sampleData = JSON.parse(s);
-      } catch (e) {}
-    }
 
     async function handleAuth() { if (SheetsAPI.isSignedIn) await SheetsAPI.signOut(); else await SheetsAPI.signIn(); }
     
     function handleSignInChange(isSignedIn) {
       const authBtn = document.getElementById('authBtn'), userInfo = document.getElementById('userInfo');
-      if (isSignedIn) {
-        userInfo.textContent = 'Connected';
-        authBtn.textContent = '✓ Signed In';
-        authBtn.classList.add('signed-in');
-      } else {
-        userInfo.textContent = '';
-        authBtn.textContent = 'Sign In with Google';
-        authBtn.classList.remove('signed-in');
-      }
+      if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
+      else { userInfo.textContent = ''; authBtn.textContent = 'Sign In with Google'; authBtn.classList.remove('signed-in'); }
     }
 
-    function getUniqueYears() {
-      return [...new Set(sampleData.map(s => s.year).filter(y => y))].sort((a, b) => b - a);
+    function loadLocalData() {
+      try {
+        const saved = localStorage.getItem('soilSamples');
+        if (saved) sampleData = JSON.parse(saved);
+      } catch (e) {}
+      populateSelectors();
+      updateDisplay();
     }
 
-    function updateYearSelectors() {
-      const years = getUniqueYears();
-      const yearSel = document.getElementById('yearSelect');
-      const compareSel = document.getElementById('compareYearSelect');
+    function populateSelectors() {
+      // Fields
+      const fieldSelect = document.getElementById('fieldSelect');
+      const fields = [...new Set(sampleData.map(s => s.field).filter(f => f && f !== 'Unknown'))].sort();
+      fieldSelect.innerHTML = '<option value="all">All Fields (Operation Average)</option>';
+      fields.forEach(f => { fieldSelect.innerHTML += `<option value="${f}">${f}</option>`; });
       
-      yearSel.innerHTML = '<option value="">All Years</option>';
-      years.forEach(y => { yearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+      // Years
+      const years = [...new Set(sampleData.map(s => s.year).filter(y => y))].sort((a, b) => b - a);
+      const year1Select = document.getElementById('year1Select');
+      const year2Select = document.getElementById('year2Select');
       
-      if (years.length > 0) {
-        selectedYear = years[0].toString();
-        yearSel.value = selectedYear;
-      }
+      year1Select.innerHTML = '';
+      year2Select.innerHTML = '';
       
-      updateCompareYearOptions();
-    }
-
-    function updateCompareYearOptions() {
-      const years = getUniqueYears().filter(y => String(y) !== String(selectedYear));
-      const compareSel = document.getElementById('compareYearSelect');
-      compareSel.innerHTML = '<option value="">Select Year</option>';
-      years.forEach(y => { compareSel.innerHTML += `<option value="${y}">${y}</option>`; });
+      years.forEach((y, i) => {
+        year1Select.innerHTML += `<option value="${y}" ${i === 0 ? 'selected' : ''}>${y}</option>`;
+        year2Select.innerHTML += `<option value="${y}" ${i === 1 ? 'selected' : ''}>${y}</option>`;
+      });
       
-      if (years.length > 0) {
-        compareYear = years[0].toString();
-        compareSel.value = compareYear;
-      }
+      year1 = years[0] || null;
+      year2 = years[1] || years[0] || null;
     }
 
-    function updateAnalysis() {
-      updateSummaryStats();
-      updateComparisonGrid();
-      updateFieldRanking();
+    function setupEventListeners() {
+      document.getElementById('fieldSelect').addEventListener('change', (e) => { selectedField = e.target.value; updateDisplay(); });
+      document.getElementById('year1Select').addEventListener('change', (e) => { year1 = e.target.value; updateDisplay(); });
+      document.getElementById('year2Select').addEventListener('change', (e) => { year2 = e.target.value; updateDisplay(); });
     }
 
-    function getFilteredSamples(year) {
-      if (!year) return sampleData;
-      return sampleData.filter(s => String(s.year) === String(year));
-    }
-
-    function calculateStats(samples, attr) {
+    function getStats(samples, attr) {
       const values = samples.map(s => s[attr]).filter(v => v !== undefined && v !== null && !isNaN(v));
       if (values.length === 0) return null;
+      const sum = values.reduce((a, b) => a + b, 0);
       return {
-        avg: values.reduce((a, b) => a + b, 0) / values.length,
+        avg: sum / values.length,
         high: Math.max(...values),
         low: Math.min(...values),
         count: values.length
       };
     }
 
-    function updateSummaryStats() {
-      const container = document.getElementById('summaryStats');
-      const currentSamples = getFilteredSamples(selectedYear);
-      const compareSamples = compareYear ? getFilteredSamples(compareYear) : null;
+    function updateDisplay() {
+      const grid = document.getElementById('nutrientGrid');
       
-      const currentStats = calculateStats(currentSamples, selectedAttribute);
-      const compareStats = compareSamples ? calculateStats(compareSamples, selectedAttribute) : null;
-      
-      if (!currentStats) {
-        container.innerHTML = '<div class="no-data">No data for selected year</div>';
+      if (!year1 || sampleData.length === 0) {
+        grid.innerHTML = '<div class="no-data">No data available. Import soil samples to see analysis.</div>';
         return;
       }
       
-      const unit = CONFIG.NUTRIENT_UNITS[selectedAttribute] || '';
-      const decimals = selectedAttribute === 'pH' ? 2 : 1;
-      
-      let html = `
-        <div class="stat-card">
-          <div class="label">Average ${CONFIG.NUTRIENT_NAMES[selectedAttribute]}</div>
-          <div class="value">${currentStats.avg.toFixed(decimals)} ${unit}</div>
-          ${compareStats ? `<div class="change ${currentStats.avg >= compareStats.avg ? 'positive' : 'negative'}">${currentStats.avg >= compareStats.avg ? '↑' : '↓'} ${Math.abs(currentStats.avg - compareStats.avg).toFixed(decimals)} from ${compareYear}</div>` : ''}
-        </div>
-        <div class="stat-card">
-          <div class="label">High</div>
-          <div class="value">${currentStats.high.toFixed(decimals)} ${unit}</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Low</div>
-          <div class="value">${currentStats.low.toFixed(decimals)} ${unit}</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Sample Count</div>
-          <div class="value">${currentStats.count}</div>
-        </div>
-      `;
-      
-      container.innerHTML = html;
-    }
-
-    function updateComparisonGrid() {
-      const container = document.getElementById('comparisonGrid');
-      
-      if (!selectedYear || !compareYear) {
-        container.innerHTML = '<div class="no-data">Select two years to compare</div>';
-        return;
+      // Filter samples by field
+      let samples = sampleData;
+      if (selectedField !== 'all') {
+        samples = samples.filter(s => s.field === selectedField);
       }
       
-      const currentSamples = getFilteredSamples(selectedYear);
-      const compareSamples = getFilteredSamples(compareYear);
+      // Get samples for each year
+      const samples1 = samples.filter(s => String(s.year) === String(year1));
+      const samples2 = year2 ? samples.filter(s => String(s.year) === String(year2)) : [];
+      
+      if (samples1.length === 0) {
+        grid.innerHTML = `<div class="no-data">No samples found for ${year1}</div>`;
+        return;
+      }
       
       let html = '';
       
-      CONFIG.NUTRIENT_ORDER.forEach(attr => {
-        const currentStats = calculateStats(currentSamples, attr);
-        const compareStats = calculateStats(compareSamples, attr);
+      CONFIG.NUTRIENTS.forEach(attr => {
+        const stats1 = getStats(samples1, attr);
+        const stats2 = year2 ? getStats(samples2, attr) : null;
         
-        if (!currentStats || !compareStats) return;
+        if (!stats1) return; // Skip if no data for this nutrient
         
-        const change = currentStats.avg - compareStats.avg;
-        const pctChange = compareStats.avg !== 0 ? (change / compareStats.avg) * 100 : 0;
-        const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(attr);
-        const isPositive = isLowerBetter ? change < 0 : change > 0;
-        const decimals = attr === 'pH' ? 2 : 1;
+        const name = CONFIG.NUTRIENT_NAMES[attr] || attr;
         const unit = CONFIG.NUTRIENT_UNITS[attr] || '';
+        const decimals = (attr === 'pH' || attr === 'Buffer_pH') ? 2 : 1;
+        const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(attr);
         
-        html += `
-          <div class="comparison-card ${isPositive ? 'positive' : Math.abs(pctChange) > 5 ? 'negative' : ''}">
-            <div class="nutrient">${CONFIG.NUTRIENT_NAMES[attr]}</div>
-            <div class="values">
-              <span>${compareYear}: ${compareStats.avg.toFixed(decimals)} ${unit}</span>
-              <span>${selectedYear}: ${currentStats.avg.toFixed(decimals)} ${unit}</span>
-            </div>
-            <div class="change ${isPositive ? 'positive' : 'negative'}">
-              ${change >= 0 ? '+' : ''}${change.toFixed(decimals)} (${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%)
-            </div>
-          </div>
-        `;
-      });
-      
-      container.innerHTML = html || '<div class="no-data">No comparison data available</div>';
-    }
-
-    function updateFieldRanking() {
-      document.getElementById('rankingAttrName').textContent = CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute;
-      
-      const samples = getFilteredSamples(selectedYear);
-      
-      // Group by field
-      const fieldGroups = {};
-      samples.forEach(s => {
-        const field = s.field || 'Unknown';
-        if (!fieldGroups[field]) fieldGroups[field] = [];
-        fieldGroups[field].push(s);
-      });
-      
-      // Calculate stats per field
-      const fieldStats = [];
-      Object.entries(fieldGroups).forEach(([field, samples]) => {
-        const stats = calculateStats(samples, selectedAttribute);
-        if (stats) {
-          fieldStats.push({ field, ...stats });
-        }
-      });
-      
-      // Sort
-      fieldStats.sort((a, b) => {
-        let valA = a[currentSort.field];
-        let valB = b[currentSort.field];
-        if (currentSort.field === 'field') {
-          return currentSort.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-        return currentSort.direction === 'asc' ? valA - valB : valB - valA;
-      });
-      
-      // Update table headers
-      document.querySelectorAll('.field-table th[data-sort]').forEach(th => {
-        th.classList.remove('sorted');
-        th.querySelector('.sort-icon')?.remove();
-        if (th.dataset.sort === currentSort.field) {
-          th.classList.add('sorted');
-          th.innerHTML += `<span class="sort-icon">${currentSort.direction === 'desc' ? '↓' : '↑'}</span>`;
-        }
-      });
-      
-      // Render table
-      const tbody = document.getElementById('fieldTableBody');
-      const unit = CONFIG.NUTRIENT_UNITS[selectedAttribute] || '';
-      const decimals = selectedAttribute === 'pH' ? 2 : 1;
-      
-      const maxVal = Math.max(...fieldStats.map(f => f.avg));
-      const minVal = Math.min(...fieldStats.map(f => f.avg));
-      
-      let html = '';
-      fieldStats.forEach((f, idx) => {
-        const isHigh = f.avg === maxVal;
-        const isLow = f.avg === minVal;
-        html += `
-          <tr>
-            <td class="rank">${idx + 1}</td>
-            <td class="field-name">${f.field}</td>
-            <td class="value ${isHigh ? 'high' : isLow ? 'low' : ''}">${f.avg.toFixed(decimals)} ${unit}</td>
-            <td>${f.high.toFixed(decimals)} ${unit}</td>
-            <td>${f.low.toFixed(decimals)} ${unit}</td>
-            <td>${f.count}</td>
-          </tr>
-        `;
-      });
-      
-      tbody.innerHTML = html || '<tr><td colspan="6" style="text-align:center;">No data</td></tr>';
-    }
-    
-    function updateHistoryFieldSelector() {
-      const select = document.getElementById('historyFieldSelect');
-      const fields = [...new Set(sampleData.map(s => s.field).filter(f => f && f !== 'Unknown'))].sort();
-      select.innerHTML = '<option value="">Select a field...</option>';
-      fields.forEach(f => { select.innerHTML += `<option value="${f}">${f}</option>`; });
-    }
-    
-    function updateHistoricalTrends(fieldName) {
-      const container = document.getElementById('historyContent');
-      
-      if (!fieldName) {
-        container.innerHTML = '<div class="no-data">Select a field to view nutrient trends over time</div>';
-        return;
-      }
-      
-      const fieldSamples = sampleData.filter(s => s.field === fieldName);
-      const years = [...new Set(fieldSamples.map(s => s.year).filter(y => y))].sort((a, b) => a - b);
-      
-      if (years.length < 1) {
-        container.innerHTML = '<div class="no-data">No data available for this field</div>';
-        return;
-      }
-      
-      let html = '';
-      
-      CONFIG.NUTRIENT_ORDER.forEach(attr => {
-        const yearData = [];
-        let hasData = false;
+        // Calculate change
+        let pointChange = 0, pctChange = 0, cardClass = 'neutral', changeClass = 'neutral', arrowClass = '';
         
-        years.forEach(year => {
-          const yearSamples = fieldSamples.filter(s => String(s.year) === String(year));
-          const stats = calculateStats(yearSamples, attr);
-          if (stats) {
-            yearData.push({ year, avg: stats.avg });
-            hasData = true;
+        if (stats2 && stats2.avg) {
+          pointChange = stats1.avg - stats2.avg;
+          pctChange = stats2.avg !== 0 ? (pointChange / stats2.avg) * 100 : 0;
+          
+          // Determine if change is good or bad
+          const isPositive = isLowerBetter ? pointChange < 0 : pointChange > 0;
+          const isSignificant = Math.abs(pctChange) > 2;
+          
+          if (isSignificant) {
+            cardClass = isPositive ? 'positive' : 'negative';
+            changeClass = isPositive ? 'positive' : 'negative';
+            arrowClass = isPositive ? 'positive' : 'negative';
           }
-        });
-        
-        if (!hasData || yearData.length < 1) return;
-        
-        const firstYear = yearData[0];
-        const lastYear = yearData[yearData.length - 1];
-        const change = lastYear.avg - firstYear.avg;
-        const pctChange = firstYear.avg !== 0 ? (change / firstYear.avg) * 100 : 0;
-        const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(attr);
-        const isPositive = isLowerBetter ? change < 0 : change > 0;
-        const decimals = attr === 'pH' ? 2 : 1;
-        const unit = CONFIG.NUTRIENT_UNITS[attr] || '';
-        
-        // Calculate graph dimensions
-        const graphWidth = 500;
-        const graphHeight = 100;
-        const padding = { left: 50, right: 30, top: 20, bottom: 25 };
-        const innerWidth = graphWidth - padding.left - padding.right;
-        const innerHeight = graphHeight - padding.top - padding.bottom;
-        
-        // Calculate scales
-        const values = yearData.map(d => d.avg);
-        const minVal = Math.min(...values) * 0.9;
-        const maxVal = Math.max(...values) * 1.1;
-        const valueRange = maxVal - minVal || 1;
-        
-        // Create points
-        const points = yearData.map((d, i) => {
-          const x = padding.left + (i / Math.max(yearData.length - 1, 1)) * innerWidth;
-          const y = padding.top + innerHeight - ((d.avg - minVal) / valueRange) * innerHeight;
-          return { x, y, year: d.year, value: d.avg };
-        });
-        
-        // Create path
-        const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-        
-        // Line color based on trend
-        const lineColor = yearData.length > 1 ? (isPositive ? '#22c55e' : '#ef4444') : '#3b82f6';
-        
-        let badgeClass = '';
-        let badgeText = '';
-        if (yearData.length > 1) {
-          badgeClass = isPositive ? 'positive' : 'negative';
-          badgeText = `${change >= 0 ? '+' : ''}${change.toFixed(decimals)} (${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%)`;
         }
         
         html += `
-          <div class="trend-graph-card">
-            <h3>
-              ${CONFIG.NUTRIENT_NAMES[attr] || attr}
-              ${badgeText ? `<span class="change-badge ${badgeClass}">${badgeText}</span>` : ''}
-            </h3>
-            <div class="line-graph">
-              <svg class="line-graph-svg" viewBox="0 0 ${graphWidth} ${graphHeight}" preserveAspectRatio="xMidYMid meet">
-                <!-- Grid lines -->
-                <line class="graph-grid-line" x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + innerHeight}"/>
-                <line class="graph-grid-line" x1="${padding.left}" y1="${padding.top + innerHeight}" x2="${padding.left + innerWidth}" y2="${padding.top + innerHeight}"/>
-                
-                <!-- Line path -->
-                <path class="graph-line" d="${pathD}" stroke="${lineColor}"/>
-                
-                <!-- Points and labels -->
-                ${points.map((p, i) => `
-                  <circle class="graph-point" cx="${p.x}" cy="${p.y}" r="5" fill="${lineColor}"/>
-                  <text class="graph-label" x="${p.x}" y="${padding.top + innerHeight + 15}" text-anchor="middle">${p.year}</text>
-                  <text class="graph-value-label" x="${p.x}" y="${p.y - 10}" text-anchor="middle">${p.value.toFixed(decimals)}</text>
-                `).join('')}
-                
-                <!-- Y axis labels -->
-                <text class="graph-label" x="${padding.left - 5}" y="${padding.top + 5}" text-anchor="end">${maxVal.toFixed(decimals)}</text>
-                <text class="graph-label" x="${padding.left - 5}" y="${padding.top + innerHeight}" text-anchor="end">${minVal.toFixed(decimals)}</text>
-              </svg>
+          <div class="nutrient-card ${cardClass}">
+            <div class="nutrient-header">
+              <span class="nutrient-name">${name}</span>
+              ${stats2 ? `<span class="nutrient-change ${changeClass}">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%</span>` : ''}
             </div>
+            
+            <div class="nutrient-stats">
+              <div class="stat-box">
+                <div class="label">Average</div>
+                <div class="value">${stats1.avg.toFixed(decimals)}${unit ? ' ' + unit : ''}</div>
+              </div>
+              <div class="stat-box">
+                <div class="label">High</div>
+                <div class="value">${stats1.high.toFixed(decimals)}</div>
+              </div>
+              <div class="stat-box">
+                <div class="label">Low</div>
+                <div class="value">${stats1.low.toFixed(decimals)}</div>
+              </div>
+            </div>
+            
+            ${stats2 ? `
+              <div class="year-comparison">
+                <div class="year-value">
+                  <div class="year">${year2}</div>
+                  <div class="val">${stats2.avg.toFixed(decimals)}</div>
+                </div>
+                <div class="year-arrow ${arrowClass}">${pointChange >= 0 ? '→' : '→'}</div>
+                <div class="year-value">
+                  <div class="year">${year1}</div>
+                  <div class="val">${stats1.avg.toFixed(decimals)}</div>
+                </div>
+              </div>
+              <div class="change-details">
+                <span>Point Change: <span class="change-value ${changeClass}">${pointChange >= 0 ? '+' : ''}${pointChange.toFixed(decimals)}</span></span>
+                <span>% Change: <span class="change-value ${changeClass}">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%</span></span>
+              </div>
+            ` : `
+              <div class="year-comparison" style="justify-content: center;">
+                <div class="year-value">
+                  <div class="year">${year1}</div>
+                  <div class="val">${stats1.avg.toFixed(decimals)}${unit ? ' ' + unit : ''}</div>
+                </div>
+              </div>
+              <div class="change-details" style="color: #94a3b8;">
+                Select a second year to see comparison
+              </div>
+            `}
           </div>
         `;
       });
       
-      container.innerHTML = html || '<div class="no-data">No nutrient data available for this field</div>';
+      grid.innerHTML = html || '<div class="no-data">No nutrient data available</div>';
+    }
+
+    function showStatus(msg, ok) {
+      const el = document.getElementById('statusMessage');
+      el.textContent = msg;
+      el.style.display = 'block';
+      el.style.background = ok ? '#dcfce7' : '#fee2e2';
+      el.style.color = ok ? '#166534' : '#991b1b';
+      setTimeout(() => el.style.display = 'none', 4000);
     }
   </script>
 </body>
