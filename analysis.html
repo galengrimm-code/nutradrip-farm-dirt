@@ -78,14 +78,14 @@
     .trend-title { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
     .trend-pct { font-size: 1.5rem; font-weight: 700; text-align: right; }
     .trend-sub { font-size: 0.75rem; color: #64748b; font-weight: 500; }
-    .trend-content { display: grid; grid-template-columns: minmax(160px, 200px) 1fr; gap: 1.5rem; align-items: start; }
+    .trend-content { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 1.5rem; align-items: start; }
     .trend-values { background: rgba(255,255,255,0.7); border-radius: 0.5rem; padding: 0.5rem; }
-    .trend-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.5rem 0.75rem; font-size: 0.9rem; border-radius: 0.25rem; }
+    .trend-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.25rem; }
     .trend-row.alt { background: rgba(0,0,0,0.03); }
-    .trend-year { font-weight: 600; color: #475569; }
+    .trend-year { font-weight: 600; color: #475569; min-width: 50px; }
     .trend-value { font-weight: 700; color: #1e293b; }
     .trend-graph { min-width: 280px; background: rgba(255,255,255,0.5); border-radius: 0.5rem; padding: 0.5rem; }
-    @media (max-width: 600px) { .trend-content { grid-template-columns: 1fr; } }
+    @media (max-width: 700px) { .trend-content { grid-template-columns: 1fr; } }
     
     /* Field Rankings */
     .rankings-table { width: 100%; border-collapse: collapse; background: white; border-radius: 0.5rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -431,8 +431,12 @@
     function getStats(samples, attr) {
       const values = samples.map(s => s[attr]).filter(v => v !== undefined && v !== null && !isNaN(v));
       if (values.length === 0) return null;
+      const sorted = [...values].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
       return {
         avg: values.reduce((a, b) => a + b, 0) / values.length,
+        median: median,
         high: Math.max(...values),
         low: Math.min(...values),
         count: values.length
@@ -678,32 +682,33 @@
       visibleNutrients.forEach(attr => {
         const yearData = [];
         let hasData = false;
-        
+
         years.forEach(year => {
           const yearSamples = fieldSamples.filter(s => String(s.year) === String(year));
           const stats = getStats(yearSamples, attr);
-          if (stats) { yearData.push({ year, avg: stats.avg }); hasData = true; }
+          if (stats) { yearData.push({ year, avg: stats.avg, median: stats.median, count: stats.count }); hasData = true; }
         });
-        
+
         if (!hasData || yearData.length < 1) return;
-        
+
         const first = yearData[0], last = yearData[yearData.length - 1];
-        const change = last.avg - first.avg;
-        const pctChange = first.avg !== 0 ? (change / first.avg) * 100 : 0;
+        const avgChange = last.avg - first.avg;
+        const medianChange = last.median - first.median;
+        const pctChange = first.avg !== 0 ? (avgChange / first.avg) * 100 : 0;
         const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(attr);
-        const isPositive = isLowerBetter ? change < 0 : change > 0;
+        const isPositive = isLowerBetter ? avgChange < 0 : avgChange > 0;
         const decimals = (attr === 'pH' || attr === 'Buffer_pH') ? 2 : 1;
         const unit = CONFIG.NUTRIENT_UNITS[attr] || '';
         const name = CONFIG.NUTRIENT_NAMES[attr] || attr;
-        
+
         let cardClass = 'neutral', color = '#64748b';
         if (yearData.length > 1) {
           cardClass = isPositive ? 'positive' : 'negative';
           color = isPositive ? '#22c55e' : '#ef4444';
         }
-        
-        const graph = createLineGraph(yearData, color);
-        
+
+        const graph = createDualLineGraph(yearData, color);
+
         html += `
           <div class="trend-card ${cardClass}">
             <div class="trend-header">
@@ -712,10 +717,17 @@
             </div>
             <div class="trend-content">
               <div class="trend-values">
-                ${yearData.map((d, i) => `<div class="trend-row ${i % 2 === 0 ? 'alt' : ''}"><span class="trend-year">${d.year}:</span><span class="trend-value">${d.avg.toFixed(decimals)} ${unit}</span></div>`).join('')}
-                ${yearData.length > 1 ? `<div class="trend-row" style="margin-top:0.5rem;border-top:2px solid ${color};padding-top:0.5rem;"><span>Change:</span><span style="color:${color};font-weight:700;">${change >= 0 ? '+' : ''}${change.toFixed(decimals)}</span></div>` : ''}
+                <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;display:flex;justify-content:space-between;padding:0 0.75rem;"><span></span><span style="width:70px;text-align:center;">Avg</span><span style="width:70px;text-align:center;">Median</span></div>
+                ${yearData.map((d, i) => `<div class="trend-row ${i % 2 === 0 ? 'alt' : ''}"><span class="trend-year">${d.year}:</span><span class="trend-value" style="width:70px;text-align:center;">${d.avg.toFixed(decimals)}</span><span class="trend-value" style="width:70px;text-align:center;color:#8b5cf6;">${d.median.toFixed(decimals)}</span></div>`).join('')}
+                ${yearData.length > 1 ? `<div class="trend-row" style="margin-top:0.5rem;border-top:2px solid ${color};padding-top:0.5rem;"><span>Change:</span><span style="width:70px;text-align:center;color:${color};font-weight:700;">${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(decimals)}</span><span style="width:70px;text-align:center;color:#8b5cf6;font-weight:700;">${medianChange >= 0 ? '+' : ''}${medianChange.toFixed(decimals)}</span></div>` : ''}
               </div>
-              <div class="trend-graph">${graph}</div>
+              <div class="trend-graph">
+                <div style="display:flex;gap:1rem;font-size:0.7rem;margin-bottom:0.25rem;justify-content:center;">
+                  <span><span style="color:${color};">●</span> Average</span>
+                  <span><span style="color:#8b5cf6;">●</span> Median</span>
+                </div>
+                ${graph}
+              </div>
             </div>
           </div>
         `;
@@ -731,17 +743,72 @@
       const range = maxVal - minVal || 1;
       const width = 400, height = 140, pad = 20;
       const gw = width - pad * 2, gh = height - pad * 2 - 20;
-      
+
       const pts = yearData.map((d, i) => {
         const x = pad + (yearData.length > 1 ? (i / (yearData.length - 1)) * gw : gw / 2);
         const y = pad + gh - ((d.avg - minVal) / range) * gh;
         return { x, y, year: d.year, val: d.avg };
       });
-      
+
       const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       const dots = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="6" fill="${color}" stroke="white" stroke-width="2"/><text x="${p.x}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#64748b">${p.year}</text><text x="${p.x}" y="${p.y - 12}" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">${p.val.toFixed(1)}</text>`).join('');
-      
+
       return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet"><path d="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round"/>${dots}</svg>`;
+    }
+
+    function createDualLineGraph(yearData, avgColor) {
+      if (yearData.length < 1) return '';
+      const medianColor = '#8b5cf6'; // Purple for median
+
+      // Get all values to determine scale
+      const allValues = [...yearData.map(d => d.avg), ...yearData.map(d => d.median)];
+      const minVal = Math.min(...allValues) * 0.9, maxVal = Math.max(...allValues) * 1.1;
+      const range = maxVal - minVal || 1;
+      const width = 400, height = 160, pad = 25;
+      const gw = width - pad * 2, gh = height - pad * 2 - 25;
+
+      // Calculate points for both lines
+      const avgPts = yearData.map((d, i) => {
+        const x = pad + (yearData.length > 1 ? (i / (yearData.length - 1)) * gw : gw / 2);
+        const y = pad + gh - ((d.avg - minVal) / range) * gh;
+        return { x, y, year: d.year, val: d.avg };
+      });
+
+      const medianPts = yearData.map((d, i) => {
+        const x = pad + (yearData.length > 1 ? (i / (yearData.length - 1)) * gw : gw / 2);
+        const y = pad + gh - ((d.median - minVal) / range) * gh;
+        return { x, y, year: d.year, val: d.median };
+      });
+
+      // Create path lines
+      const avgLine = avgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+      const medianLine = medianPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+
+      // Create dots and labels
+      const avgDots = avgPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" fill="${avgColor}" stroke="white" stroke-width="2"/>`).join('');
+      const medianDots = medianPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" fill="${medianColor}" stroke="white" stroke-width="2"/>`).join('');
+
+      // Year labels at bottom
+      const yearLabels = avgPts.map(p => `<text x="${p.x}" y="${height - 5}" text-anchor="middle" font-size="11" font-weight="600" fill="#475569">${p.year}</text>`).join('');
+
+      // Value labels - offset to avoid overlap
+      const avgLabels = avgPts.map((p, i) => {
+        const offset = p.y < medianPts[i].y ? -10 : 14;
+        return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="10" font-weight="700" fill="${avgColor}">${p.val.toFixed(1)}</text>`;
+      }).join('');
+
+      const medianLabels = medianPts.map((p, i) => {
+        const offset = p.y <= avgPts[i].y ? -10 : 14;
+        return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="10" font-weight="700" fill="${medianColor}">${p.val.toFixed(1)}</text>`;
+      }).join('');
+
+      return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+        <path d="${avgLine}" fill="none" stroke="${avgColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${medianLine}" fill="none" stroke="${medianColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4"/>
+        ${avgDots}${medianDots}
+        ${yearLabels}
+        ${avgLabels}${medianLabels}
+      </svg>`;
     }
 
     // ========== TAB 3: Field Rankings ==========
