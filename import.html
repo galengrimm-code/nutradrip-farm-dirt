@@ -532,20 +532,32 @@
     }
     
     async function finishSampleImport(samples) {
-        // Prevent duplicates - check by sampleId + year + field
-        const existingKeys = new Set(sampleData.map(s => `${s.sampleId}-${s.year}-${s.field}`));
-        const newSamples = samples.filter(s => !existingKeys.has(`${s.sampleId}-${s.year}-${s.field}`));
-        
+        // Prevent duplicates - check by sampleId + year + location (not field since it's assigned later)
+        const existingKeys = new Set(sampleData.map(s => `${s.sampleId}-${s.year}-${s.lat?.toFixed(5)}-${s.lon?.toFixed(5)}`));
+        const newSamples = samples.filter(s => !existingKeys.has(`${s.sampleId}-${s.year}-${s.lat?.toFixed(5)}-${s.lon?.toFixed(5)}`));
+
         if (newSamples.length === 0) {
           showStatus('All samples already exist (duplicates skipped)', false);
           return;
         }
-        
+
         const skipped = samples.length - newSamples.length;
         sampleData = [...sampleData, ...newSamples];
-        if (Object.keys(fieldBoundaries).length > 0) assignSamplesToFields();
-        saveLocalData(); updateSummary(); 
-        showStatus(`✓ Imported ${newSamples.length} samples${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
+
+        // Assign field names based on boundary GPS matching
+        if (Object.keys(fieldBoundaries).length > 0) {
+          assignSamplesToFields();
+          const assignedCount = newSamples.filter(s => s.field && s.field !== 'Unassigned').length;
+          const unassignedCount = newSamples.length - assignedCount;
+          saveLocalData(); updateSummary();
+          let msg = `✓ Imported ${newSamples.length} samples, ${assignedCount} assigned to fields`;
+          if (unassignedCount > 0) msg += ` (${unassignedCount} unassigned - outside boundaries)`;
+          if (skipped > 0) msg += ` (${skipped} duplicates skipped)`;
+          showStatus(msg, true);
+        } else {
+          saveLocalData(); updateSummary();
+          showStatus(`✓ Imported ${newSamples.length} samples. Upload boundaries to assign field names.${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
+        }
         document.getElementById('sampleFiles').value = ''; document.getElementById('sampleYear').value = '';
         // Auto-sync to Google Sheets if signed in
         if (SheetsAPI.isSignedIn) {
@@ -781,33 +793,9 @@
         if (!f.geometry || f.geometry.type !== 'Point') return;
         const [lon, lat] = f.geometry.coordinates, props = f.properties || {};
 
-        // Get field name - prioritize FIELD_NAME from properties
+        // Field name will be assigned from boundary matching after import
+        // Don't extract from file data - let assignSamplesToFields() handle it
         let fieldName = null;
-
-        if (props.FIELD_NAME) {
-          fieldName = props.FIELD_NAME;
-        }
-        else if (props.Field_Name) {
-          fieldName = props.Field_Name;
-        }
-        else if (props.field_name) {
-          fieldName = props.field_name;
-        }
-        else if (shapefileName) {
-          // Use shapefile name (good for multi-field zips where each file is a field)
-          // Remove .shp extension and path, get just the name
-          fieldName = shapefileName.replace(/\.shp$/i, '').split('/').pop().split('\\').pop();
-        }
-        else {
-          // Fallback: get from name/Field and extract last part after underscores
-          const rawName = props.name || props.Name || props.Field || props.field || 'Unknown';
-          // Extract last part after underscore (e.g., "Precision Farms_Precision Farms_WCG" -> "WCG")
-          if (rawName.includes('_')) {
-            fieldName = rawName.split('_').pop();
-          } else {
-            fieldName = rawName;
-          }
-        }
         
         // Get depth from file or use assigned depth
         const fileDepth = props.Depth || props.depth || props.DEPTH || props.DepthUnits;
@@ -849,20 +837,24 @@
 
     function assignSamplesToFields() {
       sampleData.forEach(sample => {
-        // Skip if sample already has a valid field name from FIELD_NAME property (not Unknown)
-        if (sample.field && sample.field !== 'Unknown') return;
-        
         let assigned = false;
+
+        // Always try to match sample to a boundary by GPS location
         for (const [name, polys] of Object.entries(fieldBoundaries)) {
           if (assigned) break;
           const arr = Array.isArray(polys[0]?.[0]) ? polys : [polys];
-          for (const poly of arr) { 
-            if (isPointInOrNearPolygon([sample.lat, sample.lon], poly)) { 
-              sample.field = name; 
+          for (const poly of arr) {
+            if (isPointInOrNearPolygon([sample.lat, sample.lon], poly)) {
+              sample.field = name;
               assigned = true;
               break;
-            } 
+            }
           }
+        }
+
+        // Mark as Unassigned if no boundary match
+        if (!assigned) {
+          sample.field = 'Unassigned';
         }
       });
     }
