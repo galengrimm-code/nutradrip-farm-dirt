@@ -102,7 +102,7 @@
         <div class="summary-item"><div class="number" id="fieldCount">0</div><div class="label">Fields</div></div>
         <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Samples</div></div>
         <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div><div class="year-list" id="yearList" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
-        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div></div>
+        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div><div class="field-list" id="yieldFieldList" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
       </div>
     </div>
 
@@ -359,9 +359,11 @@
       const uniqueYears = [...new Set(sampleData.map(s => s.year).filter(y => y))].sort((a, b) => a - b);
       document.getElementById('yearCount').textContent = uniqueYears.length;
       document.getElementById('yearList').textContent = uniqueYears.join(', ');
-      // Count samples with yield correlations instead of raw yield points
-      const samplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).length;
-      document.getElementById('yieldCount').textContent = samplesWithYield;
+      // Count samples with yield correlations and get unique fields
+      const samplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0);
+      document.getElementById('yieldCount').textContent = samplesWithYield.length;
+      const fieldsWithYield = [...new Set(samplesWithYield.map(s => s.field).filter(f => f && f !== 'Unknown'))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      document.getElementById('yieldFieldList').textContent = fieldsWithYield.length > 0 ? fieldsWithYield.join(', ') : '';
     }
 
     async function uploadBoundaries() {
