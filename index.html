@@ -40,7 +40,7 @@
     .legend-label { font-weight: 600; color: #64748b; }
     .main-content { display: flex; flex-direction: column; flex: 1; }
     #map { flex: 1; min-height: 500px; }
-    .sample-marker { border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+    .sample-marker { border-radius: 8px; border: 2px solid rgba(255,255,255,0.9); box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: 600; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4); backdrop-filter: blur(2px); }
     #statusMessage { display: none; position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9999; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 0.75rem 1rem; border-radius: 0.375rem; }
     .field-mode .sample-marker { min-width: 44px !important; min-height: 44px !important; font-size: 14px !important; }
     .field-mode .controls-left { display: none; }
@@ -84,24 +84,7 @@
         </div>
         <div class="control-group">
           <label>ATTRIBUTE</label>
-          <select id="attributeSelect">
-            <option value="sampleId">Sample ID</option>
-            <option value="P">Phosphorus (P)</option>
-            <option value="pH">pH</option>
-            <option value="K">Potassium (K)</option>
-            <option value="OM">Organic Matter</option>
-            <option value="CEC">CEC</option>
-            <option value="Ca_sat">Calcium %</option>
-            <option value="Mg_sat">Magnesium %</option>
-            <option value="K_Sat">K Base Sat %</option>
-            <option value="H_Sat">H Base Sat %</option>
-            <option value="Zn">Zinc</option>
-            <option value="Cu">Copper</option>
-            <option value="Mn">Manganese</option>
-            <option value="Fe">Iron</option>
-            <option value="Boron">Boron</option>
-            <option value="S">Sulfur</option>
-          </select>
+          <select id="attributeSelect"></select>
         </div>
         <div class="control-group">
           <label>YEAR</label>
@@ -158,17 +141,74 @@
       DEFAULT_LON: -95.5347,
       DEFAULT_ZOOM: 13,
       NUTRIENT_NAMES: {
-        sampleId: 'Sample ID', pH: 'pH', OM: 'Organic Matter', P: 'Phosphorus (P)', K: 'Potassium (K)',
-        CEC: 'CEC', Ca_sat: 'Calcium Base Sat', Mg_sat: 'Magnesium Base Sat', K_Sat: 'Potassium Base Sat', H_Sat: 'Hydrogen Base Sat',
-        Zn: 'Zinc', Cu: 'Copper', Mn: 'Manganese', Fe: 'Iron', Boron: 'Boron', S: 'Sulfur'
+        sampleId: 'Sample ID', pH: 'pH', OM: 'Organic Matter', P: 'Phosphorus (P)', P2: 'Phosphorus P2', K: 'Potassium (K)',
+        CEC: 'CEC', Ca_sat: 'Calcium Base Sat', Mg_sat: 'Magnesium Base Sat', K_Sat: 'Potassium Base Sat', H_Sat: 'Hydrogen Base Sat', Na_Sat: 'Sodium Base Sat',
+        Zn: 'Zinc', Cu: 'Copper', Mn: 'Manganese', Fe: 'Iron', Boron: 'Boron', S: 'Sulfur', Buffer_pH: 'Buffer pH',
+        Na: 'Sodium', Ca: 'Calcium', Mg: 'Magnesium', NO3: 'Nitrate', NH4: 'Ammonium', Soluble_Salts: 'Soluble Salts', EC: 'EC'
       },
       NUTRIENT_UNITS: {
-        sampleId: '', pH: '', OM: '%', P: 'ppm', K: 'ppm', CEC: 'meq/100g',
-        Ca_sat: '%', Mg_sat: '%', K_Sat: '%', H_Sat: '%',
-        Zn: 'ppm', Cu: 'ppm', Mn: 'ppm', Fe: 'ppm', Boron: 'ppm', S: 'ppm'
+        sampleId: '', pH: '', OM: '%', P: 'ppm', P2: 'ppm', K: 'ppm', CEC: 'meq/100g',
+        Ca_sat: '%', Mg_sat: '%', K_Sat: '%', H_Sat: '%', Na_Sat: '%',
+        Zn: 'ppm', Cu: 'ppm', Mn: 'ppm', Fe: 'ppm', Boron: 'ppm', S: 'ppm', Buffer_pH: '',
+        Na: 'ppm', Ca: 'ppm', Mg: 'ppm', NO3: 'ppm', NH4: 'ppm', Soluble_Salts: 'mmhos/cm', EC: 'dS/m'
       },
-      LOWER_IS_BETTER: ['Mg_sat', 'H_Sat']
+      LOWER_IS_BETTER: ['Mg_sat', 'H_Sat', 'Na_Sat', 'Soluble_Salts'],
+      
+      // All nutrients in display order with default visibility
+      ALL_NUTRIENTS: [
+        { key: 'sampleId', name: 'Sample ID', defaultVisible: true },
+        { key: 'pH', name: 'pH', defaultVisible: true },
+        { key: 'P', name: 'Phosphorus (P)', defaultVisible: true },
+        { key: 'K', name: 'Potassium (K)', defaultVisible: true },
+        { key: 'OM', name: 'Organic Matter', defaultVisible: true },
+        { key: 'CEC', name: 'CEC', defaultVisible: true },
+        { key: 'Ca_sat', name: 'Calcium %', defaultVisible: true },
+        { key: 'Mg_sat', name: 'Magnesium %', defaultVisible: true },
+        { key: 'K_Sat', name: 'K Base Sat %', defaultVisible: true },
+        { key: 'H_Sat', name: 'H Base Sat %', defaultVisible: true },
+        { key: 'Zn', name: 'Zinc', defaultVisible: true },
+        { key: 'Cu', name: 'Copper', defaultVisible: true },
+        { key: 'Mn', name: 'Manganese', defaultVisible: true },
+        { key: 'Fe', name: 'Iron', defaultVisible: true },
+        { key: 'Boron', name: 'Boron', defaultVisible: true },
+        { key: 'S', name: 'Sulfur', defaultVisible: true },
+        { key: 'Buffer_pH', name: 'Buffer pH', defaultVisible: true },
+        // Hidden by default
+        { key: 'P2', name: 'Phosphorus P2', defaultVisible: false },
+        { key: 'Na_Sat', name: 'Na Base Sat %', defaultVisible: false },
+        { key: 'Na', name: 'Sodium', defaultVisible: false },
+        { key: 'Ca', name: 'Calcium (ppm)', defaultVisible: false },
+        { key: 'Mg', name: 'Magnesium (ppm)', defaultVisible: false },
+        { key: 'NO3', name: 'Nitrate', defaultVisible: false },
+        { key: 'NH4', name: 'Ammonium', defaultVisible: false },
+        { key: 'Soluble_Salts', name: 'Soluble Salts', defaultVisible: false },
+        { key: 'EC', name: 'EC', defaultVisible: false }
+      ]
     };
+    
+    // Get visible nutrients based on settings
+    function getVisibleNutrients() {
+      const saved = JSON.parse(localStorage.getItem('nutrientVisibility') || '{}');
+      return CONFIG.ALL_NUTRIENTS.filter(n => {
+        return saved[n.key] !== undefined ? saved[n.key] : n.defaultVisible;
+      });
+    }
+    
+    // Populate attribute dropdown with visible nutrients
+    function populateAttributeDropdown() {
+      const select = document.getElementById('attributeSelect');
+      const currentValue = select.value;
+      const visible = getVisibleNutrients();
+      
+      select.innerHTML = visible.map(n => 
+        `<option value="${n.key}">${n.name}</option>`
+      ).join('');
+      
+      // Restore previous selection if still visible
+      if (visible.some(n => n.key === currentValue)) {
+        select.value = currentValue;
+      }
+    }
 
     // ========== SHEETS API ==========
     let tokenClient;
@@ -464,6 +504,7 @@
 
     // ========== INIT ==========
     document.addEventListener('DOMContentLoaded', async () => {
+      populateAttributeDropdown(); // Populate nutrients based on visibility settings
       initMap();
       try {
         await SheetsAPI.init();
@@ -475,6 +516,13 @@
       }
       setupEventListeners();
       loadLocalData();
+      
+      // Listen for visibility changes from settings page
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'nutrientVisibility') {
+          populateAttributeDropdown();
+        }
+      });
     });
 
     function initMap() {
@@ -488,7 +536,7 @@
       const centerControl = L.control({ position: 'topleft' });
       centerControl.onAdd = function() {
         const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-        div.innerHTML = '<a href="#" title="Center on my location" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:white;font-size:18px;">📍</a>';
+        div.innerHTML = '<a href="#" title="Center on my location" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:white;font-size:18px;">⊕</a>';
         div.onclick = function(e) {
           e.preventDefault();
           e.stopPropagation();
