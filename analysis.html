@@ -394,7 +394,9 @@
       
       const yieldFieldSel = document.getElementById('yieldFieldSelect');
       yieldFieldSel.innerHTML = '<option value="all">All Fields</option>';
-      fields.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+      // Only show fields that have yield data
+      const fieldsWithYield = [...new Set(sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).map(s => s.field).filter(f => f && f !== 'Unknown'))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      fieldsWithYield.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
     }
     
     function getYieldYears() {
