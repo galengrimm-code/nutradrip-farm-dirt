@@ -133,6 +133,7 @@
       <span class="legend-label">Legend:</span>
       <div style="width: 100px; height: 16px; background: linear-gradient(to right, #dc2626, #f97316, #eab308, #84cc16, #16a34a); border-radius: 8px; border: 1px solid #cbd5e1;"></div>
       <span id="legendText">Low → High</span>
+      <span style="margin-left: auto; color: #64748b; font-size: 0.75rem;" id="lastUpdated"></span>
     </div>
 
     <!-- Compare mode info bar -->
@@ -728,6 +729,7 @@
 
       // Load cached data first for instant display
       loadLocalData();
+      updateLastUpdated();
 
       // Check if cache is fresh (less than 5 minutes old)
       const cacheTime = localStorage.getItem('soilDataCacheTime');
@@ -739,7 +741,11 @@
 
         // Try to load from Google Sheets (public access first)
         if (!cacheFresh) {
-          await loadFromSheetsPublic();
+          const loaded = await loadFromSheetsPublic();
+          // If Sheets failed and we have no data, try backup
+          if (!loaded && sampleData.length === 0) {
+            loadFromBackup();
+          }
         } else {
           console.log('Using fresh cached data');
           // Still restore token state for UI
@@ -749,7 +755,10 @@
         }
       } catch (e) {
         console.warn('Google API init error:', e);
-        // Data already loaded from cache above
+        // If we have no data, try loading from backup
+        if (sampleData.length === 0) {
+          loadFromBackup();
+        }
       }
 
       // Listen for visibility changes from settings page
@@ -1153,7 +1162,45 @@
         localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries));
         localStorage.setItem('soilSettings', JSON.stringify(settings));
         localStorage.setItem('soilDataCacheTime', Date.now().toString());
+        updateLastUpdated();
       } catch (e) { console.error(e); }
+    }
+
+    function updateLastUpdated() {
+      const cacheTime = localStorage.getItem('soilDataCacheTime');
+      const el = document.getElementById('lastUpdated');
+      if (cacheTime && el) {
+        const date = new Date(parseInt(cacheTime));
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        if (isToday) {
+          el.textContent = `Updated ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        } else {
+          el.textContent = `Updated ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        }
+      }
+    }
+
+    // Load from localStorage backup if primary data fails
+    function loadFromBackup() {
+      try {
+        const backup = localStorage.getItem('soilDataBackup');
+        if (!backup) return false;
+
+        const data = JSON.parse(backup);
+        if (data.sampleData) sampleData = data.sampleData;
+        if (data.fieldBoundaries) fieldBoundaries = data.fieldBoundaries;
+        if (data.settings) settings = data.settings;
+
+        updateFieldSelector();
+        updateYearSelector();
+        updateMap();
+        Utils.showStatus(`Loaded ${sampleData.length} samples from backup`, true);
+        return true;
+      } catch (e) {
+        console.error('Failed to load from backup:', e);
+        return false;
+      }
     }
 
     function updateFieldSelector() {

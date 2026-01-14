@@ -104,6 +104,7 @@
         <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div><div class="year-list" id="yearList" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
         <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div><div class="field-list" id="yieldFieldList" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
       </div>
+      <div id="backupStatus" style="margin-top: 1rem; padding: 0.75rem; border-radius: 0.375rem; font-size: 0.8125rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"></div>
     </div>
 
     <div class="import-section boundaries">
@@ -180,6 +181,7 @@
       <div class="btn-row">
         <button class="button" id="exportCSVBtn" style="background: #8b5cf6; color: white;">📊 Export CSV</button>
         <button class="button" id="exportPDFBtn" style="background: #6366f1; color: white;">📄 Export PDF Report</button>
+        <button class="button" id="exportJSONBtn" style="background: #059669; color: white;">💾 Download Full Backup</button>
       </div>
     </div>
 
@@ -323,7 +325,7 @@
     let sampleData = [], fieldBoundaries = {}, yieldData = [];
 
     document.addEventListener('DOMContentLoaded', async () => {
-      loadLocalData(); updateSummary();
+      loadLocalData(); updateSummary(); updateBackupStatus();
       try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) { console.warn(e); }
       document.getElementById('uploadBoundaryBtn').addEventListener('click', uploadBoundaries);
       document.getElementById('uploadSampleBtn').addEventListener('click', uploadSamples);
@@ -336,6 +338,7 @@
       document.getElementById('reassignBtn').addEventListener('click', reassignSamplesToBoundaries);
       document.getElementById('exportCSVBtn').addEventListener('click', exportToCSV);
       document.getElementById('exportPDFBtn').addEventListener('click', exportToPDF);
+      document.getElementById('exportJSONBtn').addEventListener('click', exportToJSON);
     });
 
     async function handleAuth() { if (SheetsAPI.isSignedIn) await SheetsAPI.signOut(); else await SheetsAPI.signIn(); }
@@ -354,6 +357,144 @@
 
     function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); } catch (e) {} }
     function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); }
+
+    // ========== BACKUP SYSTEM ==========
+    function saveBackup() {
+      // Save full backup to localStorage
+      const backup = {
+        version: 1,
+        timestamp: Date.now(),
+        operationName: localStorage.getItem('operationName') || '',
+        sampleData: sampleData,
+        fieldBoundaries: fieldBoundaries,
+        settings: JSON.parse(localStorage.getItem('soilSettings') || '{}')
+      };
+      localStorage.setItem('soilDataBackup', JSON.stringify(backup));
+      localStorage.setItem('soilDataBackupTime', Date.now().toString());
+      updateBackupStatus();
+    }
+
+    function updateBackupStatus() {
+      const container = document.getElementById('backupStatus');
+      const backupTime = localStorage.getItem('soilDataBackupTime');
+      const lastDownload = localStorage.getItem('lastBackupDownload');
+      const autoBackup = localStorage.getItem('autoBackupFrequency') || 'weekly';
+
+      if (!backupTime && sampleData.length === 0) {
+        container.style.background = '#f8fafc';
+        container.style.border = '1px solid #e2e8f0';
+        container.innerHTML = '<span style="color: #64748b;">No data to backup yet</span>';
+        return;
+      }
+
+      const now = Date.now();
+      const daysSinceBackup = backupTime ? Math.floor((now - parseInt(backupTime)) / (1000 * 60 * 60 * 24)) : null;
+      const daysSinceDownload = lastDownload ? Math.floor((now - parseInt(lastDownload)) / (1000 * 60 * 60 * 24)) : null;
+
+      let statusColor, statusBg, statusBorder, statusIcon, statusText;
+
+      if (!lastDownload) {
+        // Never downloaded a backup
+        statusIcon = '⚠️';
+        statusText = 'No backup file downloaded yet';
+        statusBg = '#fef2f2';
+        statusBorder = '#fca5a5';
+        statusColor = '#991b1b';
+      } else if (daysSinceDownload > 30) {
+        // Backup is old
+        statusIcon = '⚠️';
+        statusText = `Last backup download: ${formatDate(parseInt(lastDownload))} (${daysSinceDownload} days ago)`;
+        statusBg = '#fffbeb';
+        statusBorder = '#fcd34d';
+        statusColor = '#92400e';
+      } else {
+        // Backup is recent
+        statusIcon = '✓';
+        statusText = `Last backup download: ${formatDate(parseInt(lastDownload))}`;
+        statusBg = '#f0fdf4';
+        statusBorder = '#86efac';
+        statusColor = '#166534';
+      }
+
+      container.style.background = statusBg;
+      container.style.border = `1px solid ${statusBorder}`;
+      container.innerHTML = `
+        <span style="color: ${statusColor};">${statusIcon} ${statusText}</span>
+        <span style="color: #64748b; font-size: 0.75rem;">Auto-backup: ${autoBackup}</span>
+      `;
+
+      // Check if we should prompt for auto-backup
+      checkAutoBackupPrompt();
+    }
+
+    function checkAutoBackupPrompt() {
+      const autoBackup = localStorage.getItem('autoBackupFrequency') || 'weekly';
+      const lastDownload = localStorage.getItem('lastBackupDownload');
+      const lastPrompt = localStorage.getItem('lastBackupPrompt');
+      const now = Date.now();
+
+      // Don't prompt more than once per session
+      if (lastPrompt && (now - parseInt(lastPrompt)) < 1000 * 60 * 60) return;
+
+      if (autoBackup === 'weekly' && sampleData.length > 0) {
+        const daysSince = lastDownload ? Math.floor((now - parseInt(lastDownload)) / (1000 * 60 * 60 * 24)) : 999;
+        if (daysSince >= 7) {
+          localStorage.setItem('lastBackupPrompt', now.toString());
+          if (confirm(`It's been ${daysSince === 999 ? 'a while' : daysSince + ' days'} since your last backup.\n\nDownload a backup now?`)) {
+            exportToJSON();
+          }
+        }
+      }
+    }
+
+    function formatDate(timestamp) {
+      return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function exportToJSON() {
+      if (sampleData.length === 0 && Object.keys(fieldBoundaries).length === 0) {
+        showStatus('No data to export', false);
+        return;
+      }
+
+      const backup = {
+        version: 1,
+        exportDate: new Date().toISOString(),
+        operationName: localStorage.getItem('operationName') || 'SoilData',
+        sampleData: sampleData,
+        fieldBoundaries: fieldBoundaries,
+        settings: JSON.parse(localStorage.getItem('soilSettings') || '{}'),
+        columnAliases: JSON.parse(localStorage.getItem('columnAliases') || '{}'),
+        nutrientVisibility: JSON.parse(localStorage.getItem('nutrientVisibility') || '{}')
+      };
+
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const opName = (backup.operationName || 'SoilData').replace(/[^a-zA-Z0-9]/g, '_');
+      link.download = `${opName}_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+
+      // Record the download
+      localStorage.setItem('lastBackupDownload', Date.now().toString());
+      updateBackupStatus();
+      showStatus(`✓ Backup downloaded (${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields)`, true);
+    }
+
+    // Call saveBackup after successful imports
+    function afterImportSuccess() {
+      saveLocalData();
+      saveBackup();
+      updateSummary();
+      updateBackupStatus();
+
+      // Auto-download if setting is 'after-import'
+      const autoBackup = localStorage.getItem('autoBackupFrequency');
+      if (autoBackup === 'after-import') {
+        setTimeout(() => exportToJSON(), 500);
+      }
+    }
+
     function updateSummary() {
       document.getElementById('fieldCount').textContent = Object.keys(fieldBoundaries).length;
       document.getElementById('sampleCount').textContent = sampleData.length;
@@ -400,7 +541,7 @@
           throw new Error('Please select a ZIP, Shapefile (.shp + .dbf), or GeoJSON');
         }
         
-        saveLocalData(); updateSummary(); showStatus(`✓ Imported ${total} field(s)`, true);
+        afterImportSuccess(); showStatus(`✓ Imported ${total} field(s)`, true);
         document.getElementById('boundaryFiles').value = ''; document.getElementById('boundaryFieldName').value = '';
         // Auto-sync to Google Sheets if signed in
         if (SheetsAPI.isSignedIn) {
@@ -561,13 +702,13 @@
           assignSamplesToFields();
           const assignedCount = newSamples.filter(s => s.field && s.field !== 'Unassigned').length;
           const unassignedCount = newSamples.length - assignedCount;
-          saveLocalData(); updateSummary();
+          afterImportSuccess();
           let msg = `✓ Imported ${newSamples.length} samples, ${assignedCount} assigned to fields`;
           if (unassignedCount > 0) msg += ` (${unassignedCount} unassigned - outside boundaries)`;
           if (skipped > 0) msg += ` (${skipped} duplicates skipped)`;
           showStatus(msg, true);
         } else {
-          saveLocalData(); updateSummary();
+          afterImportSuccess();
           showStatus(`✓ Imported ${newSamples.length} samples. Upload boundaries to assign field names.${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
         }
         document.getElementById('sampleFiles').value = ''; document.getElementById('sampleYear').value = '';
@@ -900,8 +1041,7 @@
       });
       
       if (reassignedCount > 0) {
-        saveLocalData();
-        updateSummary();
+        afterImportSuccess();
         showStatus(`✓ Reassigned ${reassignedCount} samples to boundaries`, true);
         
         // Sync to Google Sheets if signed in
@@ -1028,8 +1168,7 @@
         yieldData = [];
         localStorage.removeItem('yieldData');
 
-        saveLocalData();
-        updateSummary();
+        afterImportSuccess();
 
         const yearInfo = detectedYear ? `📅 Auto-detected year: ${detectedYear}<br>` : '';
         statusEl.innerHTML = `<span style="color: #22c55e;">${yearInfo}✓ Processed ${newPoints.length} yield points<br>✓ Matched ${correlationResults.matched} of ${correlationResults.total} soil samples<br>✓ Raw yield data cleared (correlated data saved on samples)</span>`;
@@ -1359,11 +1498,13 @@
 
     async function clearSamples() {
       if (!confirm('Clear all samples? Boundaries will be kept.')) return;
-      
-      sampleData = []; 
-      saveLocalData(); 
-      updateSummary(); 
-      
+
+      sampleData = [];
+      saveLocalData();
+      saveBackup();
+      updateSummary();
+      updateBackupStatus();
+
       if (SheetsAPI.isSignedIn) {
         showStatus('Clearing from Google Sheets...', true);
         try {
@@ -1379,11 +1520,13 @@
 
     async function clearBoundaries() {
       if (!confirm('Clear all field boundaries? Samples will be kept.')) return;
-      
-      fieldBoundaries = {}; 
-      saveLocalData(); 
-      updateSummary(); 
-      
+
+      fieldBoundaries = {};
+      saveLocalData();
+      saveBackup();
+      updateSummary();
+      updateBackupStatus();
+
       if (SheetsAPI.isSignedIn) {
         showStatus('Clearing from Google Sheets...', true);
         try {
@@ -1406,7 +1549,9 @@
       });
 
       saveLocalData();
+      saveBackup();
       updateSummary();
+      updateBackupStatus();
       showStatus('✓ Yield correlations cleared', true);
     }
 
@@ -1416,8 +1561,10 @@
       sampleData = [];
       fieldBoundaries = {};
       saveLocalData();
-      updateSummary(); 
-      
+      saveBackup();
+      updateSummary();
+      updateBackupStatus();
+
       if (SheetsAPI.isSignedIn) {
         showStatus('Clearing from Google Sheets...', true);
         try {

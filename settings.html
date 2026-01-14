@@ -95,6 +95,29 @@
       <div id="connectionStatus" style="margin-top: 0.75rem;"></div>
     </div>
 
+    <div class="settings-card" style="border: 2px solid #059669; background: linear-gradient(to right, #ecfdf5, white);">
+      <h3>💾 Data Backup</h3>
+      <p style="color: #64748b; margin-bottom: 1rem; font-size: 0.875rem;">Automatic backups keep your data safe. Backups are stored locally and can be downloaded as JSON files.</p>
+
+      <div class="threshold-grid">
+        <div class="threshold-row" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
+          <label style="font-weight: 600; color: #374151;">Auto-backup Frequency</label>
+          <select id="autoBackupFrequency" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem;">
+            <option value="never">Never</option>
+            <option value="weekly" selected>Weekly (recommended)</option>
+            <option value="after-import">After each import</option>
+          </select>
+          <small style="color: #64748b;">Weekly: prompts to download backup every 7 days. After import: auto-downloads after each data import.</small>
+        </div>
+      </div>
+
+      <div id="backupStatusSettings" style="margin-top: 1rem; padding: 0.75rem; border-radius: 0.375rem; font-size: 0.8125rem;"></div>
+
+      <div class="btn-row" style="margin-top: 1rem;">
+        <button class="button" style="background: #059669; color: white;" onclick="downloadBackupNow()">💾 Download Backup Now</button>
+      </div>
+    </div>
+
     <div class="settings-card">
       <h3>🧪 pH</h3>
       <div class="threshold-grid">
@@ -284,7 +307,99 @@
       if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
       else { userInfo.textContent = ''; authBtn.textContent = 'Sign In to Edit'; authBtn.classList.remove('signed-in'); }
     }
-    function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); loadColumnMapping(); loadNutrientVisibility(); loadSheetConfig(); } catch (e) {} }
+    function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); loadColumnMapping(); loadNutrientVisibility(); loadSheetConfig(); loadBackupSettings(); } catch (e) {} }
+
+    // ========== BACKUP SETTINGS ==========
+    function loadBackupSettings() {
+      const frequency = localStorage.getItem('autoBackupFrequency') || 'weekly';
+      document.getElementById('autoBackupFrequency').value = frequency;
+      document.getElementById('autoBackupFrequency').addEventListener('change', saveBackupFrequency);
+      updateBackupStatusDisplay();
+    }
+
+    function saveBackupFrequency() {
+      const frequency = document.getElementById('autoBackupFrequency').value;
+      localStorage.setItem('autoBackupFrequency', frequency);
+      showStatus('Backup frequency saved', true);
+    }
+
+    function updateBackupStatusDisplay() {
+      const container = document.getElementById('backupStatusSettings');
+      const lastDownload = localStorage.getItem('lastBackupDownload');
+      const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
+
+      if (sampleData.length === 0) {
+        container.style.background = '#f8fafc';
+        container.style.border = '1px solid #e2e8f0';
+        container.innerHTML = '<span style="color: #64748b;">No data to backup yet</span>';
+        return;
+      }
+
+      const now = Date.now();
+      const daysSince = lastDownload ? Math.floor((now - parseInt(lastDownload)) / (1000 * 60 * 60 * 24)) : null;
+
+      let statusBg, statusBorder, statusColor, statusIcon, statusText;
+
+      if (!lastDownload) {
+        statusIcon = '⚠️';
+        statusText = `No backup file downloaded yet (${sampleData.length} samples at risk)`;
+        statusBg = '#fef2f2';
+        statusBorder = '#fca5a5';
+        statusColor = '#991b1b';
+      } else if (daysSince > 30) {
+        statusIcon = '⚠️';
+        statusText = `Last backup: ${formatDate(parseInt(lastDownload))} (${daysSince} days ago)`;
+        statusBg = '#fffbeb';
+        statusBorder = '#fcd34d';
+        statusColor = '#92400e';
+      } else {
+        statusIcon = '✓';
+        statusText = `Last backup: ${formatDate(parseInt(lastDownload))} (${sampleData.length} samples)`;
+        statusBg = '#f0fdf4';
+        statusBorder = '#86efac';
+        statusColor = '#166534';
+      }
+
+      container.style.background = statusBg;
+      container.style.border = `1px solid ${statusBorder}`;
+      container.innerHTML = `<span style="color: ${statusColor};">${statusIcon} ${statusText}</span>`;
+    }
+
+    function formatDate(timestamp) {
+      return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function downloadBackupNow() {
+      const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
+      const fieldBoundaries = JSON.parse(localStorage.getItem('fieldBoundaries') || '{}');
+
+      if (sampleData.length === 0 && Object.keys(fieldBoundaries).length === 0) {
+        showStatus('No data to backup', false);
+        return;
+      }
+
+      const backup = {
+        version: 1,
+        exportDate: new Date().toISOString(),
+        operationName: localStorage.getItem('operationName') || 'SoilData',
+        sampleData: sampleData,
+        fieldBoundaries: fieldBoundaries,
+        settings: JSON.parse(localStorage.getItem('soilSettings') || '{}'),
+        columnAliases: JSON.parse(localStorage.getItem('columnAliases') || '{}'),
+        nutrientVisibility: JSON.parse(localStorage.getItem('nutrientVisibility') || '{}')
+      };
+
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const opName = (backup.operationName || 'SoilData').replace(/[^a-zA-Z0-9]/g, '_');
+      link.download = `${opName}_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+
+      localStorage.setItem('lastBackupDownload', Date.now().toString());
+      updateBackupStatusDisplay();
+      showStatus(`✓ Backup downloaded (${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields)`, true);
+    }
 
     // Column Mapping - editable aliases for all soil attributes
     function loadColumnMapping() {
