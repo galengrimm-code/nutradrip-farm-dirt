@@ -335,8 +335,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.6";
-    const BUILD_DATE = "2026-01-14T16:16:43";
+    const APP_VERSION = "v1.0.7";
+    const BUILD_DATE = "2026-01-14T16:24:35";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -567,15 +567,13 @@
       soilYearSel.innerHTML = '<option value="recent">Most Recent (default)</option><option value="all">All Years</option>';
       soilYears.forEach(y => { soilYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
 
-      const yieldFieldSel = document.getElementById('yieldFieldSelect');
-      yieldFieldSel.innerHTML = '<option value="all">All Fields</option>';
-      // Only show fields that have yield data
-      const fieldsWithYield = [...new Set(sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).map(s => s.field).filter(f => f && f !== 'Unknown'))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      fieldsWithYield.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+      // Yield field selector - will be populated by updateYieldFieldSelector based on selected crop
+      updateYieldFieldSelector();
 
       // Spatial Change Analysis selectors
       const spatialFieldSel = document.getElementById('spatialFieldSelect');
       spatialFieldSel.innerHTML = '<option value="">-- Select Field --</option>';
+      spatialFieldSel.innerHTML += '<option value="__all__">All Fields (Operation-Wide)</option>';
       fields.forEach(f => { spatialFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
 
       const spatialNutrientSel = document.getElementById('spatialNutrientSelect');
@@ -588,10 +586,10 @@
     }
 
     function updateSpatialYearSelectors(field) {
-      // Get years that have data for the selected field
+      // Get years that have data for the selected field (or all fields if __all__)
       const fieldYears = [...new Set(
         sampleData
-          .filter(s => s.field === field && s.year)
+          .filter(s => (field === '__all__' || s.field === field) && s.year)
           .map(s => s.year)
       )].sort((a, b) => a - b); // Sort ascending (oldest first for base year)
 
@@ -612,6 +610,33 @@
       const descendingYears = [...fieldYears].sort((a, b) => b - a);
       spatialCompareYearSel.innerHTML = '<option value="all">All Years</option>';
       descendingYears.forEach(y => { spatialCompareYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+    }
+
+    function updateYieldFieldSelector() {
+      // Get selected crop and filter fields to only those with yield data for that crop
+      const cropFilter = document.getElementById('yieldCropSelect').value;
+      const yieldFieldSel = document.getElementById('yieldFieldSelect');
+      const currentValue = yieldFieldSel.value;
+
+      // Find fields that have yield data for the selected crop
+      const fieldsWithYield = [...new Set(
+        sampleData
+          .filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0)
+          .filter(s => {
+            // Check if any yield correlation matches the crop filter
+            return Object.values(s.yieldCorrelations).some(yieldInfo => yieldInfo.crop === cropFilter);
+          })
+          .map(s => s.field)
+          .filter(f => f && f !== 'Unknown')
+      )].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      yieldFieldSel.innerHTML = '<option value="all">All Fields</option>';
+      fieldsWithYield.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+
+      // Try to restore previous selection if still valid
+      if (currentValue && (currentValue === 'all' || fieldsWithYield.includes(currentValue))) {
+        yieldFieldSel.value = currentValue;
+      }
     }
 
     function getSoilYearsWithYield() {
@@ -652,7 +677,10 @@
       document.getElementById('historyFieldSelect').addEventListener('change', (e) => { updateHistory(e.target.value); });
       document.getElementById('rankingAttrSelect').addEventListener('change', updateRankings);
       document.getElementById('rankingYearSelect').addEventListener('change', updateRankings);
-      document.getElementById('yieldCropSelect').addEventListener('change', updateYieldAnalysis);
+      document.getElementById('yieldCropSelect').addEventListener('change', () => {
+        updateYieldFieldSelector();
+        updateYieldAnalysis();
+      });
       document.getElementById('yieldYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('soilYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('yieldFieldSelect').addEventListener('change', updateYieldAnalysis);
@@ -2779,19 +2807,21 @@
         return;
       }
 
-      // Get all samples for this field
-      const fieldSamples = sampleData.filter(s => s.field === field);
+      // Get all samples for this field (or all fields if __all__)
+      const isAllFields = field === '__all__';
+      const fieldDisplayName = isAllFields ? 'All Fields' : field;
+      const fieldSamples = sampleData.filter(s => isAllFields || s.field === field);
       const years = [...new Set(fieldSamples.map(s => s.year).filter(y => y))].sort();
 
       if (years.length < 2) {
-        container.innerHTML = '<div class="no-data">Need at least 2 years of data to analyze changes. This field only has data from: ' + years.join(', ') + '</div>';
+        container.innerHTML = '<div class="no-data">Need at least 2 years of data to analyze changes. ' + (isAllFields ? 'Operation' : 'This field') + ' only has data from: ' + years.join(', ') + '</div>';
         return;
       }
 
       // Get base year samples
       const baseSamples = fieldSamples.filter(s => s.year === baseYear);
       if (baseSamples.length === 0) {
-        container.innerHTML = `<div class="no-data">No samples found for ${field} in ${baseYear}</div>`;
+        container.innerHTML = `<div class="no-data">No samples found for ${fieldDisplayName} in ${baseYear}</div>`;
         return;
       }
 
@@ -2900,7 +2930,7 @@
 
       let html = `
         <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: #0369a1;">
-          <strong>Spatial Change Analysis: ${field} - ${nutrientName}</strong><br>
+          <strong>Spatial Change Analysis: ${fieldDisplayName} - ${nutrientName}</strong><br>
           <strong>Base Year:</strong> ${baseYear} (zones defined by this year's values)<br>
           <strong>Comparing:</strong> ${compareYears.join(', ')}<br>
           <strong>Match Radius:</strong> ${radiusFt} ft | <strong>Matched Samples:</strong> ${matchedData.length} of ${baseSamples.length}
@@ -3135,6 +3165,7 @@
 
     function exportSpatialAnalysis() {
       const field = document.getElementById('spatialFieldSelect').value;
+      const fieldDisplayName = field === '__all__' ? 'All Fields' : field;
       const nutrient = document.getElementById('spatialNutrientSelect').value;
       const nutrientName = CONFIG.NUTRIENT_NAMES[nutrient] || nutrient;
       const operationName = localStorage.getItem('operationName') || 'Soil Analysis';
@@ -3145,7 +3176,7 @@
         <h1>${operationName} - Spatial Change Analysis</h1>
         <p>Generated: ${new Date().toLocaleString()}</p>
         <div class="summary">
-          <div class="summary-box"><div class="number">${field}</div><div class="label">Field</div></div>
+          <div class="summary-box"><div class="number">${fieldDisplayName}</div><div class="label">Field</div></div>
           <div class="summary-box"><div class="number">${nutrientName}</div><div class="label">Nutrient</div></div>
         </div>
         ${spatialData}
