@@ -1005,11 +1005,14 @@
       });
 
       // Auto-select: baseline = oldest year, compare-to = newest year
+      // Only auto-set selectedYear when in Compare mode (not View mode)
       if (years.length >= 2) {
         baselineSel.value = years[0]; // Oldest
         compareYear = years[0];
         compareToSel.value = years[years.length - 1]; // Newest
-        selectedYear = years[years.length - 1];
+        if (compareMode) {
+          selectedYear = years[years.length - 1];
+        }
       } else if (years.length === 1) {
         baselineSel.value = years[0];
         compareYear = years[0];
