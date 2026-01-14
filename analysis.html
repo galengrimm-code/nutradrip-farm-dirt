@@ -1243,13 +1243,24 @@
       // Calculate correlations for each nutrient
       const visibleNutrients = getVisibleNutrients();
       const correlations = [];
-      
+
+      console.log('=== YIELD CORRELATION DEBUG ===');
+      console.log('Data points:', dataPoints.length);
+      console.log('Visible nutrients:', visibleNutrients.length, visibleNutrients);
+
       visibleNutrients.forEach(nutrient => {
-        const pairs = dataPoints.filter(d => d[nutrient] !== undefined && d[nutrient] !== null && !isNaN(d[nutrient]));
+        // Filter for valid numeric values - must handle strings, empty values, etc.
+        const pairs = dataPoints.filter(d => {
+          const val = d[nutrient];
+          if (val === undefined || val === null || val === '') return false;
+          const num = parseFloat(val);
+          return isFinite(num);
+        });
+        console.log(`  ${nutrient}: ${pairs.length} valid pairs (need 5+)`);
         if (pairs.length < 5) return; // Need at least 5 points
-        
+
         const correlation = calculateCorrelation(
-          pairs.map(p => p[nutrient]),
+          pairs.map(p => parseFloat(p[nutrient])),
           pairs.map(p => p.avgYield)
         );
         
