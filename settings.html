@@ -433,11 +433,13 @@
                   ${a}
                 </span>
               `).join('')}
-              ${userAliases.map(a => `
-                <span style="background: #dbeafe; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; color: #1e40af;" title="Custom alias - click × to remove">
-                  ${a}<button onclick="removeAlias('${key}', '${a}')" style="background: #bfdbfe; border: none; cursor: pointer; color: #dc2626; font-weight: bold; padding: 0 3px; line-height: 1; font-size: 0.9rem; border-radius: 3px; margin-left: 2px;" title="Remove this alias" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#bfdbfe'">×</button>
-                </span>
-              `).join('')}
+              ${userAliases.map(a => {
+                const escapedAlias = a.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                return `
+                <span style="background: #dbeafe; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #1e40af;" title="Custom alias - click × to remove">
+                  ${a}<button onclick="removeAlias('${key}', '${escapedAlias}')" style="background: #bfdbfe; border: none; cursor: pointer; color: #dc2626; font-weight: bold; padding: 0 4px; line-height: 1; font-size: 1rem; border-radius: 3px; margin-left: 3px;" title="Remove this alias" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#bfdbfe'">×</button>
+                </span>`;
+              }).join('')}
             </div>
           </div>
         `;
@@ -501,18 +503,20 @@
     }
 
     function removeAlias(standard, alias) {
+      // Unescape the alias (in case it was escaped for the onclick handler)
+      const unescapedAlias = alias.replace(/\\'/g, "'");
       const nutrientName = ALL_NUTRIENTS[standard]?.name || standard;
-      if (!confirm(`Remove alias '${alias}' from ${nutrientName}?`)) {
+      if (!confirm(`Remove alias '${unescapedAlias}' from ${nutrientName}?`)) {
         return;
       }
 
       const aliases = JSON.parse(localStorage.getItem('columnAliases') || '{}');
       if (aliases[standard]) {
-        aliases[standard] = aliases[standard].filter(a => a !== alias);
+        aliases[standard] = aliases[standard].filter(a => a !== unescapedAlias);
         if (aliases[standard].length === 0) delete aliases[standard];
         localStorage.setItem('columnAliases', JSON.stringify(aliases));
         loadColumnMapping();
-        showStatus(`Alias '${alias}' removed from ${nutrientName}`, true);
+        showStatus(`Alias '${unescapedAlias}' removed from ${nutrientName}`, true);
       }
     }
     
