@@ -208,6 +208,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <script>
+    // ========== APP VERSION ==========
+    const APP_VERSION = "v1.0.1";
+    const BUILD_DATE = "2026-01-14T15:03:51";
+
     // ========== CONFIG ==========
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2020,11 +2024,17 @@
     function updateBackupFooter() {
       const backupTime = localStorage.getItem('soilDataBackupTime');
       const footer = document.getElementById('backupFooter');
+      const buildDate = new Date(BUILD_DATE);
+      const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+                       buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
+
       if (backupTime) {
         const date = new Date(parseInt(backupTime));
-        footer.textContent = 'Last backup: ' + date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const backupStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> Data backup: ${backupStr}`;
       } else {
-        footer.textContent = 'No backup yet';
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> No backup yet`;
       }
     }
   </script>

@@ -96,6 +96,17 @@
       <div id="connectionStatus" style="margin-top: 0.75rem;"></div>
     </div>
 
+    <div class="settings-card" style="border: 2px solid #3b82f6; background: linear-gradient(to right, #eff6ff, white);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h3 style="margin: 0;">🆕 What's New</h3>
+        <span id="currentVersion" style="font-size: 0.8rem; color: #3b82f6; font-weight: 600;"></span>
+      </div>
+      <div id="whatsNewContent" style="font-size: 0.85rem; color: #475569;"></div>
+      <div style="margin-top: 0.75rem;">
+        <a href="CHANGELOG.md" target="_blank" style="color: #3b82f6; font-size: 0.8rem; text-decoration: none;">View full changelog →</a>
+      </div>
+    </div>
+
     <div class="settings-card" style="border: 2px solid #059669; background: linear-gradient(to right, #ecfdf5, white);">
       <h3>💾 Data Backup</h3>
       <p style="color: #64748b; margin-bottom: 1rem; font-size: 0.875rem;">Automatic backups keep your data safe. Backups are stored locally and can be downloaded as JSON files.</p>
@@ -181,7 +192,11 @@
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
-    const CONFIG = { 
+    // ========== APP VERSION ==========
+    const APP_VERSION = "v1.0.1";
+    const BUILD_DATE = "2026-01-14T15:03:51";
+
+    const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com', 
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E', 
       get SHEET_ID() { return localStorage.getItem('googleSheetId') || '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY'; }
@@ -333,10 +348,30 @@
     document.addEventListener('DOMContentLoaded', async () => {
       loadSettings();
       updateBackupFooter();
+      initWhatsNew();
       try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) {}
       document.getElementById('saveBtn').addEventListener('click', saveSettings);
       document.getElementById('resetBtn').addEventListener('click', resetSettings);
     });
+
+    function initWhatsNew() {
+      // Display current version
+      const buildDate = new Date(BUILD_DATE);
+      const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      document.getElementById('currentVersion').textContent = `${APP_VERSION} • ${buildStr}`;
+
+      // Show recent changes
+      const whatsNew = document.getElementById('whatsNewContent');
+      whatsNew.innerHTML = `
+        <ul style="margin: 0; padding-left: 1.25rem; line-height: 1.6;">
+          <li><strong>Version tracking</strong> - See app version and build date in footer</li>
+          <li><strong>Data verification</strong> - Check yield correlation calculations</li>
+          <li><strong>Yield search radius</strong> - Shows import distance setting</li>
+          <li><strong>Multi-year yield modes</strong> - Average, Combined, or specific year</li>
+          <li><strong>Enhanced scatter plots</strong> - Trend lines, R², threshold analysis</li>
+        </ul>
+      `;
+    }
 
     async function handleAuth() { if (SheetsAPI.isSignedIn) await SheetsAPI.signOut(); else await SheetsAPI.signIn(); }
     function handleSignInChange(isSignedIn) {
@@ -714,11 +749,17 @@
     function updateBackupFooter() {
       const backupTime = localStorage.getItem('soilDataBackupTime');
       const footer = document.getElementById('backupFooter');
+      const buildDate = new Date(BUILD_DATE);
+      const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+                       buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
+
       if (backupTime) {
         const date = new Date(parseInt(backupTime));
-        footer.textContent = 'Last backup: ' + date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const backupStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> Data backup: ${backupStr}`;
       } else {
-        footer.textContent = 'No backup yet';
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> No backup yet`;
       }
     }
   </script>
