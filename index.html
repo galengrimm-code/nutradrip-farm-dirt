@@ -1607,13 +1607,12 @@
             ? rawValue
             : Utils.formatNumber(numValue, selectedAttribute === 'pH' ? 1 : 0);
         } else {
-          // No valid data - show grey marker with "–"
-          color = '#9ca3af';
-          displayVal = '–';
+          // No valid data - skip this sample entirely (don't show on map)
+          return;
         }
 
         const icon = L.divIcon({
-          html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;${!hasValidData ? 'opacity:0.6;' : ''}">${displayVal}</div>`,
+          html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
           className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
         });
         const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(map);

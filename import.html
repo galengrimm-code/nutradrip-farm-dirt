@@ -1154,6 +1154,23 @@
         let detectedYear = null;
         let filesProcessed = 0;
         let fileErrors = [];
+        let totalPointsLoaded = 0;
+
+        // Helper to add points without stack overflow (use push in batches)
+        const addPoints = (newPoints) => {
+          // Push in chunks to avoid stack issues with very large arrays
+          const chunkSize = 10000;
+          for (let i = 0; i < newPoints.length; i += chunkSize) {
+            const chunk = newPoints.slice(i, i + chunkSize);
+            for (const p of chunk) {
+              yieldPoints.push(p);
+            }
+          }
+          totalPointsLoaded += newPoints.length;
+        };
+
+        // Small delay to let browser breathe and update UI
+        const breathe = () => new Promise(resolve => setTimeout(resolve, 10));
 
         // Check for ZIP files and loose shapefiles
         const zipFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.zip'));
@@ -1162,13 +1179,16 @@
 
         if (zipFiles.length > 1) {
           // BATCH MODE: Multiple ZIP files (one per field)
-          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${zipFiles.length} yield files...</span>`;
+          const totalFiles = zipFiles.length;
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${totalFiles} yield files...</span>`;
 
-          for (const zipFile of zipFiles) {
+          for (let i = 0; i < zipFiles.length; i++) {
+            const zipFile = zipFiles[i];
             try {
-              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${filesProcessed + 1}/${zipFiles.length}: ${zipFile.name}...</span>`;
+              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing file ${i + 1} of ${totalFiles}: ${zipFile.name}<br><small>${totalPointsLoaded.toLocaleString()} points loaded so far</small></span>`;
+              await breathe(); // Let UI update
               const result = await parseYieldFromZip(zipFile);
-              yieldPoints = [...yieldPoints, ...result.points];
+              addPoints(result.points);
               if (result.detectedYear && !detectedYear) {
                 detectedYear = result.detectedYear;
               }
@@ -1177,20 +1197,23 @@
               console.warn(`Error processing ${zipFile.name}:`, err);
               fileErrors.push({ file: zipFile.name, error: err.message });
             }
+            // Breathe every file to prevent blocking
+            if (i % 5 === 4) await breathe();
           }
 
-          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${zipFiles.length} files, ${yieldPoints.length.toLocaleString()} points...</span>`;
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${totalFiles} files, ${totalPointsLoaded.toLocaleString()} points...</span>`;
 
         } else if (zipFiles.length === 1) {
           // Single ZIP file
           const result = await parseYieldFromZip(zipFiles[0]);
-          yieldPoints = result.points;
+          addPoints(result.points);
           detectedYear = result.detectedYear;
           filesProcessed = 1;
 
         } else if (shpFiles.length > 1) {
           // BATCH MODE: Multiple loose .shp/.dbf pairs - group by base filename
-          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${shpFiles.length} shapefiles...</span>`;
+          const totalFiles = shpFiles.length;
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${totalFiles} shapefiles...</span>`;
 
           // Create lookup for dbf files by base name
           const dbfByName = {};
@@ -1199,7 +1222,8 @@
             dbfByName[baseName] = dbf;
           }
 
-          for (const shpFile of shpFiles) {
+          for (let i = 0; i < shpFiles.length; i++) {
+            const shpFile = shpFiles[i];
             const baseName = shpFile.name.toLowerCase().replace('.shp', '');
             const dbfFile = dbfByName[baseName];
 
@@ -1209,11 +1233,12 @@
             }
 
             try {
-              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${filesProcessed + 1}/${shpFiles.length}: ${shpFile.name}...</span>`;
+              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing file ${i + 1} of ${totalFiles}: ${shpFile.name}<br><small>${totalPointsLoaded.toLocaleString()} points loaded so far</small></span>`;
+              await breathe(); // Let UI update
               const shpBuffer = await shpFile.arrayBuffer();
               const dbfBuffer = await dbfFile.arrayBuffer();
               const result = parseYieldShapefile(shpBuffer, dbfBuffer);
-              yieldPoints = [...yieldPoints, ...result.points];
+              addPoints(result.points);
               if (result.detectedYear && !detectedYear) {
                 detectedYear = result.detectedYear;
               }
@@ -1222,14 +1247,16 @@
               console.warn(`Error processing ${shpFile.name}:`, err);
               fileErrors.push({ file: shpFile.name, error: err.message });
             }
+            // Breathe every file to prevent blocking
+            if (i % 5 === 4) await breathe();
           }
 
-          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${shpFiles.length} shapefiles, ${yieldPoints.length.toLocaleString()} points...</span>`;
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${totalFiles} shapefiles, ${totalPointsLoaded.toLocaleString()} points...</span>`;
 
         } else {
           // Single shapefile (loose files)
           const result = await parseYieldFromShapefiles(files);
-          yieldPoints = result.points;
+          addPoints(result.points);
           detectedYear = result.detectedYear;
           filesProcessed = 1;
         }
@@ -1256,15 +1283,28 @@
         }
 
         // Add metadata to each point
-        yieldPoints.forEach(p => {
+        statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Adding metadata to ${yieldPoints.length.toLocaleString()} points...</span>`;
+        await breathe();
+        for (const p of yieldPoints) {
           p.year = parseInt(yieldYear);
           p.crop = yieldCrop;
-        });
+        }
 
-        // Store yield data
+        // Store yield data - avoid spread operator for large arrays
+        statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Filtering duplicates...</span>`;
+        await breathe();
         const existingKeys = new Set(yieldData.map(y => `${y.lat}-${y.lon}-${y.year}`));
-        const newPoints = yieldPoints.filter(p => !existingKeys.has(`${p.lat}-${p.lon}-${p.year}`));
-        yieldData = [...yieldData, ...newPoints];
+        const newPoints = [];
+        for (const p of yieldPoints) {
+          const key = `${p.lat}-${p.lon}-${p.year}`;
+          if (!existingKeys.has(key)) {
+            newPoints.push(p);
+          }
+        }
+        // Add to yieldData without spread
+        for (const p of newPoints) {
+          yieldData.push(p);
+        }
 
         statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length.toLocaleString()} yield points from ${filesProcessed} file(s)</span>`;
 
