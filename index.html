@@ -1309,16 +1309,65 @@
       }
     }
 
-    function loadLocalData() {
+    // IndexedDB for large datasets
+    const DB_NAME = 'SoilAppDB';
+    const DB_VERSION = 1;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
+        };
+      });
+    }
+
+    async function loadFromIndexedDB() {
       try {
-        const s = localStorage.getItem('soilSamples');
-        const b = localStorage.getItem('fieldBoundaries');
+        const db = await openDB();
+        const tx = db.transaction(['samples', 'boundaries'], 'readonly');
+        const samplesData = await new Promise((resolve, reject) => {
+          const req = tx.objectStore('samples').get('all');
+          req.onsuccess = () => resolve(req.result?.data || []);
+          req.onerror = reject;
+        });
+        const boundariesData = await new Promise((resolve, reject) => {
+          const req = tx.objectStore('boundaries').get('all');
+          req.onsuccess = () => resolve(req.result?.data || {});
+          req.onerror = reject;
+        });
+        db.close();
+        return { samples: samplesData, boundaries: boundariesData };
+      } catch (e) { return null; }
+    }
+
+    async function loadLocalData() {
+      try {
+        // Check IndexedDB first if flagged
+        if (localStorage.getItem('usingIndexedDB') === 'true') {
+          const idbData = await loadFromIndexedDB();
+          if (idbData && idbData.samples.length > 0) {
+            sampleData = idbData.samples;
+            fieldBoundaries = idbData.boundaries;
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples');
+          }
+        } else {
+          // Fallback to localStorage
+          const s = localStorage.getItem('soilSamples');
+          const b = localStorage.getItem('fieldBoundaries');
+          if (s) sampleData = JSON.parse(s);
+          if (b) fieldBoundaries = JSON.parse(b);
+        }
+
+        // Load settings (always in localStorage)
         const st = localStorage.getItem('soilSettings');
-        if (s) sampleData = JSON.parse(s);
-        if (b) fieldBoundaries = JSON.parse(b);
         if (st) {
           const rawSettings = JSON.parse(st);
-          // Convert flat settings (pH_min, pH_max) to nested format ({pH: {min, max}})
           settings = {
             pH: { min: rawSettings.pH_min || 6.3, max: rawSettings.pH_max || 6.9 },
             P: { min: rawSettings.P_min || 20, max: null },
@@ -1334,7 +1383,7 @@
         updateFieldSelector();
         updateYearSelector();
         updateMap();
-        if (sampleData.length > 0) Utils.showStatus(`Loaded ${sampleData.length} samples from local storage`, true);
+        if (sampleData.length > 0) Utils.showStatus(`Loaded ${sampleData.length} samples`, true);
       } catch (e) { console.error(e); }
     }
 

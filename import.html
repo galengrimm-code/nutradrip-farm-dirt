@@ -411,23 +411,181 @@
       }
     }
 
-    function loadLocalData() { try { const s = localStorage.getItem('soilSamples'), b = localStorage.getItem('fieldBoundaries'); if (s) sampleData = JSON.parse(s); if (b) fieldBoundaries = JSON.parse(b); } catch (e) {} }
-    function saveLocalData() { localStorage.setItem('soilSamples', JSON.stringify(sampleData)); localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries)); }
+    // IndexedDB for large datasets (localStorage has ~5MB limit)
+    const DB_NAME = 'SoilAppDB';
+    const DB_VERSION = 1;
+    let indexedDBAvailable = false;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error('IndexedDB not supported'));
+          return;
+        }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          indexedDBAvailable = true;
+          resolve(request.result);
+        };
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('samples')) {
+            db.createObjectStore('samples', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('boundaries')) {
+            db.createObjectStore('boundaries', { keyPath: 'id' });
+          }
+        };
+      });
+    }
+
+    async function saveToIndexedDB() {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(['samples', 'boundaries'], 'readwrite');
+        const samplesStore = tx.objectStore('samples');
+        const boundariesStore = tx.objectStore('boundaries');
+
+        // Clear and save samples
+        await new Promise((resolve, reject) => {
+          const clearReq = samplesStore.clear();
+          clearReq.onsuccess = resolve;
+          clearReq.onerror = reject;
+        });
+        await new Promise((resolve, reject) => {
+          const putReq = samplesStore.put({ id: 'all', data: sampleData });
+          putReq.onsuccess = resolve;
+          putReq.onerror = reject;
+        });
+
+        // Clear and save boundaries
+        await new Promise((resolve, reject) => {
+          const clearReq = boundariesStore.clear();
+          clearReq.onsuccess = resolve;
+          clearReq.onerror = reject;
+        });
+        await new Promise((resolve, reject) => {
+          const putReq = boundariesStore.put({ id: 'all', data: fieldBoundaries });
+          putReq.onsuccess = resolve;
+          putReq.onerror = reject;
+        });
+
+        db.close();
+        localStorage.setItem('usingIndexedDB', 'true');
+        console.log('Data saved to IndexedDB');
+        return true;
+      } catch (e) {
+        console.error('IndexedDB save failed:', e);
+        return false;
+      }
+    }
+
+    async function loadFromIndexedDB() {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(['samples', 'boundaries'], 'readonly');
+        const samplesStore = tx.objectStore('samples');
+        const boundariesStore = tx.objectStore('boundaries');
+
+        const samplesData = await new Promise((resolve, reject) => {
+          const req = samplesStore.get('all');
+          req.onsuccess = () => resolve(req.result?.data || []);
+          req.onerror = reject;
+        });
+
+        const boundariesData = await new Promise((resolve, reject) => {
+          const req = boundariesStore.get('all');
+          req.onsuccess = () => resolve(req.result?.data || {});
+          req.onerror = reject;
+        });
+
+        db.close();
+        return { samples: samplesData, boundaries: boundariesData };
+      } catch (e) {
+        console.error('IndexedDB load failed:', e);
+        return null;
+      }
+    }
+
+    async function loadLocalData() {
+      try {
+        // Check if we're using IndexedDB
+        if (localStorage.getItem('usingIndexedDB') === 'true') {
+          const idbData = await loadFromIndexedDB();
+          if (idbData && idbData.samples.length > 0) {
+            sampleData = idbData.samples;
+            fieldBoundaries = idbData.boundaries;
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples');
+            return;
+          }
+        }
+        // Fallback to localStorage
+        const s = localStorage.getItem('soilSamples');
+        const b = localStorage.getItem('fieldBoundaries');
+        if (s) sampleData = JSON.parse(s);
+        if (b) fieldBoundaries = JSON.parse(b);
+      } catch (e) {
+        console.error('Load error:', e);
+      }
+    }
+
+    async function saveLocalData() {
+      // Try localStorage first (faster for small datasets)
+      try {
+        const dataStr = JSON.stringify(sampleData);
+        const boundariesStr = JSON.stringify(fieldBoundaries);
+
+        // Check if data is likely too large for localStorage (~4MB limit with safety margin)
+        if (dataStr.length + boundariesStr.length > 4000000) {
+          throw new Error('Data too large for localStorage');
+        }
+
+        localStorage.setItem('soilSamples', dataStr);
+        localStorage.setItem('fieldBoundaries', boundariesStr);
+        localStorage.removeItem('usingIndexedDB');
+        console.log('Data saved to localStorage');
+      } catch (e) {
+        // localStorage quota exceeded or data too large - use IndexedDB
+        console.log('localStorage quota exceeded, switching to IndexedDB...');
+        const success = await saveToIndexedDB();
+        if (success) {
+          // Clear localStorage to free up space
+          localStorage.removeItem('soilSamples');
+          localStorage.removeItem('fieldBoundaries');
+          showStatus('Data saved (using IndexedDB for large dataset)', true);
+        } else {
+          showStatus('Warning: Could not save data locally. Data is synced to Google Sheets.', false);
+        }
+      }
+    }
 
     // ========== BACKUP SYSTEM ==========
     function saveBackup() {
-      // Save full backup to localStorage
-      const backup = {
-        version: 1,
-        timestamp: Date.now(),
-        operationName: localStorage.getItem('operationName') || '',
-        sampleData: sampleData,
-        fieldBoundaries: fieldBoundaries,
-        settings: JSON.parse(localStorage.getItem('soilSettings') || '{}')
-      };
-      localStorage.setItem('soilDataBackup', JSON.stringify(backup));
-      localStorage.setItem('soilDataBackupTime', Date.now().toString());
-      updateBackupStatus();
+      // Save full backup to localStorage (skip if data too large)
+      try {
+        const backup = {
+          version: 1,
+          timestamp: Date.now(),
+          operationName: localStorage.getItem('operationName') || '',
+          sampleData: sampleData,
+          fieldBoundaries: fieldBoundaries,
+          settings: JSON.parse(localStorage.getItem('soilSettings') || '{}')
+        };
+        const backupStr = JSON.stringify(backup);
+        // Skip localStorage backup if too large - data is in IndexedDB/Sheets
+        if (backupStr.length < 4000000) {
+          localStorage.setItem('soilDataBackup', backupStr);
+        } else {
+          localStorage.removeItem('soilDataBackup'); // Clear old backup to free space
+        }
+        localStorage.setItem('soilDataBackupTime', Date.now().toString());
+        updateBackupStatus();
+      } catch (e) {
+        console.log('Backup to localStorage skipped (data too large)');
+        localStorage.setItem('soilDataBackupTime', Date.now().toString());
+        updateBackupStatus();
+      }
     }
 
     function updateBackupStatus() {

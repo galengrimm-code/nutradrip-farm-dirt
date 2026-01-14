@@ -381,11 +381,52 @@
       else { userInfo.textContent = ''; authBtn.textContent = 'Sign In to Edit'; authBtn.classList.remove('signed-in'); }
     }
 
-    function loadLocalData() {
+    // IndexedDB for large datasets
+    const DB_NAME = 'SoilAppDB';
+    const DB_VERSION = 1;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
+        };
+      });
+    }
+
+    async function loadFromIndexedDB() {
       try {
-        const saved = localStorage.getItem('soilSamples');
-        if (saved) sampleData = JSON.parse(saved);
-      } catch (e) {}
+        const db = await openDB();
+        const tx = db.transaction(['samples'], 'readonly');
+        const samplesData = await new Promise((resolve, reject) => {
+          const req = tx.objectStore('samples').get('all');
+          req.onsuccess = () => resolve(req.result?.data || []);
+          req.onerror = reject;
+        });
+        db.close();
+        return samplesData;
+      } catch (e) { return null; }
+    }
+
+    async function loadLocalData() {
+      try {
+        // Check IndexedDB first if flagged
+        if (localStorage.getItem('usingIndexedDB') === 'true') {
+          const idbSamples = await loadFromIndexedDB();
+          if (idbSamples && idbSamples.length > 0) {
+            sampleData = idbSamples;
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples');
+          }
+        } else {
+          const saved = localStorage.getItem('soilSamples');
+          if (saved) sampleData = JSON.parse(saved);
+        }
+      } catch (e) { console.error(e); }
       populateSelectors();
       updateComparison();
       updateHistory('__all__');  // Default to All Fields view
