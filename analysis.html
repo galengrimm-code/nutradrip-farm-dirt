@@ -243,7 +243,7 @@
       </div>
 
       <!-- Scatter Plot Section -->
-      <div id="scatterSection" style="display: none; margin-top: 1.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem;">
+      <div id="scatterSection" style="margin-top: 1.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
           <div style="display: flex; align-items: center; gap: 1rem;">
             <h3 id="scatterTitle" style="margin: 0; color: #1e293b;">Scatter Plot: Nutrient vs Yield</h3>
@@ -1525,8 +1525,12 @@
       }
 
       container.innerHTML = html;
+
+      // Initialize scatter plot
+      populateScatterSelect();
+      drawScatterPlot();
     }
-    
+
     function calculateCorrelation(x, y) {
       const n = x.length;
       if (n < 3) return null;
@@ -1647,16 +1651,12 @@
 
     function toggleYieldDebug() {
       const debugPanel = document.getElementById('yieldDebugPanel');
-      const scatterSection = document.getElementById('scatterSection');
       const isHidden = debugPanel.style.display === 'none';
 
       debugPanel.style.display = isHidden ? 'block' : 'none';
-      scatterSection.style.display = isHidden ? 'block' : 'none';
 
       if (isHidden) {
         generateDebugReport();
-        populateScatterSelect();
-        drawScatterPlot();
       }
     }
 
