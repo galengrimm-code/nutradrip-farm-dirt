@@ -335,8 +335,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.5";
-    const BUILD_DATE = "2026-01-14T16:03:03";
+    const APP_VERSION = "v1.0.6";
+    const BUILD_DATE = "2026-01-14T16:16:43";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2906,26 +2906,45 @@
           <strong>Match Radius:</strong> ${radiusFt} ft | <strong>Matched Samples:</strong> ${matchedData.length} of ${baseSamples.length}
         </div>
 
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; font-size: 0.8rem; color: #475569;">
+          <strong style="color: #1e293b;">How Zones Are Defined:</strong><br>
+          Samples from ${baseYear} are divided into three zones based on their ${nutrientName} values:
+          <ul style="margin: 0.5rem 0 0.5rem 1.5rem; padding: 0;">
+            <li><strong style="color: #dc2626;">Low Zone</strong> = Bottom 25% of samples (lowest quartile)</li>
+            <li><strong style="color: #d97706;">Medium Zone</strong> = Middle 50% of samples (between 25th and 75th percentile)</li>
+            <li><strong style="color: #16a34a;">High Zone</strong> = Top 25% of samples (highest quartile)</li>
+          </ul>
+          <strong style="color: #1e293b;">What This Analysis Shows:</strong><br>
+          Once zones are defined by ${baseYear}, we track those <em>same GPS locations</em> across other years to see how values change over time. This answers: "Are my historically low-testing areas improving or staying low?"
+        </div>
+
+        <h3 style="margin: 0 0 0.5rem 0; color: #1e293b;">Zone Summary (${baseYear} Baseline)</h3>
+        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.75rem;">Number of sample locations in each zone, based on ${baseYear} ${nutrientName} values:</p>
+
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
           <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
             <div style="font-size: 1.5rem; font-weight: 700; color: #991b1b;">${lowCount}</div>
-            <div style="color: #991b1b; font-size: 0.75rem;">Low Zone</div>
+            <div style="color: #991b1b; font-size: 0.75rem;">Low Zone Samples</div>
             <div style="color: #b91c1c; font-size: 0.7rem;">≤ ${lowThreshold.toFixed(decimals)} ${unit}</div>
           </div>
           <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
             <div style="font-size: 1.5rem; font-weight: 700; color: #92400e;">${medCount}</div>
-            <div style="color: #92400e; font-size: 0.75rem;">Medium Zone</div>
+            <div style="color: #92400e; font-size: 0.75rem;">Medium Zone Samples</div>
             <div style="color: #b45309; font-size: 0.7rem;">${lowThreshold.toFixed(decimals)} - ${highThreshold.toFixed(decimals)} ${unit}</div>
           </div>
           <div style="background: #dcfce7; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
             <div style="font-size: 1.5rem; font-weight: 700; color: #166534;">${highCount}</div>
-            <div style="color: #166534; font-size: 0.75rem;">High Zone</div>
+            <div style="color: #166534; font-size: 0.75rem;">High Zone Samples</div>
             <div style="color: #15803d; font-size: 0.7rem;">≥ ${highThreshold.toFixed(decimals)} ${unit}</div>
           </div>
         </div>
 
-        <h3 style="margin: 0 0 0.75rem 0; color: #1e293b;">Zone Tracking Over Time</h3>
-        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">Zones are classified by ${baseYear} values, then tracked across years at the same GPS locations.</p>
+        <h3 style="margin: 0 0 0.5rem 0; color: #1e293b;">Zone Tracking Over Time</h3>
+        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">
+          <strong>How to read this table:</strong> Each row shows the <em>average ${nutrientName} value</em> for samples in that zone across years.
+          The <strong>(n=X)</strong> shows how many samples had data for that year.
+          The <strong>Change</strong> column shows the difference between the first and last year (+ is increase, - is decrease).
+        </p>
 
         <table class="rankings-table" style="margin-bottom: 1.5rem;">
           <thead>
