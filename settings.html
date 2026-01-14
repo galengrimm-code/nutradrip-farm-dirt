@@ -406,11 +406,14 @@
     // Column Mapping - editable aliases for all soil attributes
     function loadColumnMapping() {
       const customAliases = JSON.parse(localStorage.getItem('columnAliases') || '{}');
+      const hiddenAliases = JSON.parse(localStorage.getItem('hiddenBuiltInAliases') || '{}');
       const container = document.getElementById('columnMappingGrid');
 
       let html = '';
       for (const [key, info] of Object.entries(ALL_NUTRIENTS)) {
         const defaultAliases = DEFAULT_ALIASES[key] || [];
+        const hiddenForKey = hiddenAliases[key] || [];
+        const visibleDefaultAliases = defaultAliases.filter(a => !hiddenForKey.includes(a));
         const userAliases = customAliases[key] || [];
 
         html += `
@@ -428,11 +431,13 @@
               </div>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; padding-left: 0.5rem;">
-              ${defaultAliases.map(a => `
-                <span style="background: #e2e8f0; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.75rem; color: #475569;" title="Built-in alias">
-                  ${a}
-                </span>
-              `).join('')}
+              ${visibleDefaultAliases.map(a => {
+                const escapedAlias = a.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                return `
+                <span style="background: #e2e8f0; padding: 0.15rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: inline-flex; align-items: center; color: #475569;" title="Built-in alias - click × to hide">
+                  ${a}<button onclick="hideBuiltInAlias('${key}', '${escapedAlias}')" style="background: #cbd5e1; border: none; cursor: pointer; color: #64748b; font-weight: bold; padding: 0 4px; line-height: 1; font-size: 1rem; border-radius: 3px; margin-left: 3px;" title="Hide this alias" onmouseover="this.style.background='#94a3b8';this.style.color='#dc2626'" onmouseout="this.style.background='#cbd5e1';this.style.color='#64748b'">×</button>
+                </span>`;
+              }).join('')}
               ${userAliases.map(a => {
                 const escapedAlias = a.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 return `
@@ -440,6 +445,7 @@
                   ${a}<button onclick="removeAlias('${key}', '${escapedAlias}')" style="background: #bfdbfe; border: none; cursor: pointer; color: #dc2626; font-weight: bold; padding: 0 4px; line-height: 1; font-size: 1rem; border-radius: 3px; margin-left: 3px;" title="Remove this alias" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#bfdbfe'">×</button>
                 </span>`;
               }).join('')}
+              ${hiddenForKey.length > 0 ? `<button onclick="restoreHiddenAliases('${key}')" style="background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; cursor: pointer; margin-left: 0.25rem;" title="Restore ${hiddenForKey.length} hidden alias(es)">+${hiddenForKey.length} hidden</button>` : ''}
             </div>
           </div>
         `;
@@ -519,7 +525,39 @@
         showStatus(`Alias '${unescapedAlias}' removed from ${nutrientName}`, true);
       }
     }
-    
+
+    function hideBuiltInAlias(standard, alias) {
+      const unescapedAlias = alias.replace(/\\'/g, "'");
+      const nutrientName = ALL_NUTRIENTS[standard]?.name || standard;
+      if (!confirm(`Hide built-in alias '${unescapedAlias}' from ${nutrientName}?\n\nYou can restore it later.`)) {
+        return;
+      }
+
+      const hidden = JSON.parse(localStorage.getItem('hiddenBuiltInAliases') || '{}');
+      if (!hidden[standard]) hidden[standard] = [];
+      if (!hidden[standard].includes(unescapedAlias)) {
+        hidden[standard].push(unescapedAlias);
+        localStorage.setItem('hiddenBuiltInAliases', JSON.stringify(hidden));
+        loadColumnMapping();
+        showStatus(`Alias '${unescapedAlias}' hidden (click +hidden to restore)`, true);
+      }
+    }
+
+    function restoreHiddenAliases(standard) {
+      const nutrientName = ALL_NUTRIENTS[standard]?.name || standard;
+      const hidden = JSON.parse(localStorage.getItem('hiddenBuiltInAliases') || '{}');
+      const count = hidden[standard]?.length || 0;
+
+      if (!confirm(`Restore ${count} hidden built-in alias(es) for ${nutrientName}?`)) {
+        return;
+      }
+
+      delete hidden[standard];
+      localStorage.setItem('hiddenBuiltInAliases', JSON.stringify(hidden));
+      loadColumnMapping();
+      showStatus(`${count} hidden alias(es) restored for ${nutrientName}`, true);
+    }
+
     // Sheet Configuration Functions
     function loadSheetConfig() {
       const sheetId = localStorage.getItem('googleSheetId') || '';

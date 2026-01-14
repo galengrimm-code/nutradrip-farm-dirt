@@ -874,7 +874,12 @@
         zoomToField(selectedField); 
       });
       document.getElementById('attributeSelect').addEventListener('change', (e) => { selectedAttribute = e.target.value; updateYearSelector(); updateCompareYearOptions(); updateMap(); updateLegend(); });
-      document.getElementById('yearSelect').addEventListener('change', (e) => { selectedYear = e.target.value; updateCompareYearOptions(); updateMap(); });
+      document.getElementById('yearSelect').addEventListener('change', (e) => {
+        selectedYear = e.target.value;
+        console.log('Year changed to:', selectedYear);
+        updateCompareYearOptions();
+        updateMap();
+      });
       document.getElementById('compareYearSelect').addEventListener('change', (e) => { compareYear = e.target.value; updateCompareSummary(); updateMap(); });
       document.getElementById('compareToYearSelect').addEventListener('change', (e) => { selectedYear = e.target.value; updateCompareSummary(); updateMap(); });
       document.getElementById('singleYearBtn').addEventListener('click', () => {
@@ -884,6 +889,8 @@
         document.getElementById('compareYearStack').style.display = 'none';
         document.getElementById('viewYearGroup').style.display = 'block';
         document.getElementById('compareInfoBar').style.display = 'none';
+        // Sync selectedYear with the View mode dropdown
+        selectedYear = document.getElementById('yearSelect').value;
         updateLegend();
         updateMap();
       });
