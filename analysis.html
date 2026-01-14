@@ -242,6 +242,10 @@
             <option value="all">All Fields</option>
           </select>
         </div>
+        <div class="control-group" style="display: flex; align-items: center; gap: 0.5rem;">
+          <label style="margin: 0; white-space: nowrap;">Normalize by Field</label>
+          <input type="checkbox" id="yieldNormalizeToggle" style="width: 18px; height: 18px; cursor: pointer;" title="Convert yield to % of field average to isolate nutrient effect from field productivity">
+        </div>
         <button onclick="exportYieldCorrelation()" class="export-btn">📄 Export Report</button>
       </div>
       <div id="yieldContent">
@@ -336,8 +340,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.13";
-    const BUILD_DATE = "2026-01-14T17:01:51";
+    const APP_VERSION = "v1.0.14";
+    const BUILD_DATE = "2026-01-14T17:30:07";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -685,6 +689,7 @@
       document.getElementById('yieldYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('soilYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('yieldFieldSelect').addEventListener('change', updateYieldAnalysis);
+      document.getElementById('yieldNormalizeToggle').addEventListener('change', updateYieldAnalysis);
       // Spatial Change Analysis listeners
       document.getElementById('spatialFieldSelect').addEventListener('change', (e) => {
         updateSpatialYearSelectors(e.target.value);
@@ -1566,6 +1571,49 @@
         return;
       }
 
+      // Check if normalization is enabled
+      const normalizeByField = document.getElementById('yieldNormalizeToggle').checked;
+      let fieldAverages = {};
+      let fieldAvgRange = { min: Infinity, max: -Infinity };
+      let yieldLabel = 'Yield (bu/ac)';
+      let normalizeNote = '';
+
+      if (normalizeByField) {
+        // Calculate average yield for each field
+        const fieldYields = {};
+        dataPoints.forEach(dp => {
+          const field = dp.field || 'Unknown';
+          if (!fieldYields[field]) fieldYields[field] = [];
+          fieldYields[field].push(dp.avgYield);
+        });
+
+        // Calculate field averages
+        Object.entries(fieldYields).forEach(([field, yields]) => {
+          const avg = yields.reduce((a, b) => a + b, 0) / yields.length;
+          fieldAverages[field] = avg;
+          if (avg < fieldAvgRange.min) fieldAvgRange.min = avg;
+          if (avg > fieldAvgRange.max) fieldAvgRange.max = avg;
+        });
+
+        // Convert yields to % of field average
+        dataPoints.forEach(dp => {
+          const field = dp.field || 'Unknown';
+          const fieldAvg = fieldAverages[field];
+          dp.rawYield = dp.avgYield; // Store original
+          dp.avgYield = (dp.avgYield / fieldAvg) * 100; // Convert to %
+          dp.fieldAvg = fieldAvg;
+        });
+
+        yieldLabel = 'Yield (% of Field Avg)';
+        const fieldCount = Object.keys(fieldAverages).length;
+        normalizeNote = `<div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem; padding: 0.5rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #92400e;">
+          <strong>📊 Normalized by Field Productivity</strong><br>
+          Yields converted to % of each field's average to isolate nutrient effect.<br>
+          Field averages range from <strong>${fieldAvgRange.min.toFixed(0)}</strong> to <strong>${fieldAvgRange.max.toFixed(0)}</strong> bu/ac across ${fieldCount} fields.
+          <br><span style="font-size: 0.75rem; color: #b45309;">100% = field average • >100% = above average • <100% = below average</span>
+        </div>`;
+      }
+
       // Calculate correlations for each nutrient
       const visibleNutrients = getVisibleNutrients();
       const correlations = [];
@@ -1652,6 +1700,8 @@
           ${yearFilter === 'avg' ? ' <em>(averaged at each location)</em>' : yearFilter === 'combined' ? ' <em>(each year = separate data point)</em>' : ''}${radiusNote}
         </div>
 
+        ${normalizeNote}
+
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
           <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; text-align: center;">
             <div style="font-size: 2rem; font-weight: 700; color: #92400e;">${dataPoints.length}</div>
@@ -1659,8 +1709,8 @@
             ${modeDescription}
           </div>
           <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 1rem; text-align: center;">
-            <div style="font-size: 2rem; font-weight: 700; color: #166534;">${avgYield.toFixed(1)}</div>
-            <div style="color: #166534; font-size: 0.875rem;">Avg Yield (bu/ac)</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #166534;">${avgYield.toFixed(1)}${normalizeByField ? '%' : ''}</div>
+            <div style="color: #166534; font-size: 0.875rem;">${normalizeByField ? 'Avg Yield (% of Field)' : 'Avg Yield (bu/ac)'}</div>
           </div>
           <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.5rem; padding: 1rem; text-align: center;">
             <div style="font-size: 1.25rem; font-weight: 600; color: #1e40af;">${crops.map(c => c === 'corn' ? '🌽' : '🫘').join(' ')}</div>
@@ -1906,6 +1956,33 @@
           }
         });
       }
+
+      // Apply normalization if enabled
+      const normalizeByField = document.getElementById('yieldNormalizeToggle').checked;
+      if (normalizeByField && dataPoints.length > 0) {
+        // Calculate average yield for each field
+        const fieldYields = {};
+        dataPoints.forEach(dp => {
+          const field = dp.field || 'Unknown';
+          if (!fieldYields[field]) fieldYields[field] = [];
+          fieldYields[field].push(dp.avgYield);
+        });
+
+        const fieldAverages = {};
+        Object.entries(fieldYields).forEach(([field, yields]) => {
+          fieldAverages[field] = yields.reduce((a, b) => a + b, 0) / yields.length;
+        });
+
+        // Convert yields to % of field average
+        dataPoints.forEach(dp => {
+          const field = dp.field || 'Unknown';
+          const fieldAvg = fieldAverages[field];
+          dp.rawYield = dp.avgYield;
+          dp.avgYield = (dp.avgYield / fieldAvg) * 100;
+          dp.fieldAvg = fieldAvg;
+        });
+      }
+
       return dataPoints;
     }
 
@@ -1983,10 +2060,12 @@
       const yMin = Math.min(...yValues);
       const yMax = Math.max(...yValues);
 
-      // Labels for axes
+      // Labels for axes - check if normalized
+      const normalizeByField = document.getElementById('yieldNormalizeToggle').checked;
+      const yieldAxisLabel = normalizeByField ? 'Yield (% of Field Avg)' : 'Yield (bu/ac)';
       const nutrientName = CONFIG.NUTRIENT_NAMES[nutrient] || nutrient;
-      const xLabel = scatterAxesFlipped ? 'Yield (bu/ac)' : nutrientName;
-      const yLabel = scatterAxesFlipped ? nutrientName : 'Yield (bu/ac)';
+      const xLabel = scatterAxesFlipped ? yieldAxisLabel : nutrientName;
+      const yLabel = scatterAxesFlipped ? nutrientName : yieldAxisLabel;
 
       // Padding for axes
       const padding = { left: 70, right: 40, top: 40, bottom: 60 };
@@ -2088,13 +2167,14 @@
           ctx.setLineDash([]);
 
           // Label the threshold line
+          const thresholdUnit = normalizeByField ? '%' : 'bu/ac';
           ctx.fillStyle = '#92400e';
           ctx.font = 'bold 12px system-ui';
           ctx.save();
           ctx.translate(thresholdX + 5, padding.top + 60);
           ctx.rotate(Math.PI / 2);
           ctx.textAlign = 'left';
-          ctx.fillText(`${yieldThreshold} bu/ac threshold`, 0, 0);
+          ctx.fillText(`${yieldThreshold} ${thresholdUnit} threshold`, 0, 0);
           ctx.restore();
         }
       } else {
@@ -2111,10 +2191,11 @@
           ctx.setLineDash([]);
 
           // Label the threshold line
+          const thresholdUnit = normalizeByField ? '%' : 'bu/ac';
           ctx.fillStyle = '#92400e';
           ctx.font = 'bold 12px system-ui';
           ctx.textAlign = 'left';
-          ctx.fillText(`${yieldThreshold} bu/ac threshold`, padding.left + 5, thresholdY - 5);
+          ctx.fillText(`${yieldThreshold} ${thresholdUnit} threshold`, padding.left + 5, thresholdY - 5);
         }
       }
 
@@ -2223,8 +2304,9 @@
       ctx.fill();
       ctx.strokeStyle = '#16a34a';
       ctx.stroke();
+      const yieldUnit = normalizeByField ? '%' : 'bu/ac';
       ctx.fillStyle = '#1e293b';
-      ctx.fillText(`Above ${yieldThreshold} bu/ac (${aboveThreshold.length})`, legendX + 18, legendY + 14);
+      ctx.fillText(`Above ${yieldThreshold} ${yieldUnit} (${aboveThreshold.length})`, legendX + 18, legendY + 14);
 
       // Below threshold legend
       ctx.beginPath();
@@ -2234,7 +2316,7 @@
       ctx.strokeStyle = '#94a3b8';
       ctx.stroke();
       ctx.fillStyle = '#64748b';
-      ctx.fillText(`Below ${yieldThreshold} bu/ac (${belowThreshold.length})`, legendX + 18, legendY + 34);
+      ctx.fillText(`Below ${yieldThreshold} ${yieldUnit} (${belowThreshold.length})`, legendX + 18, legendY + 34);
 
       // Trend line legend
       ctx.strokeStyle = '#3b82f6';
@@ -2281,10 +2363,13 @@
     function updateThresholdAnalysis(nutrient, validPoints, threshold, aboveThreshold, belowThreshold, isFlipped = false) {
       const content = document.getElementById('thresholdContent');
       const nutrientName = CONFIG.NUTRIENT_NAMES[nutrient] || nutrient;
+      const normalizeByField = document.getElementById('yieldNormalizeToggle').checked;
+      const yieldUnit = normalizeByField ? '%' : 'bu/ac';
+      const yieldDesc = normalizeByField ? '% of field avg' : 'bu/ac';
 
       if (aboveThreshold.length === 0) {
         content.innerHTML = `
-          <p style="color: #dc2626; font-weight: 600;">No samples above ${threshold} bu/ac</p>
+          <p style="color: #dc2626; font-weight: 600;">No samples above ${threshold} ${yieldUnit}</p>
           <p>Try lowering the yield threshold to analyze high-yielding samples.</p>
         `;
         return;
@@ -2307,7 +2392,7 @@
         const diffPct = avgBelow > 0 ? ((diff / avgBelow) * 100).toFixed(0) : 'N/A';
         belowStats = `
           <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e2e8f0;">
-            <div style="font-weight: 600; color: #64748b; margin-bottom: 0.5rem;">Below ${threshold} bu/ac:</div>
+            <div style="font-weight: 600; color: #64748b; margin-bottom: 0.5rem;">Below ${threshold} ${yieldUnit}:</div>
             <div>Avg ${nutrient}: <strong>${avgBelow.toFixed(1)}</strong></div>
             <div style="margin-top: 0.5rem; color: ${diff >= 0 ? '#16a34a' : '#dc2626'};">
               Difference: ${diff >= 0 ? '+' : ''}${diff.toFixed(1)} (${diffPct}%)
@@ -2316,16 +2401,17 @@
         `;
       }
 
-      // Different interpretation based on axis orientation
+      // Different interpretation based on axis orientation and normalization
+      const thresholdDesc = normalizeByField ? `${threshold}% of field average` : `${threshold} bu/ac`;
       const interpretationText = isFlipped
-        ? `<strong>Key insight:</strong> At yields ≥${threshold} bu/ac, ${nutrient} levels ranged from <strong>${minAbove.toFixed(1)}</strong> to <strong>${maxAbove.toFixed(1)}</strong>. The minimum ${nutrient} observed at this yield level was <strong>${minAbove.toFixed(1)}</strong> - you never see ${nutrient} below this at high yields.`
-        : `<strong>Interpretation:</strong> For high yields (≥${threshold} bu/ac), the minimum ${nutrientName} observed was <strong>${minAbove.toFixed(1)}</strong>. This suggests ${nutrient} levels below this may limit yield potential.`;
+        ? `<strong>Key insight:</strong> At yields ≥${thresholdDesc}, ${nutrient} levels ranged from <strong>${minAbove.toFixed(1)}</strong> to <strong>${maxAbove.toFixed(1)}</strong>. The minimum ${nutrient} observed at this yield level was <strong>${minAbove.toFixed(1)}</strong> - you never see ${nutrient} below this at high yields.`
+        : `<strong>Interpretation:</strong> For high yields (≥${thresholdDesc}), the minimum ${nutrientName} observed was <strong>${minAbove.toFixed(1)}</strong>. This suggests ${nutrient} levels below this may limit yield potential.`;
 
       content.innerHTML = `
         ${isFlipped ? '<div style="background: #eff6ff; border: 1px solid #3b82f6; border-radius: 0.375rem; padding: 0.5rem; margin-bottom: 0.75rem; font-size: 0.75rem; color: #1d4ed8;"><strong>Flipped View:</strong> X=Yield, Y=${nutrientName}. Look left of the threshold line to see nutrient levels at high yields.</div>' : ''}
         <div style="background: #f0fdf4; border: 1px solid #22c55e; border-radius: 0.375rem; padding: 0.75rem; margin-bottom: 0.75rem;">
           <div style="font-weight: 700; color: #166534; margin-bottom: 0.5rem;">
-            🎯 For yields ≥ ${threshold} bu/ac:
+            🎯 For yields ≥ ${threshold} ${yieldUnit}:
           </div>
           <div style="font-size: 0.8rem; color: #166534;">
             <strong>Minimum ${nutrient}:</strong> ${minAbove.toFixed(1)}<br>
