@@ -4,6 +4,21 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.15] - January 14, 2026
+
+### Yield Correlation
+- Add "Normalize by Field" toggle with explanation info box
+- Collapsible info box explaining how normalization affects correlations
+- When normalized, yields shown as % of field average to isolate nutrient effect
+
+### Reports & Exports
+- Improved page break handling in PDF reports
+- Added CSS rules to prevent breaking inside cards, tables, and graphs
+- Headers kept with following content
+- Orphan/widow line prevention
+
+---
+
 ## [v1.0.1] - January 14, 2026
 
 ### Version Tracking
