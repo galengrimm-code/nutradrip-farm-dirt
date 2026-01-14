@@ -189,6 +189,7 @@
         <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">Avg:</span> <span id="statsAvg" style="font-weight: 600;">-</span></div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 3px;"><span style="color: #64748b;">High:</span> <span id="statsHigh" style="font-weight: 600; color: #22c55e;">-</span></div>
         <div style="display: flex; justify-content: space-between;"><span style="color: #64748b;">Low:</span> <span id="statsLow" style="font-weight: 600; color: #ef4444;">-</span></div>
+        <div id="statsNote" style="margin-top: 6px; font-size: 11px; color: #94a3b8; font-style: italic;"></div>
       </div>
       <div id="zoomIndicator" style="position: absolute; bottom: 30px; left: 10px; background: white; padding: 6px 10px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); z-index: 1000; font-size: 11px; font-weight: 500;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -1072,28 +1073,36 @@
       }
     }
     
-    function updateStats(values) {
+    function updateStats(values, mode = 'sample') {
       const statsTitle = document.getElementById('statsTitle');
       const statsAvg = document.getElementById('statsAvg');
       const statsHigh = document.getElementById('statsHigh');
       const statsLow = document.getElementById('statsLow');
-      
+      const statsNote = document.getElementById('statsNote');
+
       const attrName = CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute;
       const unit = CONFIG.NUTRIENT_UNITS[selectedAttribute] || '';
       statsTitle.textContent = attrName;
-      
+
+      // Update note based on mode
+      if (mode === 'field') {
+        statsNote.textContent = 'Based on field averages';
+      } else {
+        statsNote.textContent = 'Based on sample points';
+      }
+
       if (!values || values.length === 0) {
         statsAvg.textContent = '-';
         statsHigh.textContent = '-';
         statsLow.textContent = '-';
         return;
       }
-      
+
       const avg = values.reduce((a, b) => a + b, 0) / values.length;
       const high = Math.max(...values);
       const low = Math.min(...values);
       const decimals = selectedAttribute === 'pH' ? 2 : 1;
-      
+
       statsAvg.textContent = avg.toFixed(decimals) + (unit ? ' ' + unit : '');
       statsHigh.textContent = high.toFixed(decimals) + (unit ? ' ' + unit : '');
       statsLow.textContent = low.toFixed(decimals) + (unit ? ' ' + unit : '');
@@ -1634,16 +1643,22 @@
       }
       // If allFieldAvgs.length === 0, all fields are grey (no data)
 
-      // Update stats box with all samples (using helper to filter out zeros for no-data attributes)
-      let filtered = sampleData.filter(s => {
-        if (selectedField !== 'all' && s.field !== selectedField) return false;
-        if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
-        return true;
-      });
-      const allValues = filtered
-        .map(s => Utils.getNumericValue(s[selectedAttribute], selectedAttribute))
-        .filter(v => v !== null);
-      updateStats(allValues);
+      // Update stats box - use field averages when "All Fields" selected
+      if (selectedField === 'all' && allFieldAvgs.length > 0) {
+        // Show stats based on field averages
+        updateStats(allFieldAvgs, 'field');
+      } else {
+        // Single field selected - show individual sample points
+        let filtered = sampleData.filter(s => {
+          if (selectedField !== 'all' && s.field !== selectedField) return false;
+          if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
+          return true;
+        });
+        const allValues = filtered
+          .map(s => Utils.getNumericValue(s[selectedAttribute], selectedAttribute))
+          .filter(v => v !== null);
+        updateStats(allValues, 'sample');
+      }
 
       // Draw boundaries with shading
       drawBoundaries(true, fieldColors);
@@ -1670,8 +1685,8 @@
         .map(s => Utils.getNumericValue(s[selectedAttribute], selectedAttribute))
         .filter(v => v !== null);
 
-      // Update stats box
-      updateStats(allValues);
+      // Update stats box (always sample points when showing markers)
+      updateStats(allValues, 'sample');
 
       // Render point markers
       filtered.forEach(sample => {
@@ -1822,6 +1837,7 @@
         document.getElementById('statsAvg').textContent = (avg >= 0 ? '+' : '') + avg.toFixed(1);
         document.getElementById('statsHigh').textContent = (high >= 0 ? '+' : '') + high.toFixed(1);
         document.getElementById('statsLow').textContent = (low >= 0 ? '+' : '') + low.toFixed(1);
+        document.getElementById('statsNote').textContent = 'Year-over-year change';
 
         // Update compare info bar summary
         const sign = avg >= 0 ? '+' : '';
