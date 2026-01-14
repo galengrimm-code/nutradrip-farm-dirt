@@ -1311,7 +1311,7 @@
         // Now correlate with soil samples
         statusEl.innerHTML += '<br><span style="color: #3b82f6;">⏳ Correlating with soil samples...</span>';
 
-        const correlationResults = correlateYieldToSamples(yieldYear, radiusFeet);
+        const correlationResults = await correlateYieldToSamples(yieldYear, radiusFeet);
 
         // Clear raw yield data after correlation - only keep correlated summary on samples
         yieldData = [];
@@ -1513,7 +1513,7 @@
       return { points, detectedYear };
     }
     
-    function correlateYieldToSamples(yieldYear, radiusFeet) {
+    async function correlateYieldToSamples(yieldYear, radiusFeet) {
       // NEW LOGIC: For each yield point, find the most recent soil sample at that location
       // The sample must be from the same year or earlier (soil conditions at planting time)
 
@@ -1530,13 +1530,18 @@
         return { matched: 0, total: 0, noYieldData: true, fieldStats: {}, unmatchedYieldPoints: [], sampleAgeStats: {} };
       }
 
-      // Get yield data bounding box
-      const yieldLats = yearYield.map(y => y.lat);
-      const yieldLons = yearYield.map(y => y.lon);
-      const yieldBounds = {
-        minLat: Math.min(...yieldLats), maxLat: Math.max(...yieldLats),
-        minLon: Math.min(...yieldLons), maxLon: Math.max(...yieldLons)
-      };
+      // Get yield data bounding box - use loop instead of spread to avoid stack overflow
+      let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+      for (const y of yearYield) {
+        if (y.lat < minLat) minLat = y.lat;
+        if (y.lat > maxLat) maxLat = y.lat;
+        if (y.lon < minLon) minLon = y.lon;
+        if (y.lon > maxLon) maxLon = y.lon;
+      }
+      const yieldBounds = { minLat, maxLat, minLon, maxLon };
+
+      // Helper for async breathing
+      const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
 
       // Sample age tracking
       const sampleAgeStats = {
@@ -1581,15 +1586,17 @@
         }
       });
 
-      yearYield.forEach((y, idx) => {
-        let foundField = false;
+      // Cache field lookups for reuse in correlation loop
+      const yieldPointFields = new Array(yearYield.length);
+
+      for (let idx = 0; idx < yearYield.length; idx++) {
+        const y = yearYield[idx];
+        let foundField = null;
         for (const [fieldName, polygons] of Object.entries(fieldBoundaries)) {
-          // Check each polygon in the field (most fields have just one)
           for (const polygon of polygons) {
             if (pointInPolygon([y.lat, y.lon], polygon)) {
               yieldPointsPerField[fieldName] = (yieldPointsPerField[fieldName] || 0) + 1;
-              foundField = true;
-              // Debug: Log first match for first few points
+              foundField = fieldName;
               if (idx < 5) {
                 console.log(`Yield point ${idx} (${y.lat.toFixed(6)}, ${y.lon.toFixed(6)}) -> ${fieldName}`);
               }
@@ -1598,8 +1605,11 @@
           }
           if (foundField) break;
         }
+        yieldPointFields[idx] = foundField;
         if (!foundField) orphanedYieldPoints++;
-      });
+        // Breathe every 5000 points
+        if (idx % 5000 === 4999) await breathe();
+      }
 
       // Debug: Show yield distribution per field
       console.log('=== YIELD POINTS PER FIELD ===');
@@ -1641,15 +1651,21 @@
       }
 
       // Process each yield point - find matching soil sample
-      yearYield.forEach((yieldPoint, yIdx) => {
+      for (let yIdx = 0; yIdx < yearYield.length; yIdx++) {
+        const yieldPoint = yearYield[yIdx];
+        // Use cached field lookup instead of re-doing point-in-polygon
+        const yieldField = yieldPointFields[yIdx];
+
         // Find all soil samples within radius
-        const nearbySamples = sampleData
-          .map((sample, idx) => ({ sample, idx }))
-          .filter(({ sample }) => {
-            const latDiff = Math.abs(yieldPoint.lat - sample.lat);
-            const lonDiff = Math.abs(yieldPoint.lon - sample.lon);
-            return latDiff <= radiusLatDeg && lonDiff <= radiusLonDeg;
-          });
+        const nearbySamples = [];
+        for (let sIdx = 0; sIdx < sampleData.length; sIdx++) {
+          const sample = sampleData[sIdx];
+          const latDiff = Math.abs(yieldPoint.lat - sample.lat);
+          const lonDiff = Math.abs(yieldPoint.lon - sample.lon);
+          if (latDiff <= radiusLatDeg && lonDiff <= radiusLonDeg) {
+            nearbySamples.push({ sample, idx: sIdx });
+          }
+        }
 
         // Filter to samples from yield year or earlier, then find most recent
         const validSamples = nearbySamples
@@ -1658,18 +1674,6 @@
             return !isNaN(sampleYear) && sampleYear <= yieldYear_int;
           })
           .sort((a, b) => parseInt(b.sample.year) - parseInt(a.sample.year)); // Most recent first
-
-        // Determine which field this yield point is in
-        let yieldField = null;
-        for (const [fieldName, polygons] of Object.entries(fieldBoundaries)) {
-          for (const polygon of polygons) {
-            if (pointInPolygon([yieldPoint.lat, yieldPoint.lon], polygon)) {
-              yieldField = fieldName;
-              break;
-            }
-          }
-          if (yieldField) break;
-        }
 
         if (validSamples.length > 0) {
           // Use the most recent sample
@@ -1738,7 +1742,10 @@
             reason: reason
           });
         }
-      });
+
+        // Breathe every 2000 points to keep UI responsive
+        if (yIdx % 2000 === 1999) await breathe();
+      }
 
       // Calculate match rates per field
       for (const field of Object.keys(fieldStats)) {
