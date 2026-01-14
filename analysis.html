@@ -142,6 +142,7 @@
       <div class="tab" data-tab="comparison">📊 Year-Over-Year</div>
       <div class="tab" data-tab="rankings">🏆 Field Rankings</div>
       <div class="tab" data-tab="yield">🌾 Yield Correlation</div>
+      <div class="tab" data-tab="spatial">🗺️ Spatial Change</div>
     </div>
     
     <!-- Tab: Year Comparison (Operation-wide) -->
@@ -223,6 +224,7 @@
             <option value="all">All Crops</option>
             <option value="corn">🌽 Corn</option>
             <option value="soybeans">🫘 Soybeans</option>
+            <option value="amylose">🍚 Amylose</option>
           </select>
         </div>
         <div class="control-group">
@@ -292,16 +294,51 @@
         <div id="yieldDebugContent" style="font-family: monospace; font-size: 0.75rem; white-space: pre-wrap; color: #78350f; max-height: 500px; overflow-y: auto;"></div>
       </div>
     </div>
+
+    <!-- Tab: Spatial Change Analysis -->
+    <div id="spatial" class="tab-content">
+      <div class="controls-bar">
+        <div class="control-group">
+          <label>Field</label>
+          <select id="spatialFieldSelect"></select>
+        </div>
+        <div class="control-group">
+          <label>Nutrient</label>
+          <select id="spatialNutrientSelect"></select>
+        </div>
+        <div class="control-group">
+          <label>Base Year</label>
+          <select id="spatialBaseYearSelect"></select>
+        </div>
+        <div class="control-group">
+          <label>Compare To</label>
+          <select id="spatialCompareYearSelect"></select>
+        </div>
+        <div class="control-group">
+          <label>Match Radius</label>
+          <select id="spatialRadiusSelect">
+            <option value="50">50 ft</option>
+            <option value="100" selected>100 ft (default)</option>
+            <option value="150">150 ft</option>
+            <option value="200">200 ft</option>
+          </select>
+        </div>
+        <button onclick="exportSpatialAnalysis()" class="export-btn">📄 Export Report</button>
+      </div>
+      <div id="spatialContent">
+        <div class="no-data">Select a field and nutrient to analyze spatial changes over time.</div>
+      </div>
+    </div>
   </div>
-  
+
   <div id="statusMessage"></div>
 
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.3";
-    const BUILD_DATE = "2026-01-14T15:37:37";
+    const APP_VERSION = "v1.0.4";
+    const BUILD_DATE = "2026-01-14T15:43:21";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -537,6 +574,23 @@
       // Only show fields that have yield data
       const fieldsWithYield = [...new Set(sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).map(s => s.field).filter(f => f && f !== 'Unknown'))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       fieldsWithYield.forEach(f => { yieldFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+
+      // Spatial Change Analysis selectors
+      const spatialFieldSel = document.getElementById('spatialFieldSelect');
+      spatialFieldSel.innerHTML = '<option value="">-- Select Field --</option>';
+      fields.forEach(f => { spatialFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+
+      const spatialNutrientSel = document.getElementById('spatialNutrientSelect');
+      spatialNutrientSel.innerHTML = '';
+      visibleNutrients.forEach(n => { spatialNutrientSel.innerHTML += `<option value="${n}">${CONFIG.NUTRIENT_NAMES[n] || n}</option>`; });
+
+      const spatialBaseYearSel = document.getElementById('spatialBaseYearSelect');
+      spatialBaseYearSel.innerHTML = '';
+      years.forEach(y => { spatialBaseYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+
+      const spatialCompareYearSel = document.getElementById('spatialCompareYearSelect');
+      spatialCompareYearSel.innerHTML = '<option value="all">All Years</option>';
+      years.forEach(y => { spatialCompareYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
     }
 
     function getSoilYearsWithYield() {
@@ -581,6 +635,12 @@
       document.getElementById('yieldYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('soilYearSelect').addEventListener('change', updateYieldAnalysis);
       document.getElementById('yieldFieldSelect').addEventListener('change', updateYieldAnalysis);
+      // Spatial Change Analysis listeners
+      document.getElementById('spatialFieldSelect').addEventListener('change', updateSpatialAnalysis);
+      document.getElementById('spatialNutrientSelect').addEventListener('change', updateSpatialAnalysis);
+      document.getElementById('spatialBaseYearSelect').addEventListener('change', updateSpatialAnalysis);
+      document.getElementById('spatialCompareYearSelect').addEventListener('change', updateSpatialAnalysis);
+      document.getElementById('spatialRadiusSelect').addEventListener('change', updateSpatialAnalysis);
     }
 
     function getStats(samples, attr) {
@@ -2642,6 +2702,377 @@
           <div class="summary-box"><div class="number">${field === 'all' ? 'All' : field}</div><div class="label">Field</div></div>
         </div>
         ${yieldData}
+        <div class="footer">Soil Sample Analysis App</div>
+      </body></html>`);
+      printWindow.document.close();
+      printWindow.print();
+    }
+
+    // ========== TAB 5: Spatial Change Analysis ==========
+    function updateSpatialAnalysis() {
+      const container = document.getElementById('spatialContent');
+      const field = document.getElementById('spatialFieldSelect').value;
+      const nutrient = document.getElementById('spatialNutrientSelect').value;
+      const baseYear = parseInt(document.getElementById('spatialBaseYearSelect').value);
+      const compareYear = document.getElementById('spatialCompareYearSelect').value;
+      const radiusFt = parseInt(document.getElementById('spatialRadiusSelect').value);
+
+      if (!field) {
+        container.innerHTML = '<div class="no-data">Select a field to analyze spatial changes over time.</div>';
+        return;
+      }
+
+      // Get all samples for this field
+      const fieldSamples = sampleData.filter(s => s.field === field);
+      const years = [...new Set(fieldSamples.map(s => s.year).filter(y => y))].sort();
+
+      if (years.length < 2) {
+        container.innerHTML = '<div class="no-data">Need at least 2 years of data to analyze changes. This field only has data from: ' + years.join(', ') + '</div>';
+        return;
+      }
+
+      // Get base year samples
+      const baseSamples = fieldSamples.filter(s => s.year === baseYear);
+      if (baseSamples.length === 0) {
+        container.innerHTML = `<div class="no-data">No samples found for ${field} in ${baseYear}</div>`;
+        return;
+      }
+
+      // Get valid nutrient values for base year
+      const baseWithValues = baseSamples.filter(s => {
+        const val = s[nutrient];
+        return val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val));
+      });
+
+      if (baseWithValues.length < 4) {
+        container.innerHTML = `<div class="no-data">Need at least 4 samples with ${nutrient} data in base year. Found: ${baseWithValues.length}</div>`;
+        return;
+      }
+
+      // Calculate zone thresholds based on base year (quartiles)
+      const baseValues = baseWithValues.map(s => parseFloat(s[nutrient])).sort((a, b) => a - b);
+      const q1Index = Math.floor(baseValues.length * 0.25);
+      const q3Index = Math.floor(baseValues.length * 0.75);
+      const lowThreshold = baseValues[q1Index];
+      const highThreshold = baseValues[q3Index];
+
+      // Classify base year samples into zones
+      const zonedSamples = baseWithValues.map(s => ({
+        ...s,
+        baseValue: parseFloat(s[nutrient]),
+        zone: parseFloat(s[nutrient]) <= lowThreshold ? 'low' :
+              parseFloat(s[nutrient]) >= highThreshold ? 'high' : 'medium'
+      }));
+
+      // Determine which years to compare
+      const compareYears = compareYear === 'all'
+        ? years.filter(y => y !== baseYear)
+        : [parseInt(compareYear)];
+
+      // For each zoned sample, find matching samples in compare years
+      const radiusMeters = radiusFt * 0.3048;
+      const matchedData = [];
+
+      zonedSamples.forEach(baseSample => {
+        const matches = { base: baseSample, years: {} };
+        matches.years[baseYear] = baseSample.baseValue;
+
+        compareYears.forEach(year => {
+          const yearSamples = fieldSamples.filter(s => s.year === year);
+          // Find closest sample within radius
+          let closest = null;
+          let closestDist = Infinity;
+
+          yearSamples.forEach(s => {
+            const dist = getDistanceMeters(baseSample.lat, baseSample.lon, s.lat, s.lon);
+            if (dist <= radiusMeters && dist < closestDist) {
+              const val = s[nutrient];
+              if (val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val))) {
+                closest = s;
+                closestDist = dist;
+              }
+            }
+          });
+
+          if (closest) {
+            matches.years[year] = parseFloat(closest[nutrient]);
+          }
+        });
+
+        matchedData.push(matches);
+      });
+
+      // Calculate zone statistics for each year
+      const allYears = [baseYear, ...compareYears].sort();
+      const zoneStats = { low: {}, medium: {}, high: {}, all: {} };
+
+      allYears.forEach(year => {
+        ['low', 'medium', 'high'].forEach(zone => {
+          const zoneMatches = matchedData.filter(m => m.base.zone === zone && m.years[year] !== undefined);
+          if (zoneMatches.length > 0) {
+            const values = zoneMatches.map(m => m.years[year]);
+            zoneStats[zone][year] = {
+              avg: values.reduce((a, b) => a + b, 0) / values.length,
+              count: values.length,
+              min: Math.min(...values),
+              max: Math.max(...values)
+            };
+          }
+        });
+
+        // Field average
+        const allMatches = matchedData.filter(m => m.years[year] !== undefined);
+        if (allMatches.length > 0) {
+          const values = allMatches.map(m => m.years[year]);
+          zoneStats.all[year] = {
+            avg: values.reduce((a, b) => a + b, 0) / values.length,
+            count: values.length
+          };
+        }
+      });
+
+      // Calculate match rates
+      const lowCount = matchedData.filter(m => m.base.zone === 'low').length;
+      const medCount = matchedData.filter(m => m.base.zone === 'medium').length;
+      const highCount = matchedData.filter(m => m.base.zone === 'high').length;
+
+      // Build the results HTML
+      const nutrientName = CONFIG.NUTRIENT_NAMES[nutrient] || nutrient;
+      const unit = CONFIG.NUTRIENT_UNITS[nutrient] || '';
+      const decimals = getDecimals(nutrient);
+
+      let html = `
+        <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: #0369a1;">
+          <strong>Spatial Change Analysis: ${field} - ${nutrientName}</strong><br>
+          <strong>Base Year:</strong> ${baseYear} (zones defined by this year's values)<br>
+          <strong>Comparing:</strong> ${compareYears.join(', ')}<br>
+          <strong>Match Radius:</strong> ${radiusFt} ft | <strong>Matched Samples:</strong> ${matchedData.length} of ${baseSamples.length}
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
+          <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700; color: #991b1b;">${lowCount}</div>
+            <div style="color: #991b1b; font-size: 0.75rem;">Low Zone</div>
+            <div style="color: #b91c1c; font-size: 0.7rem;">≤ ${lowThreshold.toFixed(decimals)} ${unit}</div>
+          </div>
+          <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700; color: #92400e;">${medCount}</div>
+            <div style="color: #92400e; font-size: 0.75rem;">Medium Zone</div>
+            <div style="color: #b45309; font-size: 0.7rem;">${lowThreshold.toFixed(decimals)} - ${highThreshold.toFixed(decimals)} ${unit}</div>
+          </div>
+          <div style="background: #dcfce7; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700; color: #166534;">${highCount}</div>
+            <div style="color: #166534; font-size: 0.75rem;">High Zone</div>
+            <div style="color: #15803d; font-size: 0.7rem;">≥ ${highThreshold.toFixed(decimals)} ${unit}</div>
+          </div>
+        </div>
+
+        <h3 style="margin: 0 0 0.75rem 0; color: #1e293b;">Zone Tracking Over Time</h3>
+        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">Zones are classified by ${baseYear} values, then tracked across years at the same GPS locations.</p>
+
+        <table class="rankings-table" style="margin-bottom: 1.5rem;">
+          <thead>
+            <tr>
+              <th>Zone (${baseYear} baseline)</th>
+              ${allYears.map(y => `<th>${y} Avg</th>`).join('')}
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+      // Add rows for each zone
+      const lastYear = allYears[allYears.length - 1];
+
+      ['low', 'medium', 'high'].forEach(zone => {
+        const zoneName = zone === 'low' ? `Low (≤${lowThreshold.toFixed(decimals)})` :
+                        zone === 'medium' ? `Medium (${lowThreshold.toFixed(decimals)}-${highThreshold.toFixed(decimals)})` :
+                        `High (≥${highThreshold.toFixed(decimals)})`;
+        const zoneColor = zone === 'low' ? '#dc2626' : zone === 'medium' ? '#d97706' : '#16a34a';
+
+        html += `<tr>
+          <td style="font-weight: 600; color: ${zoneColor};">${zoneName}</td>`;
+
+        allYears.forEach(year => {
+          const stat = zoneStats[zone][year];
+          if (stat) {
+            html += `<td>${stat.avg.toFixed(decimals)} <span style="color: #94a3b8; font-size: 0.7rem;">(n=${stat.count})</span></td>`;
+          } else {
+            html += `<td style="color: #94a3b8;">-</td>`;
+          }
+        });
+
+        // Change column
+        const baseAvg = zoneStats[zone][baseYear]?.avg;
+        const lastAvg = zoneStats[zone][lastYear]?.avg;
+        if (baseAvg !== undefined && lastAvg !== undefined) {
+          const change = lastAvg - baseAvg;
+          const pctChange = baseAvg !== 0 ? ((change / baseAvg) * 100).toFixed(0) : 'N/A';
+          const changeColor = change > 0 ? '#16a34a' : change < 0 ? '#dc2626' : '#64748b';
+          const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+          html += `<td style="font-weight: 600; color: ${changeColor};">${change >= 0 ? '+' : ''}${change.toFixed(decimals)} ${arrow} <span style="font-size: 0.75rem;">(${pctChange}%)</span></td>`;
+        } else {
+          html += `<td style="color: #94a3b8;">-</td>`;
+        }
+
+        html += `</tr>`;
+      });
+
+      // Field average row
+      html += `<tr style="background: #f1f5f9; font-weight: 600;">
+        <td>Field Average</td>`;
+      allYears.forEach(year => {
+        const stat = zoneStats.all[year];
+        if (stat) {
+          html += `<td>${stat.avg.toFixed(decimals)}</td>`;
+        } else {
+          html += `<td style="color: #94a3b8;">-</td>`;
+        }
+      });
+
+      const baseFieldAvg = zoneStats.all[baseYear]?.avg;
+      const lastFieldAvg = zoneStats.all[lastYear]?.avg;
+      if (baseFieldAvg !== undefined && lastFieldAvg !== undefined) {
+        const change = lastFieldAvg - baseFieldAvg;
+        const changeColor = change > 0 ? '#16a34a' : change < 0 ? '#dc2626' : '#64748b';
+        const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+        html += `<td style="color: ${changeColor};">${change >= 0 ? '+' : ''}${change.toFixed(decimals)} ${arrow}</td>`;
+      } else {
+        html += `<td>-</td>`;
+      }
+      html += `</tr></tbody></table>`;
+
+      // Generate insights
+      html += generateSpatialInsights(zoneStats, baseYear, lastYear, nutrientName, decimals, unit);
+
+      container.innerHTML = html;
+    }
+
+    function generateSpatialInsights(zoneStats, baseYear, lastYear, nutrientName, decimals, unit) {
+      const insights = [];
+
+      // Low zone insight
+      const lowBase = zoneStats.low[baseYear]?.avg;
+      const lowLast = zoneStats.low[lastYear]?.avg;
+      if (lowBase !== undefined && lowLast !== undefined) {
+        const lowChange = lowLast - lowBase;
+        const lowPct = lowBase !== 0 ? Math.abs((lowChange / lowBase) * 100).toFixed(0) : 0;
+        if (lowChange > 0) {
+          insights.push({
+            type: 'positive',
+            icon: '📈',
+            text: `Low ${nutrientName} areas improved ${lowPct}% (+${lowChange.toFixed(decimals)} ${unit} avg)`
+          });
+        } else if (lowChange < 0) {
+          insights.push({
+            type: 'negative',
+            icon: '📉',
+            text: `Low ${nutrientName} areas declined ${lowPct}% (${lowChange.toFixed(decimals)} ${unit} avg)`
+          });
+        }
+      }
+
+      // High zone insight
+      const highBase = zoneStats.high[baseYear]?.avg;
+      const highLast = zoneStats.high[lastYear]?.avg;
+      if (highBase !== undefined && highLast !== undefined) {
+        const highChange = highLast - highBase;
+        const highPct = highBase !== 0 ? Math.abs((highChange / highBase) * 100).toFixed(0) : 0;
+        if (highChange < 0) {
+          insights.push({
+            type: 'neutral',
+            icon: '⚖️',
+            text: `High ${nutrientName} areas decreased ${highPct}% (${highChange.toFixed(decimals)} ${unit} avg)`
+          });
+        } else if (highChange > 0) {
+          insights.push({
+            type: 'warning',
+            icon: '⬆️',
+            text: `High ${nutrientName} areas increased ${highPct}% (+${highChange.toFixed(decimals)} ${unit} avg)`
+          });
+        }
+      }
+
+      // Overall strategy insight
+      if (lowBase !== undefined && lowLast !== undefined && highBase !== undefined && highLast !== undefined) {
+        const lowChange = lowLast - lowBase;
+        const highChange = highLast - highBase;
+
+        if (lowChange > 0 && highChange <= 0) {
+          insights.push({
+            type: 'positive',
+            icon: '🎯',
+            text: `Your fertility strategy is successfully bringing up the low spots while maintaining high areas!`
+          });
+        } else if (lowChange > 0 && highChange > 0) {
+          insights.push({
+            type: 'neutral',
+            icon: '📊',
+            text: `All areas are increasing - consider variable rate application to target low spots more`
+          });
+        } else if (lowChange <= 0 && highChange > 0) {
+          insights.push({
+            type: 'warning',
+            icon: '⚠️',
+            text: `High areas getting higher while low areas stagnate - review application targeting`
+          });
+        }
+      }
+
+      if (insights.length === 0) {
+        return '';
+      }
+
+      let html = `
+        <h3 style="margin: 1rem 0 0.75rem 0; color: #1e293b;">💡 Insights</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">`;
+
+      insights.forEach(insight => {
+        const bgColor = insight.type === 'positive' ? '#f0fdf4' :
+                       insight.type === 'negative' ? '#fef2f2' :
+                       insight.type === 'warning' ? '#fffbeb' : '#f8fafc';
+        const borderColor = insight.type === 'positive' ? '#22c55e' :
+                           insight.type === 'negative' ? '#ef4444' :
+                           insight.type === 'warning' ? '#f59e0b' : '#cbd5e1';
+
+        html += `
+          <div style="background: ${bgColor}; border-left: 4px solid ${borderColor}; padding: 0.75rem 1rem; border-radius: 0.375rem;">
+            <span style="font-size: 1.1rem; margin-right: 0.5rem;">${insight.icon}</span>
+            <span style="color: #1e293b;">${insight.text}</span>
+          </div>`;
+      });
+
+      html += `</div>`;
+      return html;
+    }
+
+    function getDistanceMeters(lat1, lon1, lat2, lon2) {
+      // Haversine formula for distance between two GPS coordinates
+      const R = 6371000; // Earth radius in meters
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function exportSpatialAnalysis() {
+      const field = document.getElementById('spatialFieldSelect').value;
+      const nutrient = document.getElementById('spatialNutrientSelect').value;
+      const nutrientName = CONFIG.NUTRIENT_NAMES[nutrient] || nutrient;
+      const operationName = localStorage.getItem('operationName') || 'Soil Analysis';
+      const spatialData = document.getElementById('spatialContent').innerHTML;
+
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`<!DOCTYPE html><html><head><title>${operationName} - Spatial Change Analysis</title><style>${getReportStyles()}</style></head><body>
+        <h1>${operationName} - Spatial Change Analysis</h1>
+        <p>Generated: ${new Date().toLocaleString()}</p>
+        <div class="summary">
+          <div class="summary-box"><div class="number">${field}</div><div class="label">Field</div></div>
+          <div class="summary-box"><div class="number">${nutrientName}</div><div class="label">Nutrient</div></div>
+        </div>
+        ${spatialData}
         <div class="footer">Soil Sample Analysis App</div>
       </body></html>`);
       printWindow.document.close();
