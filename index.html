@@ -1506,22 +1506,43 @@
       // This ensures fields are colored relative to each other, not just absolute thresholds
       const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(selectedAttribute);
 
+      // Remove outliers using IQR method to prevent skewed color gradients
+      const removeOutliers = (values) => {
+        if (values.length < 4) return values;
+        const sorted = [...values].sort((a, b) => a - b);
+        const q1 = sorted[Math.floor(sorted.length * 0.25)];
+        const q3 = sorted[Math.floor(sorted.length * 0.75)];
+        const iqr = q3 - q1;
+        const lowerBound = q1 - 1.5 * iqr;
+        const upperBound = q3 + 1.5 * iqr;
+        const filtered = values.filter(v => v >= lowerBound && v <= upperBound);
+        // Log if we removed any outliers
+        if (filtered.length < values.length) {
+          const outliers = values.filter(v => v < lowerBound || v > upperBound);
+          console.log(`Removed ${outliers.length} outlier(s) from color range:`, outliers);
+        }
+        return filtered.length > 0 ? filtered : values; // Fallback to original if all filtered
+      };
+
       if (allFieldAvgs.length > 1) {
-        // Sort field averages to determine relative positions
-        const sortedAvgs = [...allFieldAvgs].sort((a, b) => a - b);
+        // Remove outliers for color range calculation
+        const filteredAvgs = removeOutliers(allFieldAvgs);
+        const sortedAvgs = [...filteredAvgs].sort((a, b) => a - b);
         const minAvg = sortedAvgs[0];
         const maxAvg = sortedAvgs[sortedAvgs.length - 1];
         const range = maxAvg - minAvg;
 
-        console.log('Color gradient range:', { minAvg, maxAvg, range, isLowerBetter });
+        console.log('Color gradient range:', { minAvg, maxAvg, range, isLowerBetter, originalCount: allFieldAvgs.length, filteredCount: filteredAvgs.length });
 
         Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
           let color;
           if (range === 0) {
             color = '#eab308'; // All same value = yellow
           } else {
-            // Calculate position from 0 to 1
-            const position = (stats.avg - minAvg) / range;
+            // Calculate position from 0 to 1, clamping outliers to the range
+            let position = (stats.avg - minAvg) / range;
+            position = Math.max(0, Math.min(1, position)); // Clamp to 0-1
+
             // Assign color based on position (higher = greener for most, inverted for "lower is better")
             if (isLowerBetter) {
               // Lower is better: low position = green, high position = red
