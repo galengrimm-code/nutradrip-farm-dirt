@@ -125,7 +125,7 @@
     </nav>
     <div class="auth-section">
       <span class="user-info" id="userInfo"></span>
-      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In with Google</button>
+      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In to Edit</button>
     </div>
   </div>
   
@@ -278,7 +278,7 @@
       });
     }
 
-    let tokenClient, accessToken = null;
+    let tokenClient, accessToken = null, tokenExpiry = null;
     let sampleData = [];
     let year1 = null, year2 = null;
     let selectedComparisonFields = new Set(); // Track which fields are included in comparison
@@ -301,7 +301,10 @@
                 callback: (response) => {
                   if (response.error) return;
                   accessToken = response.access_token;
+                  tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
                   localStorage.setItem('googleAccessToken', accessToken);
+                  localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
+                  gapi.client.setToken({ access_token: accessToken });
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
@@ -310,6 +313,7 @@
               const savedExpiry = localStorage.getItem('googleTokenExpiry');
               if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
                 accessToken = savedToken;
+                tokenExpiry = parseInt(savedExpiry);
                 gapi.client.setToken({ access_token: accessToken });
                 this.isSignedIn = true;
                 this.onSignInChange(true);
@@ -320,10 +324,12 @@
         });
       },
       async signIn() { tokenClient.requestAccessToken({ prompt: 'consent' }); },
-      async signOut() { 
+      async signOut() {
         if (accessToken) google.accounts.oauth2.revoke(accessToken);
         accessToken = null;
+        tokenExpiry = null;
         localStorage.removeItem('googleAccessToken');
+        localStorage.removeItem('googleTokenExpiry');
         this.isSignedIn = false;
         this.onSignInChange(false);
       },
@@ -342,7 +348,7 @@
     function handleSignInChange(isSignedIn) {
       const authBtn = document.getElementById('authBtn'), userInfo = document.getElementById('userInfo');
       if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
-      else { userInfo.textContent = ''; authBtn.textContent = 'Sign In with Google'; authBtn.classList.remove('signed-in'); }
+      else { userInfo.textContent = ''; authBtn.textContent = 'Sign In to Edit'; authBtn.classList.remove('signed-in'); }
     }
 
     function loadLocalData() {

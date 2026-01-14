@@ -53,7 +53,7 @@
     </nav>
     <div class="auth-section">
       <span class="user-info" id="userInfo"></span>
-      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In with Google</button>
+      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In to Edit</button>
     </div>
   </div>
 
@@ -133,9 +133,6 @@
         <span><span style="background: #dbeafe; padding: 0.15rem 0.4rem; border-radius: 0.25rem; color: #1e40af;">blue</span> = custom (removable)</span>
       </div>
       <div id="columnMappingGrid" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto;"></div>
-      <div class="btn-row" style="margin-top: 1rem;">
-        <button class="button secondary" onclick="clearAllAliases()">🗑️ Clear All Custom Aliases</button>
-      </div>
     </div>
 
     <div class="settings-card">
@@ -241,6 +238,7 @@
                   tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
                   localStorage.setItem('googleAccessToken', accessToken);
                   localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
+                  gapi.client.setToken({ access_token: accessToken });
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
@@ -284,7 +282,7 @@
     function handleSignInChange(isSignedIn) {
       const authBtn = document.getElementById('authBtn'), userInfo = document.getElementById('userInfo');
       if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
-      else { userInfo.textContent = ''; authBtn.textContent = 'Sign In with Google'; authBtn.classList.remove('signed-in'); }
+      else { userInfo.textContent = ''; authBtn.textContent = 'Sign In to Edit'; authBtn.classList.remove('signed-in'); }
     }
     function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); loadColumnMapping(); loadNutrientVisibility(); loadSheetConfig(); } catch (e) {} }
 
@@ -394,13 +392,6 @@
         loadColumnMapping();
         showStatus('Alias removed', true);
       }
-    }
-
-    function clearAllAliases() {
-      if (!confirm('Clear all custom column aliases?')) return;
-      localStorage.removeItem('columnAliases');
-      loadColumnMapping();
-      showStatus('All custom aliases cleared', true);
     }
     
     // Sheet Configuration Functions

@@ -93,7 +93,7 @@
       </nav>
       <div class="auth-section">
         <span class="user-info" id="userInfo"></span>
-        <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In with Google</button>
+        <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In to Edit</button>
       </div>
     </div>
     
@@ -269,12 +269,12 @@
     let tokenClient;
     let accessToken = null;
     let tokenExpiry = null;
-    
+
     const SheetsAPI = {
       isInitialized: false,
       isSignedIn: false,
       SHEETS: { FIELDS: 'Fields', SAMPLES: 'Samples', SETTINGS: 'Settings' },
-      
+
       async init() {
         return new Promise((resolve, reject) => {
           // Load the Google API client library
@@ -285,7 +285,7 @@
                 discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
               });
               this.isInitialized = true;
-              
+
               // Initialize the token client for Google Identity Services
               tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CONFIG.CLIENT_ID,
@@ -301,26 +301,24 @@
                   // Save token to localStorage
                   localStorage.setItem('googleAccessToken', accessToken);
                   localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
+                  gapi.client.setToken({ access_token: accessToken });
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
               });
-              
-              // Check for saved token
+
+              // Check for saved token (but don't set it yet - we'll try public access first)
               const savedToken = localStorage.getItem('googleAccessToken');
               const savedExpiry = localStorage.getItem('googleTokenExpiry');
               if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
                 accessToken = savedToken;
                 tokenExpiry = parseInt(savedExpiry);
-                this.isSignedIn = true;
-                // Set the token for gapi client
-                gapi.client.setToken({ access_token: accessToken });
-                this.onSignInChange(true);
+                // Don't set token or mark as signed in yet - we'll do this after trying public access
               }
-              
+
               // Set up token refresh check every 5 minutes
               setInterval(() => this.checkTokenRefresh(), 300000);
-              
+
               resolve(true);
             } catch (error) {
               console.error('Error initializing Google API:', error);
@@ -328,6 +326,16 @@
             }
           });
         });
+      },
+
+      // Restore saved OAuth token after public load attempt
+      restoreSavedToken() {
+        if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
+          gapi.client.setToken({ access_token: accessToken });
+          this.isSignedIn = true;
+          return true;
+        }
+        return false;
       },
       
       checkTokenRefresh() {
@@ -710,23 +718,40 @@
     document.addEventListener('DOMContentLoaded', async () => {
       populateAttributeDropdown(); // Populate nutrients based on visibility settings
       initMap();
-      try {
-        await SheetsAPI.init();
-        SheetsAPI.onSignInChange = handleSignInChange;
-        handleSignInChange(SheetsAPI.isSignedIn);
-      } catch (e) {
-        console.warn('Google API init error:', e);
-        Utils.showStatus('Configure Google API to enable cloud sync', false);
-      }
       setupEventListeners();
-      loadLocalData();
-      
+
       // Load operation name
       const opName = localStorage.getItem('operationName');
       if (opName) {
         document.getElementById('operationSubtitle').textContent = opName;
       }
-      
+
+      // Load cached data first for instant display
+      loadLocalData();
+
+      // Check if cache is fresh (less than 5 minutes old)
+      const cacheTime = localStorage.getItem('soilDataCacheTime');
+      const cacheFresh = cacheTime && (Date.now() - parseInt(cacheTime)) < 300000; // 5 minutes
+
+      try {
+        await SheetsAPI.init();
+        SheetsAPI.onSignInChange = handleSignInChange;
+
+        // Try to load from Google Sheets (public access first)
+        if (!cacheFresh) {
+          await loadFromSheetsPublic();
+        } else {
+          console.log('Using fresh cached data');
+          // Still restore token state for UI
+          if (SheetsAPI.restoreSavedToken()) {
+            handleSignInChange(true);
+          }
+        }
+      } catch (e) {
+        console.warn('Google API init error:', e);
+        // Data already loaded from cache above
+      }
+
       // Listen for visibility changes from settings page
       window.addEventListener('storage', (e) => {
         if (e.key === 'nutrientVisibility') {
@@ -955,11 +980,11 @@
         userInfo.textContent = 'Connected';
         authBtn.textContent = '✓ Signed In';
         authBtn.classList.add('signed-in');
-        // Load from Google Sheets (the database)
-        loadFromSheets();
+        // Only reload if user explicitly signed in (not on initial load with saved token)
+        // The initial load already happened via loadFromSheetsPublic
       } else {
         userInfo.textContent = '';
-        authBtn.textContent = 'Sign In with Google';
+        authBtn.textContent = 'Sign In to Edit';
         authBtn.classList.remove('signed-in');
       }
       updateMobileAuthBtn();
@@ -968,6 +993,56 @@
     function updateMobileAuthBtn() {
       // Mobile toolbar doesn't have a dedicated auth button
       // The refresh button can be used to sync when signed in
+    }
+
+    // Load data using API key only (public access) - no OAuth required
+    async function loadFromSheetsPublic() {
+      Utils.showStatus('Loading data...', true);
+
+      try {
+        console.log('Attempting public load from sheet ID:', CONFIG.SHEET_ID);
+        const fields = await SheetsAPI.getFields();
+        fieldBoundaries = {};
+        fields.forEach(f => { if (f.boundary) fieldBoundaries[f.name] = f.boundary; });
+        sampleData = await SheetsAPI.getSamples();
+        settings = await SheetsAPI.getSettings();
+        updateFieldSelector();
+        updateYearSelector();
+        updateMap();
+        saveLocalData();
+        Utils.showStatus(`Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
+
+        // Restore saved OAuth token for edit capabilities (if available)
+        if (SheetsAPI.restoreSavedToken()) {
+          handleSignInChange(true);
+        }
+        return true;
+      } catch (e) {
+        console.log('Public access failed:', e?.result?.error?.code || e.message);
+        const errorCode = e.result?.error?.code;
+
+        // 403 = sheet is not public, need to sign in
+        if (errorCode === 403) {
+          console.log('Sheet is not public, checking for saved OAuth token...');
+          // Try with saved OAuth token if available
+          if (SheetsAPI.restoreSavedToken()) {
+            handleSignInChange(true);
+            return loadFromSheets();
+          }
+          Utils.showStatus('Sign in required to access this sheet', false);
+          return false;
+        }
+
+        // 404 = sheet not found
+        if (errorCode === 404) {
+          Utils.showStatus('Google Sheet not found - check Sheet ID in Settings', false);
+          return false;
+        }
+
+        // Other errors - use cached data
+        Utils.showStatus('Could not connect to Google Sheets', false);
+        return false;
+      }
     }
 
     async function loadFromSheets(isRetry = false) {
@@ -1077,6 +1152,7 @@
         localStorage.setItem('soilSamples', JSON.stringify(sampleData));
         localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries));
         localStorage.setItem('soilSettings', JSON.stringify(settings));
+        localStorage.setItem('soilDataCacheTime', Date.now().toString());
       } catch (e) { console.error(e); }
     }
 

@@ -91,7 +91,7 @@
     </nav>
     <div class="auth-section">
       <span class="user-info" id="userInfo"></span>
-      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In with Google</button>
+      <button class="sign-in-btn" id="authBtn" onclick="handleAuth()">Sign In to Sync</button>
     </div>
   </div>
 
@@ -261,6 +261,7 @@
                   tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
                   localStorage.setItem('googleAccessToken', accessToken);
                   localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
+                  gapi.client.setToken({ access_token: accessToken });
                   this.isSignedIn = true;
                   this.onSignInChange(true);
                 },
@@ -340,14 +341,14 @@
     async function handleAuth() { if (SheetsAPI.isSignedIn) await SheetsAPI.signOut(); else await SheetsAPI.signIn(); }
     function handleSignInChange(isSignedIn) {
       const authBtn = document.getElementById('authBtn'), userInfo = document.getElementById('userInfo');
-      if (isSignedIn) { 
-        userInfo.textContent = 'Connected'; 
-        authBtn.textContent = '✓ Signed In'; 
-        authBtn.classList.add('signed-in'); 
-      } else { 
-        userInfo.textContent = ''; 
-        authBtn.textContent = 'Sign In with Google'; 
-        authBtn.classList.remove('signed-in'); 
+      if (isSignedIn) {
+        userInfo.textContent = 'Connected';
+        authBtn.textContent = '✓ Signed In';
+        authBtn.classList.add('signed-in');
+      } else {
+        userInfo.textContent = '';
+        authBtn.textContent = 'Sign In to Sync';
+        authBtn.classList.remove('signed-in');
       }
     }
 
