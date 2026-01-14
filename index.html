@@ -1336,6 +1336,8 @@
     }
 
     function updateMap() {
+      console.log('updateMap called - selectedYear:', selectedYear, 'selectedField:', selectedField, 'selectedAttribute:', selectedAttribute);
+
       currentLayers.forEach(l => map.removeLayer(l));
       currentLayers = [];
 
@@ -1344,6 +1346,7 @@
 
       // Compare mode - show year-over-year change (always show samples)
       if (compareMode && selectedYear !== 'all' && compareYear) {
+        console.log('Rendering: Compare mode');
         drawBoundaries(false);
         renderCompareMode();
         return;
@@ -1351,12 +1354,14 @@
 
       // Zoomed out with All Fields: show field-level shading
       if (isZoomedOut && Object.keys(fieldBoundaries).length > 0 && selectedAttribute !== 'sampleId') {
+        console.log('Rendering: Field shading (zoomed out)');
         drawFieldShading();
         updateZoomIndicator();
         return;
       }
 
       // Zoomed in or specific field: show individual samples
+      console.log('Rendering: Sample markers');
       drawBoundaries(false);
       drawSampleMarkers();
       updateZoomIndicator();
@@ -1491,17 +1496,23 @@
     
     function drawSampleMarkers() {
       const settings = Utils.loadSettings();
-      
+
       // Filter samples for selected year
       let filtered = sampleData.filter(s => {
         if (selectedField !== 'all' && s.field !== selectedField) return false;
         if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
         return true;
       });
-      
+
+      console.log('drawSampleMarkers - total samples:', sampleData.length, 'filtered:', filtered.length, 'for year:', selectedYear);
+      if (filtered.length > 0) {
+        const years = [...new Set(filtered.map(s => s.year))];
+        console.log('Years in filtered samples:', years);
+      }
+
       // Get all values for median-based coloring and stats
       const allValues = filtered.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
-      
+
       // Update stats box
       updateStats(allValues);
       
