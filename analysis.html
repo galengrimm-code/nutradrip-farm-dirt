@@ -226,7 +226,7 @@
           </select>
         </div>
         <div class="control-group">
-          <label>Year</label>
+          <label>Yield Year</label>
           <select id="yieldYearSelect"></select>
         </div>
         <div class="control-group">
@@ -488,7 +488,7 @@
       // Yield selectors
       const yieldYearSel = document.getElementById('yieldYearSelect');
       const yieldYears = getYieldYears();
-      yieldYearSel.innerHTML = '<option value="all">All Years</option>';
+      yieldYearSel.innerHTML = '<option value="avg">All Years (Average)</option><option value="combined">All Years (Combined)</option>';
       yieldYears.forEach(y => { yieldYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
       
       const yieldFieldSel = document.getElementById('yieldFieldSelect');
@@ -1303,35 +1303,95 @@
       });
       samplesWithYield = Array.from(locationMap.values());
 
-      // Build correlation data points
-      const dataPoints = [];
+      // Get soil sample year range
+      const soilYears = [...new Set(samplesWithYield.map(s => s.year).filter(y => y))].sort();
+      const soilYearRange = soilYears.length > 0 ? `${Math.min(...soilYears)}-${Math.max(...soilYears)}` : 'N/A';
+
+      // Get all available yield years (before filtering)
+      const allYieldYears = new Set();
       samplesWithYield.forEach(sample => {
         Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
-          if (yearFilter !== 'all' && String(year) !== String(yearFilter)) return;
-          if (cropFilter !== 'all' && yieldInfo.crop !== cropFilter) return;
-
-          dataPoints.push({
-            ...sample,
-            yieldYear: parseInt(year),
-            avgYield: yieldInfo.avgYield,
-            crop: yieldInfo.crop,
-            yieldPointCount: yieldInfo.pointCount
-          });
+          if (cropFilter === 'all' || yieldInfo.crop === cropFilter) {
+            allYieldYears.add(parseInt(year));
+          }
         });
       });
-      
+      const sortedYieldYears = [...allYieldYears].sort();
+
+      // Build correlation data points based on yearFilter mode
+      const dataPoints = [];
+      const uniqueLocations = samplesWithYield.length;
+
+      if (yearFilter === 'avg') {
+        // ALL YEARS (AVERAGE): Average yield across all years at each location
+        samplesWithYield.forEach(sample => {
+          const validYields = [];
+          Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
+            if (cropFilter === 'all' || yieldInfo.crop === cropFilter) {
+              validYields.push({
+                yield: yieldInfo.avgYield,
+                crop: yieldInfo.crop,
+                pointCount: yieldInfo.pointCount
+              });
+            }
+          });
+
+          if (validYields.length > 0) {
+            const avgYield = validYields.reduce((sum, v) => sum + v.yield, 0) / validYields.length;
+            dataPoints.push({
+              ...sample,
+              yieldYear: 'avg',
+              avgYield: avgYield,
+              crop: validYields[0].crop,
+              yieldPointCount: validYields.reduce((sum, v) => sum + v.pointCount, 0),
+              yearsAveraged: validYields.length
+            });
+          }
+        });
+      } else if (yearFilter === 'combined') {
+        // ALL YEARS (COMBINED): Each year is a separate data point
+        samplesWithYield.forEach(sample => {
+          Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
+            if (cropFilter === 'all' || yieldInfo.crop === cropFilter) {
+              dataPoints.push({
+                ...sample,
+                yieldYear: parseInt(year),
+                avgYield: yieldInfo.avgYield,
+                crop: yieldInfo.crop,
+                yieldPointCount: yieldInfo.pointCount
+              });
+            }
+          });
+        });
+      } else {
+        // SPECIFIC YEAR: Only use yield from that year
+        samplesWithYield.forEach(sample => {
+          const yieldInfo = sample.yieldCorrelations[yearFilter];
+          if (yieldInfo && (cropFilter === 'all' || yieldInfo.crop === cropFilter)) {
+            dataPoints.push({
+              ...sample,
+              yieldYear: parseInt(yearFilter),
+              avgYield: yieldInfo.avgYield,
+              crop: yieldInfo.crop,
+              yieldPointCount: yieldInfo.pointCount
+            });
+          }
+        });
+      }
+
       if (dataPoints.length === 0) {
         container.innerHTML = '<div class="no-data">No matching yield data for selected filters.</div>';
         return;
       }
-      
+
       // Calculate correlations for each nutrient
       const visibleNutrients = getVisibleNutrients();
       const correlations = [];
 
       console.log('=== YIELD CORRELATION DEBUG ===');
+      console.log('Year filter:', yearFilter);
       console.log('Data points:', dataPoints.length);
-      console.log('Visible nutrients:', visibleNutrients.length, visibleNutrients);
+      console.log('Unique locations:', uniqueLocations);
 
       visibleNutrients.forEach(nutrient => {
         // Filter for valid numeric values - must handle strings, empty values, etc.
@@ -1348,7 +1408,7 @@
           pairs.map(p => parseFloat(p[nutrient])),
           pairs.map(p => p.avgYield)
         );
-        
+
         if (correlation !== null && !isNaN(correlation.r)) {
           correlations.push({
             nutrient,
@@ -1360,7 +1420,7 @@
           });
         }
       });
-      
+
       // Store correlations globally for re-sorting
       yieldCorrelationsData = correlations;
 
@@ -1370,18 +1430,38 @@
       // Get summary stats
       const avgYield = dataPoints.reduce((sum, d) => sum + d.avgYield, 0) / dataPoints.length;
       const crops = [...new Set(dataPoints.map(d => d.crop))];
-      const years = [...new Set(dataPoints.map(d => d.yieldYear))].sort();
+      const usedYieldYears = yearFilter === 'avg' || yearFilter === 'combined'
+        ? sortedYieldYears
+        : [parseInt(yearFilter)];
 
       const getSortIcon = (col) => {
         if (yieldSortColumn !== col) return '<span style="opacity: 0.3; font-size: 0.75rem;">&#9650;&#9660;</span>';
         return yieldSortDirection === 'asc' ? '<span style="color: #3b82f6;">&#9650;</span>' : '<span style="color: #3b82f6;">&#9660;</span>';
       };
 
+      // Build description based on mode
+      let modeDescription = '';
+      if (yearFilter === 'avg') {
+        modeDescription = `<div style="font-size: 0.8rem; color: #64748b;">${uniqueLocations} locations × avg of ${sortedYieldYears.length} yield years</div>`;
+      } else if (yearFilter === 'combined') {
+        modeDescription = `<div style="font-size: 0.8rem; color: #64748b;">${uniqueLocations} locations × ${sortedYieldYears.length} yield years</div>`;
+      } else {
+        modeDescription = `<div style="font-size: 0.8rem; color: #64748b;">${dataPoints.length} locations with ${yearFilter} yield</div>`;
+      }
+
       let html = `
+        <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: #0369a1;">
+          <strong>Data Selection:</strong><br>
+          <strong>Soil Samples:</strong> Most recent sample at each location (${soilYearRange})<br>
+          <strong>Yield Years:</strong> ${usedYieldYears.join(', ')}
+          ${yearFilter === 'avg' ? ' <em>(averaged at each location)</em>' : yearFilter === 'combined' ? ' <em>(each year = separate data point)</em>' : ''}
+        </div>
+
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
           <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; text-align: center;">
             <div style="font-size: 2rem; font-weight: 700; color: #92400e;">${dataPoints.length}</div>
-            <div style="color: #92400e; font-size: 0.875rem;">Sample-Yield Pairs</div>
+            <div style="color: #92400e; font-size: 0.875rem;">Data Points</div>
+            ${modeDescription}
           </div>
           <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 1rem; text-align: center;">
             <div style="font-size: 2rem; font-weight: 700; color: #166534;">${avgYield.toFixed(1)}</div>
@@ -1389,7 +1469,7 @@
           </div>
           <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.5rem; padding: 1rem; text-align: center;">
             <div style="font-size: 1.25rem; font-weight: 600; color: #1e40af;">${crops.map(c => c === 'corn' ? '🌽' : '🫘').join(' ')}</div>
-            <div style="color: #1e40af; font-size: 0.875rem;">Years: ${years.join(', ')}</div>
+            <div style="color: #1e40af; font-size: 0.875rem;">Yield Years: ${usedYieldYears.join(', ')}</div>
           </div>
         </div>
 
@@ -1399,8 +1479,7 @@
           <strong>How to read this table:</strong><br>
           <strong>r (Correlation)</strong> ranges from -1 to +1. Positive = higher nutrient, higher yield. Negative = higher nutrient, lower yield. Values closer to +/-1 indicate stronger relationships.<br>
           <strong>R² (R-squared)</strong> shows what % of yield variation is explained by this nutrient. Example: R²=25% means 25% of yield differences can be attributed to this nutrient.<br>
-          <strong>Significance:</strong> *** = strong (|r| > 0.7), ** = moderate (|r| > 0.4), * = weak (|r| > 0.2), - = no meaningful correlation<br>
-          <strong>Note:</strong> Uses the most recent soil sample at each location. Filter by Field and Yield Year to analyze specific data.
+          <strong>Significance:</strong> *** = strong (|r| > 0.7), ** = moderate (|r| > 0.4), * = weak (|r| > 0.2), - = no meaningful correlation
         </div>
 
         <table class="rankings-table" id="yieldCorrelationTable">
@@ -1587,19 +1666,62 @@
       samplesWithYield = Array.from(locationMap.values());
 
       const dataPoints = [];
-      samplesWithYield.forEach(sample => {
-        Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
-          if (yearFilter !== 'all' && String(year) !== String(yearFilter)) return;
-          if (cropFilter !== 'all' && yieldInfo.crop !== cropFilter) return;
-          dataPoints.push({
-            ...sample,
-            yieldYear: parseInt(year),
-            avgYield: yieldInfo.avgYield,
-            crop: yieldInfo.crop,
-            yieldPointCount: yieldInfo.pointCount
+
+      if (yearFilter === 'avg') {
+        // ALL YEARS (AVERAGE): Average yield across all years at each location
+        samplesWithYield.forEach(sample => {
+          const validYields = [];
+          Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
+            if (cropFilter === 'all' || yieldInfo.crop === cropFilter) {
+              validYields.push({
+                yield: yieldInfo.avgYield,
+                crop: yieldInfo.crop,
+                pointCount: yieldInfo.pointCount
+              });
+            }
+          });
+          if (validYields.length > 0) {
+            const avgYield = validYields.reduce((sum, v) => sum + v.yield, 0) / validYields.length;
+            dataPoints.push({
+              ...sample,
+              yieldYear: 'avg',
+              avgYield: avgYield,
+              crop: validYields[0].crop,
+              yieldPointCount: validYields.reduce((sum, v) => sum + v.pointCount, 0),
+              yearsAveraged: validYields.length
+            });
+          }
+        });
+      } else if (yearFilter === 'combined') {
+        // ALL YEARS (COMBINED): Each year is a separate data point
+        samplesWithYield.forEach(sample => {
+          Object.entries(sample.yieldCorrelations).forEach(([year, yieldInfo]) => {
+            if (cropFilter === 'all' || yieldInfo.crop === cropFilter) {
+              dataPoints.push({
+                ...sample,
+                yieldYear: parseInt(year),
+                avgYield: yieldInfo.avgYield,
+                crop: yieldInfo.crop,
+                yieldPointCount: yieldInfo.pointCount
+              });
+            }
           });
         });
-      });
+      } else {
+        // SPECIFIC YEAR: Only use yield from that year
+        samplesWithYield.forEach(sample => {
+          const yieldInfo = sample.yieldCorrelations[yearFilter];
+          if (yieldInfo && (cropFilter === 'all' || yieldInfo.crop === cropFilter)) {
+            dataPoints.push({
+              ...sample,
+              yieldYear: parseInt(yearFilter),
+              avgYield: yieldInfo.avgYield,
+              crop: yieldInfo.crop,
+              yieldPointCount: yieldInfo.pointCount
+            });
+          }
+        });
+      }
       return dataPoints;
     }
 
@@ -2088,13 +2210,18 @@
       const operationName = localStorage.getItem('operationName') || 'Soil Analysis';
       const yieldData = document.getElementById('yieldContent').innerHTML;
 
+      // Format year label
+      let yearLabel = year;
+      if (year === 'avg') yearLabel = 'All (Averaged)';
+      else if (year === 'combined') yearLabel = 'All (Combined)';
+
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`<!DOCTYPE html><html><head><title>${operationName} - Yield Correlation</title><style>${getReportStyles()}</style></head><body>
         <h1>${operationName} - Yield Correlation Analysis</h1>
         <p>Generated: ${new Date().toLocaleString()}</p>
         <div class="summary">
           <div class="summary-box"><div class="number">${crop === 'all' ? 'All' : crop}</div><div class="label">Crop</div></div>
-          <div class="summary-box"><div class="number">${year === 'all' ? 'All' : year}</div><div class="label">Yield Year</div></div>
+          <div class="summary-box"><div class="number">${yearLabel}</div><div class="label">Yield Year</div></div>
           <div class="summary-box"><div class="number">${field === 'all' ? 'All' : field}</div><div class="label">Field</div></div>
         </div>
         ${yieldData}
