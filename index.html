@@ -1534,6 +1534,9 @@
 
         console.log('Color gradient range:', { minAvg, maxAvg, range, isLowerBetter, originalCount: allFieldAvgs.length, filteredCount: filteredAvgs.length });
 
+        // Debug: track color distribution
+        const colorCounts = { green: 0, yellow: 0, red: 0 };
+
         Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
           let color;
           if (range === 0) {
@@ -1558,7 +1561,14 @@
           }
           fieldColors[fieldName] = color;
           fieldColors[fieldName + '_stats'] = stats;
+
+          // Track color distribution
+          if (color === '#22c55e') colorCounts.green++;
+          else if (color === '#eab308') colorCounts.yellow++;
+          else if (color === '#ef4444') colorCounts.red++;
         });
+
+        console.log('Field color distribution:', colorCounts, 'Total fields colored:', Object.keys(fieldAverages).length);
       } else if (allFieldAvgs.length === 1) {
         // Single field with data - use threshold-based coloring
         Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
