@@ -78,15 +78,21 @@
     .trend-title { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
     .trend-pct { font-size: 1.5rem; font-weight: 700; text-align: right; }
     .trend-sub { font-size: 0.75rem; color: #64748b; font-weight: 500; }
-    .trend-content { display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; }
-    .trend-values { background: rgba(255,255,255,0.7); border-radius: 0.5rem; padding: 0.5rem; min-width: 180px; flex: 0 0 auto; }
+    .trend-content { display: flex; flex-wrap: nowrap; gap: 1rem; align-items: stretch; }
+    .trend-values { background: rgba(255,255,255,0.7); border-radius: 0.5rem; padding: 0.5rem; min-width: 180px; flex: 0 0 auto; max-height: 400px; overflow-y: auto; }
     .trend-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.25rem; }
     .trend-row.alt { background: rgba(0,0,0,0.03); }
     .trend-year { font-weight: 600; color: #475569; min-width: 50px; }
     .trend-value { font-weight: 700; color: #1e293b; }
-    .trend-graph { min-width: 200px; max-width: 300px; flex: 1 1 200px; background: rgba(255,255,255,0.5); border-radius: 0.5rem; padding: 0.5rem; }
-    .trend-graph svg { display: block; width: 100%; height: auto; }
-    @media (max-width: 700px) { .trend-content { flex-direction: column; } .trend-graph { min-width: 100%; max-width: 100%; } }
+    .trend-graph { flex: 1 1 auto; background: rgba(255,255,255,0.5); border-radius: 0.5rem; padding: 0.5rem; min-width: 300px; }
+    .trend-graph svg { display: block; width: 100%; height: auto; min-height: 150px; }
+    .trend-graph.large svg { min-height: 250px; }
+    .trend-graph.xlarge svg { min-height: 350px; }
+    @media (max-width: 900px) {
+      .trend-content { flex-direction: column; }
+      .trend-graph { min-width: 100%; width: 100%; }
+      .trend-graph svg { min-height: 250px; }
+    }
     
     /* Field Rankings */
     .rankings-table { width: 100%; border-collapse: collapse; background: white; border-radius: 0.5rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -360,6 +366,7 @@
       } catch (e) {}
       populateSelectors();
       updateComparison();
+      updateHistory('__all__');  // Default to All Fields view
       updateRankings();
       updateYieldAnalysis();
     }
@@ -379,11 +386,11 @@
       year1 = years[1] || years[0] || null;  // Earlier year (second most recent)
       year2 = years[0] || null;               // Later year (most recent)
       
-      // History field selector
+      // History field selector - default to All Fields (Operation Average)
       const historyFieldSel = document.getElementById('historyFieldSelect');
-      historyFieldSel.innerHTML = '<option value="">Select a field...</option>';
-      historyFieldSel.innerHTML += '<option value="__all__" style="font-weight: bold;">📊 All Fields (Operation Average)</option>';
+      historyFieldSel.innerHTML = '<option value="__all__" style="font-weight: bold;">📊 All Fields (Operation Average)</option>';
       fields.forEach(f => { historyFieldSel.innerHTML += `<option value="${f}">${f}</option>`; });
+      historyFieldSel.value = '__all__';
       
       // Rankings selectors
       const rankAttrSel = document.getElementById('rankingAttrSelect');
@@ -757,7 +764,7 @@
                     ${yearData.map((d, i) => `<div class="trend-row ${i % 2 === 0 ? 'alt' : ''}"><span class="trend-year">${d.year}:</span><span class="trend-value" style="width:70px;text-align:center;">${d.avg.toFixed(decimals)}</span><span class="trend-value" style="width:70px;text-align:center;color:#8b5cf6;">${d.median.toFixed(decimals)}</span></div>`).join('')}
                     ${yearData.length > 1 ? `<div class="trend-row" style="margin-top:0.5rem;border-top:2px solid ${color};padding-top:0.5rem;"><span>Change:</span><span style="width:70px;text-align:center;color:${color};font-weight:700;">${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(decimals)}</span><span style="width:70px;text-align:center;color:#8b5cf6;font-weight:700;">${medianChange >= 0 ? '+' : ''}${medianChange.toFixed(decimals)}</span></div>` : ''}
                   </div>
-                  <div class="trend-graph">
+                  <div class="trend-graph ${yearData.length > 10 ? 'xlarge' : (yearData.length > 5 ? 'large' : '')}">
                     <div style="display:flex;gap:1rem;font-size:0.7rem;margin-bottom:0.25rem;justify-content:center;">
                       <span><span style="color:${color};">●</span> Average</span>
                       <span><span style="color:#8b5cf6;">●</span> Median</span>
@@ -905,7 +912,7 @@
                       </div>
                     ` : ''}
                   </div>
-                  <div class="trend-graph">
+                  <div class="trend-graph ${yearData.length > 10 ? 'xlarge' : (yearData.length > 5 ? 'large' : '')}">
                     <div style="display:flex;gap:0.75rem;font-size:0.65rem;margin-bottom:0.25rem;justify-content:center;">
                       <span><span style="color:${color};">●</span> Avg</span>
                       <span><span style="color:#8b5cf6;">●</span> Median</span>
@@ -932,6 +939,7 @@
     function createOperationTrendGraph(yearData, avgColor) {
       if (yearData.length < 1) return '';
       const medianColor = '#8b5cf6';
+      const numYears = yearData.length;
 
       // Get all values including range to determine scale
       const allValues = [
@@ -943,10 +951,16 @@
       const minVal = Math.min(...allValues) * 0.9, maxVal = Math.max(...allValues) * 1.1;
       const range = maxVal - minVal || 1;
 
-      const width = 280, height = 130;
-      const padLeft = 25, padRight = 25, padTop = 20, padBottom = 22;
+      // Dynamic dimensions based on year count
+      const baseWidth = 300;
+      const width = numYears <= 5 ? baseWidth : Math.max(baseWidth, numYears * 50);
+      const height = numYears <= 5 ? 170 : (numYears <= 10 ? 210 : 260);
+      const padLeft = 30, padRight = 30, padTop = 25, padBottom = 30;
       const gw = width - padLeft - padRight;
       const gh = height - padTop - padBottom;
+
+      // Determine label skip interval for many years
+      const labelSkip = numYears > 12 ? 2 : (numYears > 8 ? 1 : 0);
 
       // Calculate points
       const avgPts = yearData.map((d, i) => {
@@ -985,14 +999,22 @@
       const avgLine = avgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       const medianLine = medianPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
 
-      // Create dots
-      const avgDots = avgPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${avgColor}" stroke="white" stroke-width="1.5"/>`).join('');
-      const medianDots = medianPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${medianColor}" stroke="white" stroke-width="1.5"/>`).join('');
+      // Create dots - smaller for many years
+      const dotRadius = numYears > 10 ? 3 : 4;
+      const avgDots = avgPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="${dotRadius}" fill="${avgColor}" stroke="white" stroke-width="1.5"/>`).join('');
+      const medianDots = medianPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="${dotRadius}" fill="${medianColor}" stroke="white" stroke-width="1.5"/>`).join('');
 
-      // Year labels
-      const yearLabels = avgPts.map(p => `<text x="${p.x}" y="${height - 5}" text-anchor="middle" font-size="9" font-weight="600" fill="#475569">${p.year}</text>`).join('');
+      // Year labels - skip some if too many years
+      const yearLabels = avgPts.map((p, i) => {
+        const showLabel = i === 0 || i === avgPts.length - 1 || (labelSkip === 0) || (labelSkip === 1 && i % 2 === 0) || (labelSkip === 2 && i % 3 === 0);
+        if (!showLabel) return '';
+        const fontSize = numYears > 10 ? 8 : 9;
+        return `<text x="${p.x}" y="${height - 8}" text-anchor="middle" font-size="${fontSize}" font-weight="600" fill="#475569">${p.year}</text>`;
+      }).join('');
 
-      return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+      const sizeClass = numYears > 10 ? 'xlarge' : (numYears > 5 ? 'large' : '');
+
+      return `<svg width="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;" data-size="${sizeClass}">
         ${rangePath}
         <path d="${avgLine}" fill="none" stroke="${avgColor}" stroke-width="2.5" stroke-linecap="round"/>
         <path d="${medianLine}" fill="none" stroke="${medianColor}" stroke-width="2" stroke-linecap="round" stroke-dasharray="4,2"/>
@@ -1025,69 +1047,80 @@
     function createDualLineGraph(yearData, avgColor) {
       if (yearData.length < 1) return '';
       const medianColor = '#8b5cf6'; // Purple for median
+      const numYears = yearData.length;
 
       // Get all values to determine scale
       const allValues = [...yearData.map(d => d.avg), ...yearData.map(d => d.median)];
       const minVal = Math.min(...allValues) * 0.85, maxVal = Math.max(...allValues) * 1.15;
       const range = maxVal - minVal || 1;
 
-      // Compact dimensions with adequate padding
-      const width = 280, height = 120;
-      const padLeft = 25, padRight = 25, padTop = 20, padBottom = 22;
+      // Dynamic dimensions based on year count
+      const baseWidth = 300;
+      const width = numYears <= 5 ? baseWidth : Math.max(baseWidth, numYears * 50);
+      const height = numYears <= 5 ? 160 : (numYears <= 10 ? 200 : 250);
+      const padLeft = 30, padRight = 30, padTop = 25, padBottom = 30;
       const gw = width - padLeft - padRight;
       const gh = height - padTop - padBottom;
+
+      // Determine label skip interval for many years
+      const labelSkip = numYears > 12 ? 2 : (numYears > 8 ? 1 : 0);
 
       // Calculate points for both lines
       const avgPts = yearData.map((d, i) => {
         const x = padLeft + (yearData.length > 1 ? (i / (yearData.length - 1)) * gw : gw / 2);
         const y = padTop + gh - ((d.avg - minVal) / range) * gh;
-        return { x, y, year: d.year, val: d.avg };
+        return { x, y, year: d.year, val: d.avg, idx: i };
       });
 
       const medianPts = yearData.map((d, i) => {
         const x = padLeft + (yearData.length > 1 ? (i / (yearData.length - 1)) * gw : gw / 2);
         const y = padTop + gh - ((d.median - minVal) / range) * gh;
-        return { x, y, year: d.year, val: d.median };
+        return { x, y, year: d.year, val: d.median, idx: i };
       });
 
       // Create path lines
       const avgLine = avgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       const medianLine = medianPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
 
-      // Create dots
-      const avgDots = avgPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${avgColor}" stroke="white" stroke-width="1.5"/>`).join('');
-      const medianDots = medianPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${medianColor}" stroke="white" stroke-width="1.5"/>`).join('');
+      // Create dots - smaller for many years
+      const dotRadius = numYears > 10 ? 3 : 4;
+      const avgDots = avgPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="${dotRadius}" fill="${avgColor}" stroke="white" stroke-width="1.5"/>`).join('');
+      const medianDots = medianPts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="${dotRadius}" fill="${medianColor}" stroke="white" stroke-width="1.5"/>`).join('');
 
-      // Year labels at bottom
-      const yearLabels = avgPts.map(p => `<text x="${p.x}" y="${height - 5}" text-anchor="middle" font-size="9" font-weight="600" fill="#475569">${p.year}</text>`).join('');
-
-      // Value labels - smarter positioning to avoid overlap
-      const avgLabels = avgPts.map((p, i) => {
-        const medianY = medianPts[i].y;
-        const gap = Math.abs(p.y - medianY);
-        let offset;
-        if (gap < 16) {
-          offset = p.y < medianY ? -9 : 12;
-        } else {
-          offset = -9;
-        }
-        return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="8" font-weight="700" fill="${avgColor}">${p.val.toFixed(1)}</text>`;
+      // Year labels at bottom - skip some if too many years
+      const yearLabels = avgPts.map((p, i) => {
+        // Always show first and last, skip middle ones based on labelSkip
+        const showLabel = i === 0 || i === avgPts.length - 1 || (labelSkip === 0) || (labelSkip === 1 && i % 2 === 0) || (labelSkip === 2 && i % 3 === 0);
+        if (!showLabel) return '';
+        const fontSize = numYears > 10 ? 8 : 9;
+        return `<text x="${p.x}" y="${height - 8}" text-anchor="middle" font-size="${fontSize}" font-weight="600" fill="#475569">${p.year}</text>`;
       }).join('');
 
-      const medianLabels = medianPts.map((p, i) => {
-        const avgY = avgPts[i].y;
-        const gap = Math.abs(p.y - avgY);
-        let offset;
-        if (gap < 16) {
-          offset = p.y <= avgY ? -9 : 12;
-        } else {
-          offset = 12;
-        }
-        return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="8" font-weight="700" fill="${medianColor}">${p.val.toFixed(1)}</text>`;
-      }).join('');
+      // Value labels - only show for fewer years or on hover
+      let avgLabels = '', medianLabels = '';
+      if (numYears <= 8) {
+        avgLabels = avgPts.map((p, i) => {
+          const medianY = medianPts[i].y;
+          const gap = Math.abs(p.y - medianY);
+          let offset = gap < 16 ? (p.y < medianY ? -10 : 14) : -10;
+          const fontSize = numYears > 6 ? 7 : 8;
+          return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="${fontSize}" font-weight="700" fill="${avgColor}">${p.val.toFixed(1)}</text>`;
+        }).join('');
 
-      return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;">
-        <path d="${avgLine}" fill="none" stroke="${avgColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        medianLabels = medianPts.map((p, i) => {
+          const avgY = avgPts[i].y;
+          const gap = Math.abs(p.y - avgY);
+          let offset = gap < 16 ? (p.y <= avgY ? -10 : 14) : 14;
+          const fontSize = numYears > 6 ? 7 : 8;
+          return `<text x="${p.x}" y="${p.y + offset}" text-anchor="middle" font-size="${fontSize}" font-weight="700" fill="${medianColor}">${p.val.toFixed(1)}</text>`;
+        }).join('');
+      }
+
+      // Add size class hint via data attribute
+      const sizeClass = numYears > 10 ? 'xlarge' : (numYears > 5 ? 'large' : '');
+
+      return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;" data-size="${sizeClass}">
+        <path d="${avgLine}" fill="none" stroke="${avgColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="${medianLine}" fill="none" stroke="${medianColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6,3"/>
         ${avgDots}${medianDots}
         ${yearLabels}
@@ -1444,14 +1477,16 @@
         .trend-title { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0; }
         .trend-pct { font-size: 20px; font-weight: 700; text-align: right; }
         .trend-sub { font-size: 10px; color: #64748b; font-weight: 500; }
-        .trend-content { display: flex; flex-wrap: wrap; gap: 12px; align-items: start; }
-        .trend-values { background: rgba(255,255,255,0.8); border-radius: 6px; padding: 6px; min-width: 150px; flex: 0 0 auto; }
+        .trend-content { display: flex; flex-wrap: nowrap; gap: 16px; align-items: stretch; }
+        .trend-values { background: rgba(255,255,255,0.8); border-radius: 6px; padding: 8px; min-width: 160px; flex: 0 0 auto; max-height: 300px; overflow-y: auto; }
         .trend-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; font-size: 10px; border-radius: 4px; }
         .trend-row.alt { background: rgba(0,0,0,0.04); }
         .trend-year { font-weight: 600; color: #475569; }
         .trend-value { font-weight: 700; color: #1e293b; }
-        .trend-graph { min-width: 180px; max-width: 220px; flex: 1 1 180px; }
-        .trend-graph svg { width: 100%; height: auto; }
+        .trend-graph { flex: 1 1 auto; min-width: 350px; }
+        .trend-graph svg { width: 100%; height: auto; min-height: 180px; }
+        .trend-graph.large svg { min-height: 220px; }
+        .trend-graph.xlarge svg { min-height: 280px; }
 
         /* Nutrient cards for Year Comparison */
         .nutrient-card { background: #fff; border: 2px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
@@ -1470,6 +1505,8 @@
           body { padding: 0; }
           .trend-card, .nutrient-card { page-break-inside: avoid; }
           h1 { page-break-after: avoid; }
+          .trend-graph { min-width: 400px; }
+          .trend-graph svg { min-height: 200px; }
         }
       `;
     }

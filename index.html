@@ -1376,7 +1376,8 @@
         const arr = Array.isArray(polys[0]?.[0]) ? polys : [polys];
         arr.forEach((coords, idx) => {
           const color = fieldColors[name] || '#22c55e';
-          const fillOpacity = withShading ? 0.6 : 0.1;
+          const hasNoData = fieldColors[name + '_nodata'] === true;
+          const fillOpacity = withShading ? (hasNoData ? 0.3 : 0.6) : 0.1;
           const poly = L.polygon(coords, {
             color: withShading ? color : '#22c55e',
             weight: withShading ? 2 : 3,
@@ -1386,10 +1387,15 @@
 
           if (withShading && fieldColors[name]) {
             const fieldStats = fieldColors[name + '_stats'];
-            if (fieldStats) {
-              poly.bindTooltip(`<strong>${name}</strong><br>Avg ${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${fieldStats.avg.toFixed(1)} ${CONFIG.NUTRIENT_UNITS[selectedAttribute] || ''}`,
-                { permanent: false, direction: 'center', className: 'field-tooltip' });
+            let tooltipContent;
+            if (hasNoData) {
+              tooltipContent = `<strong>${name}</strong><br><em style="color: #9ca3af;">No data for ${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}</em>`;
+            } else if (fieldStats) {
+              tooltipContent = `<strong>${name}</strong><br>Avg ${CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute}: ${fieldStats.avg.toFixed(1)} ${CONFIG.NUTRIENT_UNITS[selectedAttribute] || ''}`;
+            } else {
+              tooltipContent = name;
             }
+            poly.bindTooltip(tooltipContent, { permanent: false, direction: 'center', className: 'field-tooltip' });
 
             // Add permanent field name label in center (only on first polygon of multi-polygon)
             if (idx === 0) {
@@ -1416,31 +1422,68 @@
     function drawFieldShading() {
       const settings = Utils.loadSettings();
       const bufferPct = settings.bufferPercent || 25;
-      
+
       // Calculate average for each field
       const fieldAverages = {};
       const fieldColors = {};
-      
+      const fieldsWithNoData = [];
+
       // Get all values for context (for relative coloring)
       let allFieldAvgs = [];
-      
+
       Object.keys(fieldBoundaries).forEach(fieldName => {
         if (selectedField !== 'all' && selectedField !== fieldName) return;
-        
+
         let fieldSamples = sampleData.filter(s => s.field === fieldName);
         if (selectedYear !== 'all') {
           fieldSamples = fieldSamples.filter(s => String(s.year) === String(selectedYear));
         }
-        
-        const values = fieldSamples.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
-        
+
+        // Robust value extraction - handle strings, empty values, and convert to numbers
+        const values = fieldSamples
+          .map(s => {
+            const raw = s[selectedAttribute];
+            if (raw === undefined || raw === null || raw === '') return NaN;
+            const num = parseFloat(raw);
+            return num;
+          })
+          .filter(v => !isNaN(v) && isFinite(v));
+
         if (values.length > 0) {
-          const avg = values.reduce((a, b) => a + b, 0) / values.length;
-          fieldAverages[fieldName] = { avg, count: values.length };
-          allFieldAvgs.push(avg);
+          const sum = values.reduce((a, b) => a + b, 0);
+          const avg = sum / values.length;
+
+          // Debug: check for bad calculations
+          if (!isFinite(avg)) {
+            console.warn(`Field ${fieldName}: Bad avg calculation - sum=${sum}, count=${values.length}, values sample:`, values.slice(0, 5));
+            fieldsWithNoData.push(fieldName);
+          } else {
+            fieldAverages[fieldName] = { avg, count: values.length };
+            allFieldAvgs.push(avg);
+          }
+        } else {
+          // Field has no valid data for this attribute/year
+          fieldsWithNoData.push(fieldName);
         }
       });
-      
+
+      // Debug logging
+      console.log('Field shading debug:', {
+        attribute: selectedAttribute,
+        year: selectedYear,
+        fieldsWithData: Object.keys(fieldAverages).length,
+        fieldsWithNoData: fieldsWithNoData.length,
+        allFieldAvgs: allFieldAvgs.slice(0, 5),
+        fieldAverages: Object.entries(fieldAverages).slice(0, 3).map(([k, v]) => `${k}: ${v.avg.toFixed(1)}`)
+      });
+
+      // Mark fields with no data as grey
+      fieldsWithNoData.forEach(fieldName => {
+        fieldColors[fieldName] = '#9ca3af'; // Grey for no data
+        fieldColors[fieldName + '_stats'] = null; // No stats
+        fieldColors[fieldName + '_nodata'] = true;
+      });
+
       // Calculate colors based on field averages using relative coloring
       // This ensures fields are colored relative to each other, not just absolute thresholds
       const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(selectedAttribute);
@@ -1451,6 +1494,8 @@
         const minAvg = sortedAvgs[0];
         const maxAvg = sortedAvgs[sortedAvgs.length - 1];
         const range = maxAvg - minAvg;
+
+        console.log('Color gradient range:', { minAvg, maxAvg, range, isLowerBetter });
 
         Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
           let color;
@@ -1475,24 +1520,31 @@
           fieldColors[fieldName] = color;
           fieldColors[fieldName + '_stats'] = stats;
         });
-      } else {
-        // Single field - use threshold-based coloring
+      } else if (allFieldAvgs.length === 1) {
+        // Single field with data - use threshold-based coloring
         Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
           const color = Utils.getColor(stats.avg, selectedAttribute, settings, bufferPct, allFieldAvgs);
           fieldColors[fieldName] = color;
           fieldColors[fieldName + '_stats'] = stats;
         });
       }
-      
+      // If allFieldAvgs.length === 0, all fields are grey (no data)
+
       // Update stats box with all samples
       let filtered = sampleData.filter(s => {
         if (selectedField !== 'all' && s.field !== selectedField) return false;
         if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
         return true;
       });
-      const allValues = filtered.map(s => s[selectedAttribute]).filter(v => v !== undefined && v !== null && !isNaN(v));
+      const allValues = filtered
+        .map(s => {
+          const raw = s[selectedAttribute];
+          if (raw === undefined || raw === null || raw === '') return NaN;
+          return parseFloat(raw);
+        })
+        .filter(v => !isNaN(v) && isFinite(v));
       updateStats(allValues);
-      
+
       // Draw boundaries with shading
       drawBoundaries(true, fieldColors);
     }

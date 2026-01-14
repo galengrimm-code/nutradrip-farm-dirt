@@ -173,7 +173,7 @@
       <div class="form-group">
         <label>Yield File (Shapefile)</label>
         <input type="file" id="yieldFiles" multiple accept=".shp,.dbf,.prj,.shx,.zip">
-        <small>John Deere or Climate FieldView shapefile export • ZIP or individual files</small>
+        <small>Select multiple ZIPs or .shp/.dbf pairs for batch upload (files auto-matched by name)</small>
       </div>
       <button class="button" id="uploadYieldBtn" style="background: #f59e0b; color: white;">Upload Yield Data</button>
       <div id="yieldStatus" style="margin-top: 0.75rem;"></div>
@@ -1152,18 +1152,86 @@
       try {
         let yieldPoints = [];
         let detectedYear = null;
+        let filesProcessed = 0;
+        let fileErrors = [];
 
-        // Check if ZIP file
-        const zipFile = Array.from(files).find(f => f.name.toLowerCase().endsWith('.zip'));
+        // Check for ZIP files and loose shapefiles
+        const zipFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.zip'));
+        const shpFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.shp'));
+        const dbfFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.dbf'));
 
-        if (zipFile) {
-          const result = await parseYieldFromZip(zipFile);
+        if (zipFiles.length > 1) {
+          // BATCH MODE: Multiple ZIP files (one per field)
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${zipFiles.length} yield files...</span>`;
+
+          for (const zipFile of zipFiles) {
+            try {
+              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${filesProcessed + 1}/${zipFiles.length}: ${zipFile.name}...</span>`;
+              const result = await parseYieldFromZip(zipFile);
+              yieldPoints = [...yieldPoints, ...result.points];
+              if (result.detectedYear && !detectedYear) {
+                detectedYear = result.detectedYear;
+              }
+              filesProcessed++;
+            } catch (err) {
+              console.warn(`Error processing ${zipFile.name}:`, err);
+              fileErrors.push({ file: zipFile.name, error: err.message });
+            }
+          }
+
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${zipFiles.length} files, ${yieldPoints.length.toLocaleString()} points...</span>`;
+
+        } else if (zipFiles.length === 1) {
+          // Single ZIP file
+          const result = await parseYieldFromZip(zipFiles[0]);
           yieldPoints = result.points;
           detectedYear = result.detectedYear;
+          filesProcessed = 1;
+
+        } else if (shpFiles.length > 1) {
+          // BATCH MODE: Multiple loose .shp/.dbf pairs - group by base filename
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${shpFiles.length} shapefiles...</span>`;
+
+          // Create lookup for dbf files by base name
+          const dbfByName = {};
+          for (const dbf of dbfFiles) {
+            const baseName = dbf.name.toLowerCase().replace('.dbf', '');
+            dbfByName[baseName] = dbf;
+          }
+
+          for (const shpFile of shpFiles) {
+            const baseName = shpFile.name.toLowerCase().replace('.shp', '');
+            const dbfFile = dbfByName[baseName];
+
+            if (!dbfFile) {
+              fileErrors.push({ file: shpFile.name, error: 'No matching .dbf file found' });
+              continue;
+            }
+
+            try {
+              statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processing ${filesProcessed + 1}/${shpFiles.length}: ${shpFile.name}...</span>`;
+              const shpBuffer = await shpFile.arrayBuffer();
+              const dbfBuffer = await dbfFile.arrayBuffer();
+              const result = parseYieldShapefile(shpBuffer, dbfBuffer);
+              yieldPoints = [...yieldPoints, ...result.points];
+              if (result.detectedYear && !detectedYear) {
+                detectedYear = result.detectedYear;
+              }
+              filesProcessed++;
+            } catch (err) {
+              console.warn(`Error processing ${shpFile.name}:`, err);
+              fileErrors.push({ file: shpFile.name, error: err.message });
+            }
+          }
+
+          statusEl.innerHTML = `<span style="color: #3b82f6;">⏳ Processed ${filesProcessed}/${shpFiles.length} shapefiles, ${yieldPoints.length.toLocaleString()} points...</span>`;
+
         } else {
+          // Single shapefile (loose files)
           const result = await parseYieldFromShapefiles(files);
           yieldPoints = result.points;
           detectedYear = result.detectedYear;
+          filesProcessed = 1;
         }
 
         // Auto-fill year if detected from file and input is empty
@@ -1180,7 +1248,10 @@
         }
 
         if (yieldPoints.length === 0) {
-          statusEl.innerHTML = '<span style="color: #ef4444;">❌ No yield points found in file</span>';
+          statusEl.innerHTML = '<span style="color: #ef4444;">❌ No yield points found in files</span>';
+          if (fileErrors.length > 0) {
+            statusEl.innerHTML += `<br><span style="color: #f59e0b;">⚠️ ${fileErrors.length} file(s) had errors</span>`;
+          }
           return;
         }
 
@@ -1189,17 +1260,17 @@
           p.year = parseInt(yieldYear);
           p.crop = yieldCrop;
         });
-        
+
         // Store yield data
         const existingKeys = new Set(yieldData.map(y => `${y.lat}-${y.lon}-${y.year}`));
         const newPoints = yieldPoints.filter(p => !existingKeys.has(`${p.lat}-${p.lon}-${p.year}`));
         yieldData = [...yieldData, ...newPoints];
-        
-        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length} yield points</span>`;
-        
+
+        statusEl.innerHTML = `<span style="color: #22c55e;">✓ Loaded ${newPoints.length.toLocaleString()} yield points from ${filesProcessed} file(s)</span>`;
+
         // Now correlate with soil samples
         statusEl.innerHTML += '<br><span style="color: #3b82f6;">⏳ Correlating with soil samples...</span>';
-        
+
         const correlationResults = correlateYieldToSamples(yieldYear, radiusFeet);
 
         // Clear raw yield data after correlation - only keep correlated summary on samples
@@ -1209,11 +1280,17 @@
         afterImportSuccess();
 
         const yearInfo = detectedYear ? `📅 Auto-detected year: ${detectedYear}<br>` : '';
+        const batchInfo = filesProcessed > 1 ? `📁 Processed ${filesProcessed} yield files<br>` : '';
         const matchRate = Math.round((correlationResults.matched / correlationResults.total) * 100);
         const matchColor = matchRate === 100 ? '#22c55e' : (matchRate >= 80 ? '#f59e0b' : '#ef4444');
 
+        let errorInfo = '';
+        if (fileErrors.length > 0) {
+          errorInfo = `<br><span style="color: #f59e0b;">⚠️ ${fileErrors.length} file(s) skipped due to errors</span>`;
+        }
+
         statusEl.innerHTML = `
-          <span style="color: #22c55e;">${yearInfo}✓ Processed ${newPoints.length.toLocaleString()} yield points</span><br>
+          <span style="color: #22c55e;">${yearInfo}${batchInfo}✓ Processed ${newPoints.length.toLocaleString()} yield points</span>${errorInfo}<br>
           <span style="color: ${matchColor};">✓ Matched ${correlationResults.matched} of ${correlationResults.total} soil samples (${matchRate}%)</span><br>
           <button onclick="showYieldSummary(lastYieldResults)" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: #f59e0b; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-weight: 600;">
             📊 View Import Summary
@@ -1229,7 +1306,7 @@
         }
 
         fileInput.value = '';
-        
+
       } catch (e) {
         console.error('Yield upload error:', e);
         statusEl.innerHTML = `<span style="color: #ef4444;">❌ Error: ${e.message}</span>`;
