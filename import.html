@@ -1393,11 +1393,22 @@
       const headerSize = dbfView.getUint16(8, true);
       const recordSize = dbfView.getUint16(10, true);
       
+      // Helper to convert bytes to string without spread operator (avoids stack overflow)
+      const bytesToString = (buffer, start, length) => {
+        const bytes = new Uint8Array(buffer.slice(start, start + length));
+        let str = '';
+        for (let i = 0; i < bytes.length; i++) {
+          if (bytes[i] === 0) break; // Stop at null terminator
+          str += String.fromCharCode(bytes[i]);
+        }
+        return str.trim();
+      };
+
       // Parse field descriptors
       const fields = [];
       let offset = 32;
       while (offset < headerSize - 1) {
-        const fieldName = String.fromCharCode(...new Uint8Array(dbfBuffer.slice(offset, offset + 11))).replace(/\0/g, '').trim();
+        const fieldName = bytesToString(dbfBuffer, offset, 11);
         if (!fieldName) break;
         const fieldType = String.fromCharCode(dbfView.getUint8(offset + 11));
         const fieldLen = dbfView.getUint8(offset + 16);
@@ -1460,7 +1471,7 @@
         let yieldValue = null;
 
         for (const field of fields) {
-          const rawValue = String.fromCharCode(...new Uint8Array(dbfBuffer.slice(dbfOffset + fieldOffset, dbfOffset + fieldOffset + field.length))).trim();
+          const rawValue = bytesToString(dbfBuffer, dbfOffset + fieldOffset, field.length);
 
           if (field.name === yieldField.name) {
             yieldValue = parseFloat(rawValue);
