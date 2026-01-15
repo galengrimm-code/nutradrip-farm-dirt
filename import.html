@@ -518,8 +518,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.35";
-    const BUILD_DATE = "2026-01-15T11:49:54";
+    const APP_VERSION = "v1.0.36";
+    const BUILD_DATE = "2026-01-15T11:52:10";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3419,7 +3419,7 @@
       const nutrientContainer = document.getElementById('csvNutrientMappings');
       nutrientContainer.innerHTML = '';
 
-      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
 
       nutrients.forEach(nutrient => {
         const div = document.createElement('div');
@@ -3439,7 +3439,7 @@
       // Location aliases
       const latAliases = ['lat', 'latitude', 'y', 'point_y', 'lat_wgs84'];
       const lonAliases = ['lon', 'lng', 'longitude', 'x', 'point_x', 'long', 'lon_wgs84'];
-      const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid'];
+      const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid', 'sample id', 'lab #'];
       const fieldAliases = ['field', 'fieldname', 'field_name', 'farm', 'farmname', 'name'];
 
       function findMatch(aliasList) {
@@ -3456,15 +3456,43 @@
       document.getElementById('csvMapSampleId').value = findMatch(idAliases);
       document.getElementById('csvMapField').value = findMatch(fieldAliases);
 
-      // Map nutrient fields using stored aliases
-      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      // Extended aliases for common lab formats (Midwest Labs, Ward Labs, etc.)
+      const labAliases = {
+        'pH': ['ph', 'wph', 'water ph', 'soil ph', '1:1 ph', 'ph 1:1'],
+        'Buffer_pH': ['bph', 'buffer ph', 'buffer_ph', 'sikora', 'smp'],
+        'P': ['p', 'bray p1', 'bray p-1', 'mehlich p', 'olsen p', 'p1', 'p (m3)'],
+        'K': ['k', 'aa k', 'potassium', 'k (m3)', 'mehlich k'],
+        'OM': ['om', 'om (loi)', 'organic matter', 'om%', 'o.m.', 'loi'],
+        'CEC': ['cec', 'c.e.c.', 'cation exchange'],
+        'Ca': ['ca', 'aa ca', 'calcium'],
+        'Mg': ['mg', 'aa mg', 'magnesium'],
+        'Na': ['na', 'aa na', 'sodium'],
+        'S': ['s', 'sulfur', 'so4-s', 'sulfate'],
+        'Zn': ['zn', 'dtpa-zn', 'zinc'],
+        'Mn': ['mn', 'dtpa-mn', 'manganese'],
+        'Fe': ['fe', 'dtpa-fe', 'iron'],
+        'Cu': ['cu', 'dtpa-cu', 'copper'],
+        'Boron': ['b', 'dtpa-b', 'boron', 'hot water b'],
+        'Ca_sat': ['ca sat %', 'ca sat', 'ca%', 'ca base sat', '%ca'],
+        'Mg_sat': ['mg sat %', 'mg sat', 'mg%', 'mg base sat', '%mg'],
+        'K_Sat': ['k sat %', 'k sat', 'k%', 'k base sat', '%k'],
+        'H_Sat': ['h sat %', 'h sat', 'h%', '%h'],
+        'Na_Sat': ['na sat %', 'na sat', 'na%', '%na'],
+        'NO3': ['no3-n (ppm)', 'no3-n', 'no3', 'nitrate', 'nitrate-n'],
+        'NH4': ['nh4-n', 'nh4', 'ammonium', 'ammonium-n']
+      };
+
+      // Map nutrient fields using stored aliases + lab aliases
+      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'H_Sat', 'Na_Sat'];
 
       nutrients.forEach(nutrient => {
         const select = document.getElementById(`csvMap${nutrient}`);
         if (!select) return;
 
-        // Check if there's an alias match
-        const nutrientAliases = aliases[nutrient] || [nutrient];
+        // Combine stored aliases with lab aliases
+        const storedAliases = aliases[nutrient] || [];
+        const defaultLabAliases = labAliases[nutrient] || [nutrient.toLowerCase()];
+        const nutrientAliases = [...new Set([...storedAliases.map(a => a.toLowerCase()), ...defaultLabAliases])];
         let matched = '';
 
         for (const header of csvHeaders) {
@@ -3536,7 +3564,7 @@
         field: document.getElementById('csvMapField').value
       };
 
-      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
       nutrients.forEach(n => {
         const select = document.getElementById(`csvMap${n}`);
         if (select && select.value) {
@@ -3635,7 +3663,7 @@
         };
 
         // Add nutrient values
-        const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+        const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
         nutrients.forEach(n => {
           if (csvMappings[n] && row[csvMappings[n]]) {
             const val = parseFloat(row[csvMappings[n]]);
@@ -3744,7 +3772,7 @@
       if (mapping.field) document.getElementById('csvMapField').value = findHeader(mapping.field);
 
       // Nutrient fields
-      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
       nutrients.forEach(n => {
         if (mapping[n]) {
           const select = document.getElementById(`csvMap${n}`);
