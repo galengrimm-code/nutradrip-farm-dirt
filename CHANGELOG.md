@@ -18,6 +18,18 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 - **Table headers repeat**: Headers visible on each page if table spans pages
 - **Section breaks**: Major sections start on new pages
 
+### Data Quality - Orphaned Sample Scanner
+- **Find Samples Outside Boundaries**: New button in Data Scrubber section
+- **Point-in-polygon detection**: Identifies samples not inside any field boundary
+- **Cleanup stale data**: Remove samples from fields no longer farmed or with boundary changes
+- **Review before delete**: Shows results in table for selective removal
+
+### CSV Import Improvements
+- **BOM removal**: Handles Excel CSVs with Byte Order Mark
+- **Delimiter auto-detection**: Supports comma, semicolon, and tab-delimited files
+- **Lab-specific aliases**: Added Midwest Labs column names (WpH, BpH, AA K, DTPA-Zn, etc.)
+- **Clearer mapping UI**: Instructions and hints clarify which dropdown is standard vs CSV
+
 ---
 
 ## [v1.0.27] - January 15, 2026
