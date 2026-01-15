@@ -484,8 +484,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.20";
-    const BUILD_DATE = "2026-01-15T07:58:23";
+    const APP_VERSION = "v1.0.21";
+    const BUILD_DATE = "2026-01-15T08:07:00";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3697,7 +3697,12 @@
       });
 
       // Calculate zone statistics for each year
-      const allYears = [baseYear, ...compareYears].sort();
+      // Collect all unique years from matched data (handles per-field baselines)
+      const allYearsSet = new Set();
+      matchedData.forEach(m => {
+        Object.keys(m.years).forEach(y => allYearsSet.add(parseInt(y)));
+      });
+      const allYears = [...allYearsSet].sort((a, b) => a - b);
       const zoneStats = { low: {}, medium: {}, high: {}, all: {} };
 
       allYears.forEach(year => {
@@ -3738,25 +3743,25 @@
       let html = `
         <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; color: #0369a1;">
           <strong>Spatial Change Analysis: ${fieldDisplayName} - ${nutrientName}</strong><br>
-          <strong>Base Year:</strong> ${baseYear} (zones defined by this year's values)<br>
+          <strong>Base Year:</strong> ${baseYearDisplay} (zones defined by this year's values)<br>
           <strong>Comparing:</strong> ${compareYears.join(', ')}<br>
           <strong>Match Radius:</strong> ${radiusFt} ft | <strong>Matched Samples:</strong> ${matchedData.length} of ${baseSamples.length}
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; font-size: 0.8rem; color: #475569;">
           <strong style="color: #1e293b;">How Zones Are Defined:</strong><br>
-          Samples from ${baseYear} are divided into three zones based on their ${nutrientName} values:
+          Samples from ${baseYearDisplay} are divided into three zones based on their ${nutrientName} values:
           <ul style="margin: 0.5rem 0 0.5rem 1.5rem; padding: 0;">
             <li><strong style="color: #dc2626;">Low Zone</strong> = Bottom 25% of samples (lowest quartile)</li>
             <li><strong style="color: #d97706;">Medium Zone</strong> = Middle 50% of samples (between 25th and 75th percentile)</li>
             <li><strong style="color: #16a34a;">High Zone</strong> = Top 25% of samples (highest quartile)</li>
           </ul>
           <strong style="color: #1e293b;">What This Analysis Shows:</strong><br>
-          Once zones are defined by ${baseYear}, we track those <em>same GPS locations</em> across other years to see how values change over time. This answers: "Are my historically low-testing areas improving or staying low?"
+          Once zones are defined by ${baseYearDisplay}, we track those <em>same GPS locations</em> across other years to see how values change over time. This answers: "Are my historically low-testing areas improving or staying low?"
         </div>
 
-        <h3 style="margin: 0 0 0.5rem 0; color: #1e293b;">Zone Summary (${baseYear} Baseline)</h3>
-        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.75rem;">Number of sample locations in each zone, based on ${baseYear} ${nutrientName} values:</p>
+        <h3 style="margin: 0 0 0.5rem 0; color: #1e293b;">Zone Summary (${baseYearDisplay} Baseline)</h3>
+        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.75rem;">Number of sample locations in each zone, based on ${baseYearDisplay} ${nutrientName} values:</p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
           <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
@@ -3786,7 +3791,7 @@
         <table class="rankings-table" style="margin-bottom: 1.5rem;">
           <thead>
             <tr>
-              <th>Zone (${baseYear} baseline)</th>
+              <th>Zone (${baseYearDisplay} baseline)</th>
               ${allYears.map(y => `<th>${y} Avg</th>`).join('')}
               <th>Change</th>
             </tr>
@@ -3794,6 +3799,7 @@
           <tbody>`;
 
       // Add rows for each zone
+      const firstYear = allYears[0];
       const lastYear = allYears[allYears.length - 1];
 
       ['low', 'medium', 'high'].forEach(zone => {
@@ -3814,8 +3820,8 @@
           }
         });
 
-        // Change column
-        const baseAvg = zoneStats[zone][baseYear]?.avg;
+        // Change column (compare first year to last year)
+        const baseAvg = zoneStats[zone][firstYear]?.avg;
         const lastAvg = zoneStats[zone][lastYear]?.avg;
         if (baseAvg !== undefined && lastAvg !== undefined) {
           const change = lastAvg - baseAvg;
@@ -3842,7 +3848,7 @@
         }
       });
 
-      const baseFieldAvg = zoneStats.all[baseYear]?.avg;
+      const baseFieldAvg = zoneStats.all[firstYear]?.avg;
       const lastFieldAvg = zoneStats.all[lastYear]?.avg;
       if (baseFieldAvg !== undefined && lastFieldAvg !== undefined) {
         const change = lastFieldAvg - baseFieldAvg;
@@ -3855,7 +3861,7 @@
       html += `</tr></tbody></table>`;
 
       // Generate insights
-      html += generateSpatialInsights(zoneStats, baseYear, lastYear, nutrientName, decimals, unit);
+      html += generateSpatialInsights(zoneStats, firstYear, lastYear, nutrientName, decimals, unit);
 
       container.innerHTML = html;
     }
