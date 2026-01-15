@@ -372,9 +372,113 @@
         <div id="auditLogContent" style="font-size: 0.75rem; color: #78350f; max-height: 150px; overflow-y: auto;"></div>
       </div>
     </div>
+
+    <!-- Field Management Section -->
+    <div class="import-section" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-color: #0ea5e9;">
+      <h3 style="color: #0369a1;">🗺️ Manage Field Boundaries</h3>
+      <p style="color: #0c4a6e; font-size: 0.875rem; margin-bottom: 1rem;">View, rename, or delete field boundaries and their associated soil samples.</p>
+
+      <!-- Field Table -->
+      <div id="fieldManagementTable" style="background: white; border-radius: 0.5rem; border: 1px solid #bae6fd; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead style="background: #f0f9ff;">
+            <tr>
+              <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #bae6fd; color: #0369a1;">Field Name</th>
+              <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #bae6fd; color: #0369a1;">Acres</th>
+              <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #bae6fd; color: #0369a1;">Samples</th>
+              <th style="padding: 0.75rem; text-align: center; border-bottom: 2px solid #bae6fd; color: #0369a1;">Years</th>
+              <th style="padding: 0.75rem; text-align: center; border-bottom: 2px solid #bae6fd; color: #0369a1; width: 150px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="fieldTableBody">
+            <tr>
+              <td colspan="5" style="padding: 2rem; text-align: center; color: #64748b;">
+                <em>No field boundaries loaded</em>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Summary -->
+      <div id="fieldManagementSummary" style="margin-top: 1rem; padding: 0.75rem; background: #e0f2fe; border-radius: 0.5rem; font-size: 0.8rem; color: #0369a1; display: none;">
+        <span id="fieldSummaryText"></span>
+      </div>
+    </div>
   </div>
 
   <div id="statusMessage"></div>
+
+  <!-- Field Edit Modal -->
+  <div id="fieldEditModal" class="modal-overlay">
+    <div class="modal" style="max-width: 450px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);">
+        <h3>✏️ Rename Field</h3>
+        <button class="modal-close" onclick="closeFieldEditModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <p style="margin: 0 0 1rem 0; color: #475569;">Rename field boundary and update all associated soil samples.</p>
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 0.5rem;">Current Name:</label>
+          <div id="fieldEditCurrentName" style="padding: 0.5rem 0.75rem; background: #f1f5f9; border-radius: 0.375rem; font-weight: 500; color: #1e293b;"></div>
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 0.5rem;">New Name:</label>
+          <input type="text" id="fieldEditNewName" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.9rem;" placeholder="Enter new field name">
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
+        <button class="button" style="background: #94a3b8;" onclick="closeFieldEditModal()">Cancel</button>
+        <button class="button" style="background: #0ea5e9;" onclick="confirmFieldRename()">Rename Field</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Field Delete Modal -->
+  <div id="fieldDeleteModal" class="modal-overlay">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);">
+        <h3>🗑️ Delete Field</h3>
+        <button class="modal-close" onclick="closeFieldDeleteModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <p style="margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 600; color: #1e293b;">
+          Delete field "<span id="fieldDeleteName"></span>"?
+        </p>
+        <p id="fieldDeleteSampleInfo" style="margin: 0 0 1.25rem 0; color: #64748b; font-size: 0.9rem;"></p>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <label class="delete-option" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.5rem; cursor: pointer;">
+            <input type="radio" name="deleteOption" value="boundary_only" checked style="margin-top: 0.25rem;">
+            <div>
+              <div style="font-weight: 600; color: #334155;">Delete boundary only</div>
+              <div style="font-size: 0.8rem; color: #64748b;">Keep soil samples - they will become "Unassigned"</div>
+            </div>
+          </label>
+
+          <label class="delete-option" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; background: #fef2f2; border: 2px solid #fecaca; border-radius: 0.5rem; cursor: pointer;">
+            <input type="radio" name="deleteOption" value="boundary_and_samples" style="margin-top: 0.25rem;">
+            <div>
+              <div style="font-weight: 600; color: #dc2626;">Delete boundary AND all soil samples</div>
+              <div style="font-size: 0.8rem; color: #991b1b;">Permanently remove the boundary and <span id="fieldDeleteSampleCount">0</span> associated samples</div>
+            </div>
+          </label>
+
+          <label class="delete-option" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 0.5rem; cursor: pointer;">
+            <input type="radio" name="deleteOption" value="reassign_samples" style="margin-top: 0.25rem;">
+            <div>
+              <div style="font-weight: 600; color: #166534;">Delete boundary and reassign samples</div>
+              <div style="font-size: 0.8rem; color: #15803d;">Samples will be matched to the nearest remaining field by GPS</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
+        <button class="button" style="background: #94a3b8;" onclick="closeFieldDeleteModal()">Cancel</button>
+        <button class="button danger" onclick="confirmFieldDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Column Mapping Modal -->
   <div id="mappingModal" class="modal-overlay">
@@ -662,8 +766,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.41";
-    const BUILD_DATE = "2026-01-15T16:42:04";
+    const APP_VERSION = "v1.0.42";
+    const BUILD_DATE = "2026-01-15T16:47:47";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -774,7 +878,7 @@
     let backupDownloadedThisSession = false;
 
     document.addEventListener('DOMContentLoaded', async () => {
-      await loadLocalData(); updateSummary(); updateBackupStatus(); updateBackupFooter();
+      await loadLocalData(); updateSummary(); updateBackupStatus(); updateBackupFooter(); refreshFieldTable();
       try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) { console.warn(e); }
       document.getElementById('uploadBoundaryBtn').addEventListener('click', uploadBoundaries);
       document.getElementById('uploadSampleBtn').addEventListener('click', uploadSamples);
@@ -1095,6 +1199,7 @@
       updateSummary();
       updateBackupStatus();
       updateBackupFooter();
+      refreshFieldTable();
 
       // Auto-download only once per session if setting is 'after-import'
       const autoBackup = localStorage.getItem('autoBackupFrequency');
@@ -4439,6 +4544,330 @@
       document.getElementById('sampleFiles').value = '';
       document.getElementById('sampleYear').value = '';
     }
+
+    // ============================================
+    // Field Management
+    // ============================================
+
+    let fieldToEdit = null;
+    let fieldToDelete = null;
+
+    // Refresh field management table
+    function refreshFieldTable() {
+      const tbody = document.getElementById('fieldTableBody');
+      const summaryDiv = document.getElementById('fieldManagementSummary');
+      const summaryText = document.getElementById('fieldSummaryText');
+
+      const fieldNames = Object.keys(fieldBoundaries).sort();
+
+      if (fieldNames.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="padding: 2rem; text-align: center; color: #64748b;">
+              <em>No field boundaries loaded</em>
+            </td>
+          </tr>
+        `;
+        summaryDiv.style.display = 'none';
+        return;
+      }
+
+      let totalAcres = 0;
+      let totalSamples = 0;
+
+      const rows = fieldNames.map(fieldName => {
+        // Calculate acres
+        const acres = calculateFieldAcres(fieldBoundaries[fieldName]);
+        totalAcres += acres;
+
+        // Count samples and get years
+        const fieldSamples = sampleData.filter(s => s.field === fieldName);
+        const sampleCount = fieldSamples.length;
+        totalSamples += sampleCount;
+
+        const years = [...new Set(fieldSamples.map(s => s.year).filter(y => y))].sort();
+        const yearRange = years.length > 0
+          ? (years.length === 1 ? years[0] : `${years[0]}-${years[years.length - 1]}`)
+          : '--';
+
+        // Determine row styling based on data
+        const hasNoSamples = sampleCount === 0;
+        const rowStyle = hasNoSamples ? 'background: #fef3c7;' : '';
+
+        return `
+          <tr style="${rowStyle}">
+            <td style="padding: 0.75rem; border-bottom: 1px solid #e0f2fe;">
+              <span style="font-weight: 500;">${escapeHtml(fieldName)}</span>
+              ${hasNoSamples ? '<span style="margin-left: 0.5rem; font-size: 0.7rem; background: #fde047; padding: 0.125rem 0.375rem; border-radius: 0.25rem; color: #854d0e;">No samples</span>' : ''}
+            </td>
+            <td style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #e0f2fe;">${acres.toFixed(1)}</td>
+            <td style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #e0f2fe;">${sampleCount}</td>
+            <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e0f2fe; font-size: 0.8rem; color: #64748b;">${yearRange}</td>
+            <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e0f2fe;">
+              <button onclick="openFieldEditModal('${escapeHtml(fieldName)}')" style="padding: 0.25rem 0.5rem; margin-right: 0.25rem; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem; color: #0369a1;">✏️ Edit</button>
+              <button onclick="openFieldDeleteModal('${escapeHtml(fieldName)}')" style="padding: 0.25rem 0.5rem; background: #fee2e2; border: 1px solid #fca5a5; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem; color: #dc2626;">🗑️ Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rows;
+
+      // Show summary
+      summaryDiv.style.display = 'block';
+      summaryText.textContent = `${fieldNames.length} fields • ${totalAcres.toFixed(1)} total acres • ${totalSamples.toLocaleString()} samples`;
+    }
+
+    // Calculate field acres from polygon coordinates
+    function calculateFieldAcres(polys) {
+      // Ensure polys is an array of polygons
+      const polygons = Array.isArray(polys[0]?.[0]) ? polys : [polys];
+      let totalArea = 0;
+
+      polygons.forEach(polygon => {
+        // Polygon is array of [lat, lng] points
+        if (!polygon || polygon.length < 3) return;
+
+        // Use shoelace formula with lat/lng to approximate area
+        // Convert to approximate square meters then to acres
+        let area = 0;
+        const n = polygon.length;
+
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const lat1 = polygon[i][0];
+          const lng1 = polygon[i][1];
+          const lat2 = polygon[j][0];
+          const lng2 = polygon[j][1];
+
+          // Approximate meters per degree at this latitude
+          const latRad = (lat1 * Math.PI) / 180;
+          const metersPerDegreeLat = 111132.92 - 559.82 * Math.cos(2 * latRad);
+          const metersPerDegreeLng = 111412.84 * Math.cos(latRad);
+
+          // Convert to meters
+          const x1 = lng1 * metersPerDegreeLng;
+          const y1 = lat1 * metersPerDegreeLat;
+          const x2 = lng2 * metersPerDegreeLng;
+          const y2 = lat2 * metersPerDegreeLat;
+
+          area += (x1 * y2) - (x2 * y1);
+        }
+
+        totalArea += Math.abs(area) / 2;
+      });
+
+      // Convert square meters to acres (1 acre = 4046.86 sq meters)
+      return totalArea / 4046.86;
+    }
+
+    // HTML escape helper
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Edit field modal
+    function openFieldEditModal(fieldName) {
+      fieldToEdit = fieldName;
+      document.getElementById('fieldEditCurrentName').textContent = fieldName;
+      document.getElementById('fieldEditNewName').value = fieldName;
+      document.getElementById('fieldEditModal').style.display = 'flex';
+      document.getElementById('fieldEditNewName').focus();
+      document.getElementById('fieldEditNewName').select();
+    }
+
+    function closeFieldEditModal() {
+      document.getElementById('fieldEditModal').style.display = 'none';
+      fieldToEdit = null;
+    }
+
+    async function confirmFieldRename() {
+      const newName = document.getElementById('fieldEditNewName').value.trim();
+
+      if (!newName) {
+        showStatus('Please enter a new field name', false);
+        return;
+      }
+
+      if (newName === fieldToEdit) {
+        closeFieldEditModal();
+        return;
+      }
+
+      // Check if new name already exists
+      if (fieldBoundaries[newName] && newName !== fieldToEdit) {
+        showStatus(`Field "${newName}" already exists`, false);
+        return;
+      }
+
+      // Rename boundary
+      fieldBoundaries[newName] = fieldBoundaries[fieldToEdit];
+      delete fieldBoundaries[fieldToEdit];
+
+      // Update all samples with this field name
+      let updatedCount = 0;
+      sampleData.forEach(sample => {
+        if (sample.field === fieldToEdit) {
+          sample.field = newName;
+          updatedCount++;
+        }
+      });
+
+      // Save changes
+      await saveLocalData();
+      await saveToIndexedDB();
+
+      closeFieldEditModal();
+      refreshFieldTable();
+      showStatus(`✓ Renamed "${fieldToEdit}" to "${newName}" (${updatedCount} samples updated)`, true);
+
+      // Sync to Sheets if signed in
+      if (SheetsAPI.isSignedIn) {
+        syncToSheets();
+      }
+    }
+
+    // Delete field modal
+    function openFieldDeleteModal(fieldName) {
+      fieldToDelete = fieldName;
+
+      // Count samples
+      const sampleCount = sampleData.filter(s => s.field === fieldName).length;
+
+      document.getElementById('fieldDeleteName').textContent = fieldName;
+      document.getElementById('fieldDeleteSampleCount').textContent = sampleCount;
+
+      if (sampleCount === 0) {
+        document.getElementById('fieldDeleteSampleInfo').textContent = 'This field has no associated soil samples.';
+      } else {
+        document.getElementById('fieldDeleteSampleInfo').textContent = `This field has ${sampleCount} soil sample${sampleCount === 1 ? '' : 's'}.`;
+      }
+
+      // Reset to first option
+      document.querySelector('input[name="deleteOption"][value="boundary_only"]').checked = true;
+
+      document.getElementById('fieldDeleteModal').style.display = 'flex';
+    }
+
+    function closeFieldDeleteModal() {
+      document.getElementById('fieldDeleteModal').style.display = 'none';
+      fieldToDelete = null;
+    }
+
+    async function confirmFieldDelete() {
+      if (!fieldToDelete) return;
+
+      const option = document.querySelector('input[name="deleteOption"]:checked').value;
+      const fieldName = fieldToDelete;
+      const affectedSamples = sampleData.filter(s => s.field === fieldName);
+
+      let message = '';
+
+      if (option === 'boundary_only') {
+        // Delete boundary, mark samples as unassigned
+        delete fieldBoundaries[fieldName];
+        affectedSamples.forEach(s => s.field = 'Unassigned');
+        message = `✓ Deleted "${fieldName}" boundary. ${affectedSamples.length} samples marked as Unassigned.`;
+
+      } else if (option === 'boundary_and_samples') {
+        // Delete boundary and all associated samples
+        delete fieldBoundaries[fieldName];
+        sampleData = sampleData.filter(s => s.field !== fieldName);
+        message = `✓ Deleted "${fieldName}" boundary and ${affectedSamples.length} samples.`;
+
+      } else if (option === 'reassign_samples') {
+        // Delete boundary and reassign samples to nearest field
+        delete fieldBoundaries[fieldName];
+
+        // Reassign each sample to the nearest remaining field
+        const remainingFields = Object.keys(fieldBoundaries);
+        let reassignedCount = 0;
+
+        if (remainingFields.length === 0) {
+          // No fields left, mark as unassigned
+          affectedSamples.forEach(s => s.field = 'Unassigned');
+          message = `✓ Deleted "${fieldName}". No other fields exist - ${affectedSamples.length} samples marked as Unassigned.`;
+        } else {
+          affectedSamples.forEach(sample => {
+            // Find nearest field by checking if sample falls within any boundary
+            let assigned = false;
+            for (const [name, polys] of Object.entries(fieldBoundaries)) {
+              const arr = Array.isArray(polys[0]?.[0]) ? polys : [polys];
+              for (const poly of arr) {
+                if (isPointInOrNearPolygon([sample.lat, sample.lon], poly)) {
+                  sample.field = name;
+                  assigned = true;
+                  reassignedCount++;
+                  break;
+                }
+              }
+              if (assigned) break;
+            }
+            if (!assigned) {
+              // Find nearest field by centroid distance
+              let nearestField = null;
+              let nearestDist = Infinity;
+
+              for (const [name, polys] of Object.entries(fieldBoundaries)) {
+                const centroid = getFieldCentroid(polys);
+                const dist = Math.sqrt(
+                  Math.pow(sample.lat - centroid[0], 2) +
+                  Math.pow(sample.lon - centroid[1], 2)
+                );
+                if (dist < nearestDist) {
+                  nearestDist = dist;
+                  nearestField = name;
+                }
+              }
+
+              if (nearestField) {
+                sample.field = nearestField;
+                reassignedCount++;
+              } else {
+                sample.field = 'Unassigned';
+              }
+            }
+          });
+          message = `✓ Deleted "${fieldName}". ${reassignedCount} samples reassigned to nearby fields.`;
+        }
+      }
+
+      // Save changes
+      await saveLocalData();
+      await saveToIndexedDB();
+
+      closeFieldDeleteModal();
+      refreshFieldTable();
+      updateDataSummary();
+      showStatus(message, true);
+
+      // Sync to Sheets if signed in
+      if (SheetsAPI.isSignedIn) {
+        syncToSheets();
+      }
+    }
+
+    // Get centroid of a field's polygons
+    function getFieldCentroid(polys) {
+      const polygons = Array.isArray(polys[0]?.[0]) ? polys : [polys];
+      let totalLat = 0, totalLon = 0, totalPoints = 0;
+
+      polygons.forEach(polygon => {
+        polygon.forEach(point => {
+          totalLat += point[0];
+          totalLon += point[1];
+          totalPoints++;
+        });
+      });
+
+      return totalPoints > 0 ? [totalLat / totalPoints, totalLon / totalPoints] : [0, 0];
+    }
+
+    // Refresh field table on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      // Existing DOMContentLoaded handlers will call afterImportSuccess which calls refreshFieldTable
+    });
 
   </script>
   <div class="backup-footer" id="backupFooter">No backup yet</div>
