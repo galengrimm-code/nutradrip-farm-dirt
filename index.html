@@ -223,8 +223,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.31";
-    const BUILD_DATE = "2026-01-15T11:28:17";
+    const APP_VERSION = "v1.0.32";
+    const BUILD_DATE = "2026-01-15T11:29:54";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -1454,12 +1454,28 @@
 
     function saveLocalData() {
       try {
-        localStorage.setItem('soilSamples', JSON.stringify(sampleData));
-        localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries));
+        // Always save settings (small)
         localStorage.setItem('soilSettings', JSON.stringify(settings));
         localStorage.setItem('soilDataCacheTime', Date.now().toString());
+
+        // Only save samples/boundaries to localStorage if small enough
+        // Large datasets use IndexedDB as primary storage
+        const samplesJson = JSON.stringify(sampleData);
+        const boundariesJson = JSON.stringify(fieldBoundaries);
+
+        // Skip localStorage for large datasets (> 4MB) - IndexedDB handles these
+        if (samplesJson.length < 4000000) {
+          localStorage.setItem('soilSamples', samplesJson);
+        }
+        if (boundariesJson.length < 1000000) {
+          localStorage.setItem('fieldBoundaries', boundariesJson);
+        }
+
         updateLastUpdated();
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        // Quota exceeded - that's OK, IndexedDB is the primary storage
+        console.log('localStorage quota exceeded, using IndexedDB only');
+      }
     }
 
     function updateLastUpdated() {
