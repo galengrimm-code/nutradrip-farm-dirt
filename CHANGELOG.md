@@ -4,6 +4,36 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.29] - January 15, 2026
+
+### Yield Outlier Detection Improvements
+- **Crop-specific thresholds**: Corn (50-350 bu/ac), Soybeans (20-100 bu/ac)
+- **Scatter plot outlier filter**: New "Hide outliers" checkbox (default ON) removes bad yield data from scatter plot
+- **Shows count**: Displays how many outliers were hidden and the threshold used
+- **Better Data Scrubbing**: Outlier scanner now uses crop-specific limits to catch sensor errors
+
+### Print-Friendly PDF Exports
+- **Comprehensive print CSS**: Added page-break rules for all report types
+- **Keep elements together**: Model summaries, key findings, tables, charts won't be cut across pages
+- **Table headers repeat**: Headers visible on each page if table spans pages
+- **Section breaks**: Major sections start on new pages
+
+---
+
+## [v1.0.27] - January 15, 2026
+
+### CSV Import with Column Mapping
+- **New import option**: Choose between Shapefile/ZIP or CSV with column mapping
+- **Two-step wizard**: Map columns in Step 1, preview data in Step 2
+- **Auto-detection**: Automatically maps columns using existing aliases (pH, P, K, etc.)
+- **Required field validation**: Latitude and Longitude required, highlighted if missing
+- **Data preview**: Shows first 5 rows with mapped column names
+- **Row validation**: Warns about rows with missing/invalid coordinates
+- **Save mapping profiles**: Save column mappings for reuse with different lab formats
+- **Load saved mappings**: Quickly apply previously saved mappings
+
+---
+
 ## [v1.0.19] - January 15, 2026
 
 ### Multivariate Regression Analysis

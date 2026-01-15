@@ -79,6 +79,10 @@
     .save-alias-row label { font-size: 0.875rem; color: #475569; }
     .modal .button { padding: 0.5rem 1rem; width: auto; }
     .backup-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 0.25rem 1rem; font-size: 0.7rem; color: #64748b; text-align: center; z-index: 900; }
+    /* CSV Mapping Modal */
+    .csv-map-select { width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem; background: white; }
+    .csv-mapping-field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .csv-step-tab.active { border-bottom: 3px solid #8b5cf6; color: #7c3aed; }
   </style>
 </head>
 <body>
@@ -130,7 +134,7 @@
 
     <div class="import-section samples">
       <h3>🔬 Import Soil Samples</h3>
-      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
         <div class="form-group">
           <label>Sample Year <span style="font-weight: 400; font-size: 0.75rem; color: #dc2626;">(required)</span></label>
           <input type="text" id="sampleYear" placeholder="e.g., 2024" style="width: 120px; border: 2px solid #dc2626; background: #fef2f2;" required>
@@ -141,12 +145,62 @@
           <small>inches</small>
         </div>
       </div>
-      <div class="form-group">
-        <label>Sample File(s)</label>
-        <input type="file" id="sampleFiles" multiple accept=".shp,.dbf,.prj,.shx,.zip,.geojson,.json,.csv">
-        <small>CSV, Shapefile, or GeoJSON • Auto-assigns to fields by GPS</small>
+
+      <!-- Import Type Selection -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <!-- Option A: Shapefile/ZIP -->
+        <div id="shapefileImportBox" style="border: 2px solid #3b82f6; border-radius: 0.5rem; padding: 1rem; background: #eff6ff; cursor: pointer;" onclick="selectImportType('shapefile')">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <input type="radio" name="importType" id="importTypeShapefile" value="shapefile" checked style="width: 18px; height: 18px;">
+            <label for="importTypeShapefile" style="font-weight: 600; color: #1e40af; cursor: pointer;">📁 Shapefile / ZIP / GeoJSON</label>
+          </div>
+          <p style="font-size: 0.75rem; color: #3b82f6; margin: 0;">For files from precision ag software. Auto-detects columns.</p>
+        </div>
+
+        <!-- Option B: CSV with Mapping -->
+        <div id="csvImportBox" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; background: #f8fafc; cursor: pointer;" onclick="selectImportType('csv')">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <input type="radio" name="importType" id="importTypeCSV" value="csv" style="width: 18px; height: 18px;">
+            <label for="importTypeCSV" style="font-weight: 600; color: #475569; cursor: pointer;">📄 CSV with Column Mapping</label>
+          </div>
+          <p style="font-size: 0.75rem; color: #64748b; margin: 0;">For lab reports. Map columns to standard fields.</p>
+        </div>
       </div>
-      <button class="button success" id="uploadSampleBtn">Upload Samples</button>
+
+      <!-- Shapefile Import Panel -->
+      <div id="shapefileImportPanel">
+        <div class="form-group">
+          <label>Sample File(s)</label>
+          <input type="file" id="sampleFiles" multiple accept=".shp,.dbf,.prj,.shx,.zip,.geojson,.json">
+          <small>Shapefile (.shp + .dbf), ZIP, or GeoJSON • Auto-assigns to fields by GPS</small>
+        </div>
+        <button class="button success" id="uploadSampleBtn">Upload Samples</button>
+      </div>
+
+      <!-- CSV Import Panel -->
+      <div id="csvImportPanel" style="display: none;">
+        <div class="form-group">
+          <label>CSV File</label>
+          <input type="file" id="csvSampleFile" accept=".csv">
+          <small>CSV file from soil testing lab</small>
+        </div>
+        <div id="csvFileInfo" style="display: none; margin-bottom: 1rem; padding: 0.75rem; background: #f0fdf4; border: 1px solid #22c55e; border-radius: 0.375rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="csvFileName" style="font-weight: 500; color: #166534;"></span>
+            <span id="csvRowCount" style="font-size: 0.8rem; color: #64748b;"></span>
+          </div>
+        </div>
+
+        <!-- Saved Mappings Dropdown -->
+        <div class="form-group" id="savedMappingsGroup" style="display: none;">
+          <label>Load Saved Mapping <span style="font-weight: 400; font-size: 0.75rem; color: #64748b;">(optional)</span></label>
+          <select id="savedMappingSelect" style="width: 100%;">
+            <option value="">-- Select a saved mapping --</option>
+          </select>
+        </div>
+
+        <button class="button" id="openCsvMappingBtn" style="background: #8b5cf6; color: white;" disabled>📋 Map Columns & Preview</button>
+      </div>
     </div>
 
     <div class="import-section yield">
@@ -224,11 +278,19 @@
         <div id="outlierThresholds" style="display: none; margin-top: 0.75rem; padding: 1rem; background: white; border-radius: 0.5rem; border: 1px solid #fca5a5;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <div>
-              <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">Yield Range (bu/ac)</label>
+              <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">🌽 Corn Yield Range (bu/ac)</label>
               <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <input type="number" id="outlierYieldMin" value="50" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
+                <input type="number" id="outlierCornMin" value="50" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
                 <span style="color: #64748b;">to</span>
-                <input type="number" id="outlierYieldMax" value="350" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
+                <input type="number" id="outlierCornMax" value="350" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
+              </div>
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">🫘 Soybean Yield Range (bu/ac)</label>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="number" id="outlierSoyMin" value="20" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
+                <span style="color: #64748b;">to</span>
+                <input type="number" id="outlierSoyMax" value="100" style="width: 70px; padding: 0.375rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
               </div>
             </div>
             <div>
@@ -332,6 +394,93 @@
     </div>
   </div>
 
+  <!-- CSV Column Mapping Modal -->
+  <div id="csvMappingModal" class="modal-overlay">
+    <div class="modal" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);">
+        <h3>📄 CSV Column Mapping</h3>
+        <button class="modal-close" onclick="closeCsvMappingModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0;">
+        <!-- Step Indicator -->
+        <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+          <div id="csvStep1Tab" class="csv-step-tab active" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 600; border-bottom: 3px solid #8b5cf6; color: #7c3aed;">
+            1. Map Columns
+          </div>
+          <div id="csvStep2Tab" class="csv-step-tab" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 500; color: #94a3b8;">
+            2. Preview & Import
+          </div>
+        </div>
+
+        <!-- Step 1: Column Mapping -->
+        <div id="csvMappingStep1" style="padding: 1rem;">
+          <p style="margin: 0 0 1rem 0; color: #475569; font-size: 0.875rem;">
+            Map your CSV columns to standard fields. Required fields are marked with <span style="color: #dc2626;">*</span>
+          </p>
+
+          <!-- Required Fields -->
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.75rem 0; color: #991b1b; font-size: 0.9rem;">Required Fields</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 600; color: #dc2626;">Latitude *</label>
+                <select id="csvMapLat" class="csv-map-select"></select>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 600; color: #dc2626;">Longitude *</label>
+                <select id="csvMapLon" class="csv-map-select"></select>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Sample ID</label>
+                <select id="csvMapSampleId" class="csv-map-select"></select>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Field Name</label>
+                <select id="csvMapField" class="csv-map-select"></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nutrient Fields -->
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+            <h4 style="margin: 0 0 0.75rem 0; color: #166534; font-size: 0.9rem;">Nutrient Fields</h4>
+            <div id="csvNutrientMappings" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;"></div>
+          </div>
+
+          <!-- Save Mapping Option -->
+          <div style="margin-top: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.375rem; display: flex; align-items: center; gap: 0.75rem;">
+            <input type="checkbox" id="csvSaveMapping" style="width: 18px; height: 18px;">
+            <label for="csvSaveMapping" style="font-size: 0.85rem; color: #475569;">Save this mapping as:</label>
+            <input type="text" id="csvMappingName" placeholder="e.g., Ward Labs, AgSource" style="flex: 1; padding: 0.375rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <!-- Step 2: Preview -->
+        <div id="csvMappingStep2" style="display: none; padding: 1rem;">
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 0.375rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-weight: 600; color: #1e40af;">Preview: First 5 rows of mapped data</span>
+              <span id="csvPreviewCount" style="font-size: 0.85rem; color: #3b82f6;"></span>
+            </div>
+          </div>
+          <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+            <table id="csvPreviewTable" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+              <thead id="csvPreviewHead" style="background: #f1f5f9;"></thead>
+              <tbody id="csvPreviewBody"></tbody>
+            </table>
+          </div>
+          <div id="csvPreviewWarnings" style="margin-top: 1rem;"></div>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
+        <button class="button" style="background: #94a3b8;" onclick="closeCsvMappingModal()">Cancel</button>
+        <button class="button" id="csvBackBtn" style="display: none; background: #64748b;" onclick="csvMappingBack()">← Back</button>
+        <button class="button" id="csvNextBtn" style="background: #8b5cf6;" onclick="csvMappingNext()">Preview →</button>
+        <button class="button success" id="csvImportBtn" style="display: none;" onclick="csvImportConfirm()">Import Records</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Yield Import Summary Modal -->
   <div id="yieldSummaryModal" class="modal-overlay">
     <div class="modal" style="max-width: 900px;">
@@ -368,8 +517,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.26";
-    const BUILD_DATE = "2026-01-15T10:28:47";
+    const APP_VERSION = "v1.0.30";
+    const BUILD_DATE = "2026-01-15T11:09:09";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2671,8 +2820,12 @@
       const saved = localStorage.getItem('outlierThresholds');
       if (saved) {
         const thresholds = JSON.parse(saved);
-        if (thresholds.yieldMin) document.getElementById('outlierYieldMin').value = thresholds.yieldMin;
-        if (thresholds.yieldMax) document.getElementById('outlierYieldMax').value = thresholds.yieldMax;
+        // Corn thresholds
+        if (thresholds.cornMin) document.getElementById('outlierCornMin').value = thresholds.cornMin;
+        if (thresholds.cornMax) document.getElementById('outlierCornMax').value = thresholds.cornMax;
+        // Soybean thresholds
+        if (thresholds.soyMin) document.getElementById('outlierSoyMin').value = thresholds.soyMin;
+        if (thresholds.soyMax) document.getElementById('outlierSoyMax').value = thresholds.soyMax;
         if (thresholds.pHMin) document.getElementById('outlierPHMin').value = thresholds.pHMin;
         if (thresholds.pHMax) document.getElementById('outlierPHMax').value = thresholds.pHMax;
         if (thresholds.pMax) document.getElementById('outlierPMax').value = thresholds.pMax;
@@ -2684,8 +2837,10 @@
 
     function saveOutlierThresholds() {
       const thresholds = {
-        yieldMin: parseFloat(document.getElementById('outlierYieldMin').value),
-        yieldMax: parseFloat(document.getElementById('outlierYieldMax').value),
+        cornMin: parseFloat(document.getElementById('outlierCornMin').value),
+        cornMax: parseFloat(document.getElementById('outlierCornMax').value),
+        soyMin: parseFloat(document.getElementById('outlierSoyMin').value),
+        soyMax: parseFloat(document.getElementById('outlierSoyMax').value),
         pHMin: parseFloat(document.getElementById('outlierPHMin').value),
         pHMax: parseFloat(document.getElementById('outlierPHMax').value),
         pMax: parseFloat(document.getElementById('outlierPMax').value),
@@ -2701,10 +2856,23 @@
       const saved = localStorage.getItem('outlierThresholds');
       if (saved) return JSON.parse(saved);
       return {
-        yieldMin: 50, yieldMax: 350,
+        cornMin: 50, cornMax: 350,
+        soyMin: 20, soyMax: 100,
         pHMin: 4.5, pHMax: 8.5,
         pMax: 300, kMax: 800, cecMax: 50, omMax: 15
       };
+    }
+
+    // Get yield thresholds for a specific crop
+    function getYieldThresholdsForCrop(crop, thresholds) {
+      const cropLower = (crop || '').toLowerCase();
+      if (cropLower.includes('soy') || cropLower.includes('bean')) {
+        return { min: thresholds.soyMin || 20, max: thresholds.soyMax || 100 };
+      } else if (cropLower.includes('corn') || cropLower.includes('maize')) {
+        return { min: thresholds.cornMin || 50, max: thresholds.cornMax || 350 };
+      }
+      // Default to corn thresholds for unknown crops
+      return { min: thresholds.cornMin || 50, max: thresholds.cornMax || 350 };
     }
 
     async function scanForOutliers() {
@@ -2815,14 +2983,17 @@
           });
         }
 
-        // Yield outlier checks (embedded in sample)
+        // Yield outlier checks (embedded in sample) - CROP-SPECIFIC
         if (sample.yieldInfo && Array.isArray(sample.yieldInfo)) {
           sample.yieldInfo.forEach((yi, yiIndex) => {
             const avgYield = yi.avgYield;
             if (!avgYield || avgYield <= 0) return;
 
-            // Raw yield range check
-            if (avgYield < thresholds.yieldMin) {
+            // Get crop-specific thresholds
+            const cropThresholds = getYieldThresholdsForCrop(yi.crop, thresholds);
+
+            // Raw yield range check with crop-specific limits
+            if (avgYield < cropThresholds.min) {
               detectedOutliers.push({
                 type: 'yield',
                 sampleIndex: index,
@@ -2831,11 +3002,11 @@
                 year: yi.year || 'N/A',
                 sampleId,
                 dataType: `Yield (${yi.crop || 'unknown'})`,
-                issue: 'Yield too low',
+                issue: `Yield too low (<${cropThresholds.min})`,
                 value: avgYield.toFixed(1) + ' bu/ac',
                 crop: yi.crop
               });
-            } else if (avgYield > thresholds.yieldMax) {
+            } else if (avgYield > cropThresholds.max) {
               detectedOutliers.push({
                 type: 'yield',
                 sampleIndex: index,
@@ -2844,7 +3015,7 @@
                 year: yi.year || 'N/A',
                 sampleId,
                 dataType: `Yield (${yi.crop || 'unknown'})`,
-                issue: 'Yield too high',
+                issue: `Yield too high (>${cropThresholds.max})`,
                 value: avgYield.toFixed(1) + ' bu/ac',
                 crop: yi.crop
               });
@@ -3039,6 +3210,489 @@
 
     // Load audit log on page load
     setTimeout(loadAuditLog, 500);
+
+    // ============================================
+    // CSV Import with Column Mapping
+    // ============================================
+
+    let csvParsedData = null; // Store parsed CSV rows
+    let csvHeaders = [];      // Store CSV column headers
+    let csvMappings = {};     // Current column mappings
+
+    // Toggle between shapefile and CSV import options
+    function selectImportType(type) {
+      const shapefileBox = document.getElementById('shapefileImportBox');
+      const csvBox = document.getElementById('csvImportBox');
+      const shapefilePanel = document.getElementById('shapefileImportPanel');
+      const csvPanel = document.getElementById('csvImportPanel');
+
+      if (type === 'shapefile') {
+        shapefileBox.style.border = '2px solid #3b82f6';
+        shapefileBox.style.background = '#eff6ff';
+        csvBox.style.border = '2px solid #e2e8f0';
+        csvBox.style.background = '#f8fafc';
+        shapefilePanel.style.display = 'block';
+        csvPanel.style.display = 'none';
+        document.getElementById('importTypeShapefile').checked = true;
+      } else {
+        csvBox.style.border = '2px solid #8b5cf6';
+        csvBox.style.background = '#faf5ff';
+        shapefileBox.style.border = '2px solid #e2e8f0';
+        shapefileBox.style.background = '#f8fafc';
+        csvPanel.style.display = 'block';
+        shapefilePanel.style.display = 'none';
+        document.getElementById('importTypeCSV').checked = true;
+        loadSavedMappings();
+      }
+    }
+
+    // Handle CSV file selection
+    document.getElementById('csvSampleFile').addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const result = parseCSVRaw(text);
+        csvHeaders = result.headers;
+        csvParsedData = result.rows;
+
+        // Show file info
+        document.getElementById('csvFileInfo').style.display = 'block';
+        document.getElementById('csvFileName').textContent = file.name;
+        document.getElementById('csvRowCount').textContent = `${csvParsedData.length} rows`;
+
+        // Enable mapping button
+        document.getElementById('openCsvMappingBtn').disabled = false;
+
+      } catch (err) {
+        showStatus('Error reading CSV: ' + err.message, false);
+      }
+    });
+
+    // Parse CSV without applying mappings - just raw data
+    function parseCSVRaw(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return { headers: [], rows: [] };
+
+      // Handle quoted values properly
+      function parseLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      }
+
+      const headers = parseLine(lines[0]).map(h => h.replace(/"/g, ''));
+      const rows = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseLine(lines[i]);
+        if (values.length > 0 && values.some(v => v)) { // Skip empty rows
+          const row = {};
+          headers.forEach((h, idx) => {
+            row[h] = values[idx] || '';
+          });
+          rows.push(row);
+        }
+      }
+
+      return { headers, rows };
+    }
+
+    // Open CSV mapping modal
+    document.getElementById('openCsvMappingBtn').addEventListener('click', function() {
+      if (!csvHeaders.length) {
+        showStatus('Please select a CSV file first', false);
+        return;
+      }
+
+      populateCsvMappingDropdowns();
+
+      // Check if a saved mapping is selected
+      const savedMappingName = document.getElementById('savedMappingSelect').value;
+      if (savedMappingName) {
+        applySavedMapping(savedMappingName);
+      } else {
+        autoMapColumns();
+      }
+
+      // Reset to step 1
+      document.getElementById('csvMappingStep1').style.display = 'block';
+      document.getElementById('csvMappingStep2').style.display = 'none';
+      document.getElementById('csvStep1Tab').style.borderBottom = '3px solid #8b5cf6';
+      document.getElementById('csvStep1Tab').style.color = '#7c3aed';
+      document.getElementById('csvStep2Tab').style.borderBottom = 'none';
+      document.getElementById('csvStep2Tab').style.color = '#94a3b8';
+      document.getElementById('csvBackBtn').style.display = 'none';
+      document.getElementById('csvNextBtn').style.display = 'inline-block';
+      document.getElementById('csvImportBtn').style.display = 'none';
+
+      document.getElementById('csvMappingModal').style.display = 'flex';
+    });
+
+    // Populate dropdowns with CSV headers
+    function populateCsvMappingDropdowns() {
+      const options = '<option value="">(skip)</option>' +
+        csvHeaders.map(h => `<option value="${h}">${h}</option>`).join('');
+
+      // Required fields
+      document.getElementById('csvMapLat').innerHTML = options;
+      document.getElementById('csvMapLon').innerHTML = options;
+      document.getElementById('csvMapSampleId').innerHTML = options;
+      document.getElementById('csvMapField').innerHTML = options;
+
+      // Nutrient fields - get all standard fields
+      const nutrientContainer = document.getElementById('csvNutrientMappings');
+      nutrientContainer.innerHTML = '';
+
+      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+
+      nutrients.forEach(nutrient => {
+        const div = document.createElement('div');
+        div.className = 'csv-mapping-field';
+        div.innerHTML = `
+          <label style="font-size: 0.8rem; font-weight: 500;">${nutrient}</label>
+          <select id="csvMap${nutrient}" class="csv-map-select">${options}</select>
+        `;
+        nutrientContainer.appendChild(div);
+      });
+    }
+
+    // Auto-map columns using aliases
+    function autoMapColumns() {
+      const aliases = getAliases();
+
+      // Location aliases
+      const latAliases = ['lat', 'latitude', 'y', 'point_y', 'lat_wgs84'];
+      const lonAliases = ['lon', 'lng', 'longitude', 'x', 'point_x', 'long', 'lon_wgs84'];
+      const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid'];
+      const fieldAliases = ['field', 'fieldname', 'field_name', 'farm', 'farmname', 'name'];
+
+      function findMatch(aliasList) {
+        for (const header of csvHeaders) {
+          const h = header.toLowerCase().trim();
+          if (aliasList.includes(h)) return header;
+        }
+        return '';
+      }
+
+      // Map required fields
+      document.getElementById('csvMapLat').value = findMatch(latAliases);
+      document.getElementById('csvMapLon').value = findMatch(lonAliases);
+      document.getElementById('csvMapSampleId').value = findMatch(idAliases);
+      document.getElementById('csvMapField').value = findMatch(fieldAliases);
+
+      // Map nutrient fields using stored aliases
+      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+
+      nutrients.forEach(nutrient => {
+        const select = document.getElementById(`csvMap${nutrient}`);
+        if (!select) return;
+
+        // Check if there's an alias match
+        const nutrientAliases = aliases[nutrient] || [nutrient];
+        let matched = '';
+
+        for (const header of csvHeaders) {
+          const h = header.toLowerCase().trim();
+          for (const alias of nutrientAliases) {
+            if (alias.toLowerCase() === h || header === alias) {
+              matched = header;
+              break;
+            }
+          }
+          if (matched) break;
+        }
+
+        if (matched) select.value = matched;
+      });
+    }
+
+    // Close CSV mapping modal
+    function closeCsvMappingModal() {
+      document.getElementById('csvMappingModal').style.display = 'none';
+    }
+
+    // Go to step 2 (preview)
+    function csvMappingNext() {
+      // Validate required fields
+      const lat = document.getElementById('csvMapLat').value;
+      const lon = document.getElementById('csvMapLon').value;
+
+      if (!lat || !lon) {
+        showStatus('Latitude and Longitude are required', false);
+        return;
+      }
+
+      // Generate preview
+      generateCsvPreview();
+
+      // Switch to step 2
+      document.getElementById('csvMappingStep1').style.display = 'none';
+      document.getElementById('csvMappingStep2').style.display = 'block';
+      document.getElementById('csvStep1Tab').style.borderBottom = 'none';
+      document.getElementById('csvStep1Tab').style.color = '#94a3b8';
+      document.getElementById('csvStep2Tab').style.borderBottom = '3px solid #8b5cf6';
+      document.getElementById('csvStep2Tab').style.color = '#7c3aed';
+      document.getElementById('csvBackBtn').style.display = 'inline-block';
+      document.getElementById('csvNextBtn').style.display = 'none';
+      document.getElementById('csvImportBtn').style.display = 'inline-block';
+    }
+
+    // Go back to step 1
+    function csvMappingBack() {
+      document.getElementById('csvMappingStep1').style.display = 'block';
+      document.getElementById('csvMappingStep2').style.display = 'none';
+      document.getElementById('csvStep1Tab').style.borderBottom = '3px solid #8b5cf6';
+      document.getElementById('csvStep1Tab').style.color = '#7c3aed';
+      document.getElementById('csvStep2Tab').style.borderBottom = 'none';
+      document.getElementById('csvStep2Tab').style.color = '#94a3b8';
+      document.getElementById('csvBackBtn').style.display = 'none';
+      document.getElementById('csvNextBtn').style.display = 'inline-block';
+      document.getElementById('csvImportBtn').style.display = 'none';
+    }
+
+    // Generate preview of mapped data
+    function generateCsvPreview() {
+      // Collect current mappings
+      csvMappings = {
+        lat: document.getElementById('csvMapLat').value,
+        lon: document.getElementById('csvMapLon').value,
+        sampleId: document.getElementById('csvMapSampleId').value,
+        field: document.getElementById('csvMapField').value
+      };
+
+      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      nutrients.forEach(n => {
+        const select = document.getElementById(`csvMap${n}`);
+        if (select && select.value) {
+          csvMappings[n] = select.value;
+        }
+      });
+
+      // Find mapped columns (non-empty values)
+      const mappedFields = Object.entries(csvMappings)
+        .filter(([key, val]) => val)
+        .map(([key, val]) => ({ standard: key, source: val }));
+
+      // Build preview table header
+      const thead = document.getElementById('csvPreviewHead');
+      thead.innerHTML = `<tr>${mappedFields.map(f =>
+        `<th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #e2e8f0;">
+          <div style="font-weight: 600; color: #1e293b;">${f.standard}</div>
+          <div style="font-size: 0.7rem; color: #64748b; font-weight: normal;">← ${f.source}</div>
+        </th>`
+      ).join('')}</tr>`;
+
+      // Build preview table body (first 5 rows)
+      const tbody = document.getElementById('csvPreviewBody');
+      const previewRows = csvParsedData.slice(0, 5);
+
+      tbody.innerHTML = previewRows.map(row => {
+        return `<tr>${mappedFields.map(f => {
+          let val = row[f.source] || '';
+          // Highlight empty required fields
+          const isEmpty = !val && (f.standard === 'lat' || f.standard === 'lon');
+          const style = isEmpty ? 'background: #fef2f2; color: #dc2626;' : '';
+          return `<td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; ${style}">${val || '-'}</td>`;
+        }).join('')}</tr>`;
+      }).join('');
+
+      // Update count and show warnings
+      document.getElementById('csvPreviewCount').textContent = `Total: ${csvParsedData.length} records`;
+
+      // Check for issues
+      const warnings = [];
+      let missingLatLon = 0;
+      csvParsedData.forEach(row => {
+        const lat = parseFloat(row[csvMappings.lat]);
+        const lon = parseFloat(row[csvMappings.lon]);
+        if (isNaN(lat) || isNaN(lon)) missingLatLon++;
+      });
+
+      if (missingLatLon > 0) {
+        warnings.push(`⚠️ ${missingLatLon} rows have missing or invalid coordinates and will be skipped`);
+      }
+
+      const warningsDiv = document.getElementById('csvPreviewWarnings');
+      if (warnings.length > 0) {
+        warningsDiv.innerHTML = warnings.map(w =>
+          `<div style="padding: 0.5rem; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 0.25rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: #92400e;">${w}</div>`
+        ).join('');
+      } else {
+        warningsDiv.innerHTML = `<div style="padding: 0.5rem; background: #dcfce7; border: 1px solid #22c55e; border-radius: 0.25rem; font-size: 0.85rem; color: #166534;">✓ All rows have valid coordinates</div>`;
+      }
+    }
+
+    // Perform the CSV import
+    async function csvImportConfirm() {
+      // Save mapping if requested
+      if (document.getElementById('csvSaveMapping').checked) {
+        const name = document.getElementById('csvMappingName').value.trim();
+        if (name) {
+          saveCsvMapping(name);
+        }
+      }
+
+      // Get year and depth from the form
+      const year = parseInt(document.getElementById('sampleYear').value) || new Date().getFullYear();
+      const depth = document.getElementById('sampleDepth').value || '6';
+
+      // Map the data
+      const samples = [];
+      let skipped = 0;
+
+      csvParsedData.forEach((row, idx) => {
+        const lat = parseFloat(row[csvMappings.lat]);
+        const lon = parseFloat(row[csvMappings.lon]);
+
+        if (isNaN(lat) || isNaN(lon)) {
+          skipped++;
+          return;
+        }
+
+        const sample = {
+          lat: lat,
+          lon: lon,
+          year: year,
+          depth: depth,
+          sampleId: csvMappings.sampleId ? (row[csvMappings.sampleId] || `S${idx + 1}`) : `S${idx + 1}`,
+          field: csvMappings.field ? (row[csvMappings.field] || 'Unknown') : 'Unknown'
+        };
+
+        // Add nutrient values
+        const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+        nutrients.forEach(n => {
+          if (csvMappings[n] && row[csvMappings[n]]) {
+            const val = parseFloat(row[csvMappings[n]]);
+            if (!isNaN(val) && val !== 0) {
+              sample[n] = val;
+            }
+          }
+        });
+
+        samples.push(sample);
+      });
+
+      if (samples.length === 0) {
+        showStatus('No valid samples to import', false);
+        return;
+      }
+
+      // Normalize data using aliases
+      samples.forEach(s => normalizeNutrientData(s));
+
+      // Add to sampleData
+      sampleData.push(...samples);
+
+      // Assign to fields if boundaries exist
+      if (Object.keys(fieldBoundaries).length > 0) {
+        assignSamplesToFields();
+      }
+
+      // Save data
+      await saveLocalData();
+      await saveToIndexedDB();
+
+      // Close modal
+      closeCsvMappingModal();
+
+      // Update UI
+      afterImportSuccess();
+
+      let msg = `✓ Imported ${samples.length} samples`;
+      if (skipped > 0) msg += ` (${skipped} rows skipped)`;
+      showStatus(msg, true);
+
+      // Sync to Sheets if signed in
+      if (SheetsAPI.isSignedIn) {
+        syncToSheets();
+      }
+    }
+
+    // Save CSV mapping profile
+    function saveCsvMapping(name) {
+      const saved = JSON.parse(localStorage.getItem('csvMappingProfiles') || '{}');
+      saved[name] = { ...csvMappings };
+      localStorage.setItem('csvMappingProfiles', JSON.stringify(saved));
+    }
+
+    // Load saved mappings dropdown
+    function loadSavedMappings() {
+      const saved = JSON.parse(localStorage.getItem('csvMappingProfiles') || '{}');
+      const names = Object.keys(saved);
+      const group = document.getElementById('savedMappingsGroup');
+      const select = document.getElementById('savedMappingSelect');
+
+      if (names.length === 0) {
+        group.style.display = 'none';
+        return;
+      }
+
+      group.style.display = 'block';
+      select.innerHTML = '<option value="">-- Select a saved mapping --</option>' +
+        names.map(n => `<option value="${n}">${n}</option>`).join('');
+    }
+
+    // Apply saved mapping
+    document.getElementById('savedMappingSelect').addEventListener('change', function() {
+      const name = this.value;
+      if (!name) return;
+      showStatus(`Mapping "${name}" will be applied when you open the column mapper`, true);
+    });
+
+    // Apply a saved mapping to the dropdowns
+    function applySavedMapping(name) {
+      const saved = JSON.parse(localStorage.getItem('csvMappingProfiles') || '{}');
+      const mapping = saved[name];
+      if (!mapping) {
+        autoMapColumns();
+        return;
+      }
+
+      // First auto-map to get defaults, then override with saved
+      autoMapColumns();
+
+      // Apply saved mappings - find matching headers
+      function findHeader(sourceCol) {
+        if (!sourceCol) return '';
+        // Check exact match first
+        if (csvHeaders.includes(sourceCol)) return sourceCol;
+        // Check case-insensitive
+        const lower = sourceCol.toLowerCase();
+        return csvHeaders.find(h => h.toLowerCase() === lower) || '';
+      }
+
+      // Required fields
+      if (mapping.lat) document.getElementById('csvMapLat').value = findHeader(mapping.lat);
+      if (mapping.lon) document.getElementById('csvMapLon').value = findHeader(mapping.lon);
+      if (mapping.sampleId) document.getElementById('csvMapSampleId').value = findHeader(mapping.sampleId);
+      if (mapping.field) document.getElementById('csvMapField').value = findHeader(mapping.field);
+
+      // Nutrient fields
+      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts'];
+      nutrients.forEach(n => {
+        if (mapping[n]) {
+          const select = document.getElementById(`csvMap${n}`);
+          if (select) select.value = findHeader(mapping[n]);
+        }
+      });
+    }
+
   </script>
   <div class="backup-footer" id="backupFooter">No backup yet</div>
 </body>

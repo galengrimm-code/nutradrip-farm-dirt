@@ -369,6 +369,14 @@
             </div>
           </div>
         </div>
+        <!-- Outlier Filter -->
+        <div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.375rem 0.75rem; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 0.375rem;">
+            <input type="checkbox" id="hideOutliersCheckbox" checked onchange="drawScatterPlot();" style="width: 16px; height: 16px;">
+            <span style="font-size: 0.85rem; color: #991b1b; font-weight: 500;">Hide outliers</span>
+          </label>
+          <span id="outlierFilterInfo" style="font-size: 0.8rem; color: #dc2626;"></span>
+        </div>
         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 600px;">
             <canvas id="scatterCanvas" width="900" height="500" style="background: white; border: 1px solid #e2e8f0; border-radius: 0.375rem; width: 100%; height: auto;"></canvas>
@@ -519,8 +527,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.26";
-    const BUILD_DATE = "2026-01-15T10:28:47";
+    const APP_VERSION = "v1.0.30";
+    const BUILD_DATE = "2026-01-15T11:09:09";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2082,6 +2090,18 @@
       ).join('');
     }
 
+    // Get crop-specific yield outlier limits
+    function getYieldOutlierLimits(cropFilter) {
+      const cropLower = (cropFilter || '').toLowerCase();
+      if (cropLower.includes('soy') || cropLower.includes('bean')) {
+        return { min: 20, max: 100 };  // Soybeans: 20-100 bu/ac
+      } else if (cropLower.includes('corn') || cropLower.includes('maize')) {
+        return { min: 50, max: 350 };  // Corn: 50-350 bu/ac
+      }
+      // Default to corn limits for unknown crops
+      return { min: 50, max: 350 };
+    }
+
     function getYieldDataPoints() {
       const cropFilter = document.getElementById('yieldCropSelect').value;
       const yearFilter = document.getElementById('yieldYearSelect').value;
@@ -2227,7 +2247,35 @@
       const ctx = canvas.getContext('2d');
       const nutrient = document.getElementById('scatterNutrientSelect').value;
       const yieldThreshold = parseFloat(document.getElementById('yieldThresholdInput').value) || 200;
-      const dataPoints = getYieldDataPoints();
+      const hideOutliers = document.getElementById('hideOutliersCheckbox').checked;
+      let dataPoints = getYieldDataPoints();
+
+      // Get crop-specific yield thresholds for outlier filtering
+      const cropFilter = document.getElementById('yieldCropSelect').value;
+      const yieldLimits = getYieldOutlierLimits(cropFilter);
+
+      // Filter out outliers if checkbox is checked
+      let outliersRemoved = 0;
+      if (hideOutliers) {
+        const beforeCount = dataPoints.length;
+        dataPoints = dataPoints.filter(d => {
+          return d.avgYield >= yieldLimits.min && d.avgYield <= yieldLimits.max;
+        });
+        outliersRemoved = beforeCount - dataPoints.length;
+      }
+
+      // Update outlier info display
+      const outlierInfoEl = document.getElementById('outlierFilterInfo');
+      if (outliersRemoved > 0) {
+        outlierInfoEl.textContent = `(${outliersRemoved} outliers hidden: yield <${yieldLimits.min} or >${yieldLimits.max} bu/ac)`;
+        outlierInfoEl.style.color = '#dc2626';
+      } else if (hideOutliers) {
+        outlierInfoEl.textContent = `(no outliers found)`;
+        outlierInfoEl.style.color = '#16a34a';
+      } else {
+        outlierInfoEl.textContent = '';
+        outlierInfoEl.style.color = '#dc2626';
+      }
 
       // Filter for valid data
       const validPoints = dataPoints.filter(d => {
@@ -3573,16 +3621,29 @@
         @media print {
           body { padding: 10px; }
 
-          /* Prevent breaking inside content cards */
-          .trend-card, .nutrient-card, .card, table, .summary {
+          /* Prevent breaking inside content cards and containers */
+          .trend-card, .nutrient-card, .card, table, .summary,
+          .model-summary, .key-findings, .data-table, .zone-summary,
+          .chart-container, .interpretation-section, .findings-grid,
+          .coef-table, .scatter-container, .threshold-box {
             page-break-inside: avoid;
             break-inside: avoid;
           }
 
           /* Keep headers with their following content */
-          h1, h2, h3 {
+          h1, h2, h3, h4 {
             page-break-after: avoid;
             break-after: avoid;
+          }
+
+          /* Force page breaks BEFORE major sections */
+          .new-section, .report-section {
+            page-break-before: always;
+            break-before: page;
+          }
+          .new-section:first-of-type, .report-section:first-of-type {
+            page-break-before: avoid;
+            break-before: avoid;
           }
 
           /* Prevent orphaned/widowed lines */
@@ -3591,17 +3652,39 @@
             widows: 3;
           }
 
-          /* Ensure graphs print properly */
+          /* Tables - keep rows together */
+          tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          /* Keep table header visible if table spans pages */
+          thead {
+            display: table-header-group;
+          }
+
+          /* Ensure graphs and charts print properly */
           .trend-graph { width: 100%; }
           .trend-graph svg { min-height: 220px; width: 100%; }
 
-          /* Force page breaks before major sections */
-          .report-section { page-break-before: always; break-before: page; }
-          .report-section:first-of-type { page-break-before: avoid; break-before: avoid; }
+          /* Charts and visualizations - don't cut */
+          svg, canvas, .chart, .bar-chart {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            max-height: 400px;
+          }
 
           /* Scatter plot and analysis boxes */
           canvas { page-break-inside: avoid; break-inside: avoid; }
           #thresholdAnalysis { page-break-inside: avoid; break-inside: avoid; }
+
+          /* MVR specific elements */
+          .significance-chart { page-break-inside: avoid; break-inside: avoid; }
+          .mvr-coefficients { page-break-inside: avoid; break-inside: avoid; }
+
+          /* Spatial Change elements */
+          .zone-card { page-break-inside: avoid; break-inside: avoid; }
+          .change-grid { page-break-inside: avoid; break-inside: avoid; }
         }
       `;
     }
