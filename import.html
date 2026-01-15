@@ -323,8 +323,11 @@
         </div>
       </div>
 
-      <!-- Scan Button -->
-      <button class="button" id="scanOutliersBtn" onclick="scanForOutliers()" style="background: #dc2626; color: white; margin-bottom: 1rem;">🔍 Scan for Outliers</button>
+      <!-- Scan Buttons -->
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <button class="button" id="scanOutliersBtn" onclick="scanForOutliers()" style="background: #dc2626; color: white;">🔍 Scan for Outliers</button>
+        <button class="button" onclick="scanOrphanedSamples()" style="background: #7c3aed; color: white;">📍 Find Samples Outside Boundaries</button>
+      </div>
 
       <!-- Scan Results (hidden by default) -->
       <div id="outlierResults" style="display: none;">
@@ -532,8 +535,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.37";
-    const BUILD_DATE = "2026-01-15T11:53:32";
+    const APP_VERSION = "v1.0.38";
+    const BUILD_DATE = "2026-01-15T11:56:17";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3042,6 +3045,110 @@
       // Display results
       displayOutlierResults();
       loadAuditLog();
+    }
+
+    // Scan for samples outside all field boundaries
+    async function scanOrphanedSamples() {
+      if (Object.keys(fieldBoundaries).length === 0) {
+        showStatus('No field boundaries loaded. Import boundaries first.', false);
+        return;
+      }
+
+      showStatus('Scanning for samples outside boundaries...', true);
+      detectedOutliers = [];
+
+      await loadLocalData();
+
+      let orphanedCount = 0;
+
+      sampleData.forEach((sample, index) => {
+        if (!sample.lat || !sample.lon) return;
+
+        let isInsideAnyBoundary = false;
+
+        // Check if sample is inside any field boundary
+        for (const [fieldName, polys] of Object.entries(fieldBoundaries)) {
+          const polyArray = Array.isArray(polys[0]?.[0]) ? polys : [polys];
+          for (const poly of polyArray) {
+            if (isPointInOrNearPolygon([sample.lat, sample.lon], poly, 0)) {
+              isInsideAnyBoundary = true;
+              break;
+            }
+          }
+          if (isInsideAnyBoundary) break;
+        }
+
+        if (!isInsideAnyBoundary) {
+          orphanedCount++;
+          detectedOutliers.push({
+            type: 'sample',
+            index,
+            field: sample.field || 'Unassigned',
+            year: sample.year || 'N/A',
+            sampleId: sample.sampleId || sample.SAMPLE_ID || `#${index + 1}`,
+            dataType: 'Outside Boundary',
+            issue: 'Not inside any field',
+            value: `${sample.lat.toFixed(5)}, ${sample.lon.toFixed(5)}`,
+            attribute: 'location'
+          });
+        }
+      });
+
+      if (orphanedCount === 0) {
+        showStatus('✓ All samples are inside field boundaries!', true);
+      } else {
+        showStatus(`Found ${orphanedCount} samples outside boundaries`, true);
+      }
+
+      displayOrphanedResults();
+      loadAuditLog();
+    }
+
+    function displayOrphanedResults() {
+      const resultsDiv = document.getElementById('outlierResults');
+      const summaryDiv = document.getElementById('outlierSummary');
+      const tableBody = document.getElementById('outlierTableBody');
+
+      if (detectedOutliers.length === 0) {
+        resultsDiv.style.display = 'block';
+        summaryDiv.innerHTML = '<div style="color: #166534; font-weight: 600;">✓ All samples are inside field boundaries!</div>';
+        tableBody.innerHTML = '';
+        return;
+      }
+
+      summaryDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span style="font-weight: 700; color: #7c3aed; font-size: 1.25rem;">📍 Found ${detectedOutliers.length} samples outside boundaries</span>
+            <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.25rem;">
+              These samples are not inside any field boundary - possibly from fields no longer farmed or boundary changes.
+            </div>
+          </div>
+          <div style="font-size: 0.75rem; color: #64748b;">
+            Review and select items to delete
+          </div>
+        </div>
+      `;
+
+      // Build table rows
+      tableBody.innerHTML = detectedOutliers.map((outlier, idx) => `
+        <tr style="border-bottom: 1px solid #e9d5ff;">
+          <td style="padding: 0.5rem;">
+            <input type="checkbox" class="outlier-checkbox" data-index="${idx}" checked>
+          </td>
+          <td style="padding: 0.5rem;">${outlier.field}</td>
+          <td style="padding: 0.5rem;">${outlier.year}</td>
+          <td style="padding: 0.5rem;">
+            <span style="padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.7rem; background: #f3e8ff; color: #7c3aed;">
+              ${outlier.dataType}
+            </span>
+          </td>
+          <td style="padding: 0.5rem; color: #7c3aed;">${outlier.issue}</td>
+          <td style="padding: 0.5rem; font-family: monospace; font-size: 0.7rem;">${outlier.value}</td>
+        </tr>
+      `).join('');
+
+      resultsDiv.style.display = 'block';
     }
 
     function displayOutlierResults() {
