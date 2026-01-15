@@ -184,12 +184,13 @@
           <input type="file" id="csvSampleFile" accept=".csv">
           <small>CSV file from soil testing lab</small>
         </div>
-        <div id="csvFileInfo" style="display: none; margin-bottom: 1rem; padding: 0.75rem; background: #f0fdf4; border: 1px solid #22c55e; border-radius: 0.375rem;">
+        <div id="csvFileInfo" style="display: none; margin-bottom: 0.5rem; padding: 0.75rem; background: #f0fdf4; border: 1px solid #22c55e; border-radius: 0.375rem;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span id="csvFileName" style="font-weight: 500; color: #166534;"></span>
             <span id="csvRowCount" style="font-size: 0.8rem; color: #64748b;"></span>
           </div>
         </div>
+        <div id="csvColumnList" style="display: none; margin-bottom: 1rem; padding: 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.375rem; font-size: 0.8rem; color: #475569; line-height: 1.8;"></div>
 
         <!-- Saved Mappings Dropdown -->
         <div class="form-group" id="savedMappingsGroup" style="display: none;">
@@ -517,8 +518,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.32";
-    const BUILD_DATE = "2026-01-15T11:29:54";
+    const APP_VERSION = "v1.0.33";
+    const BUILD_DATE = "2026-01-15T11:40:58";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3260,19 +3261,36 @@
         // Show file info
         document.getElementById('csvFileInfo').style.display = 'block';
         document.getElementById('csvFileName').textContent = file.name;
-        document.getElementById('csvRowCount').textContent = `${csvParsedData.length} rows`;
+        document.getElementById('csvRowCount').textContent = `${csvParsedData.length} rows, ${csvHeaders.length} columns`;
+
+        // Show detected columns
+        const colList = document.getElementById('csvColumnList');
+        if (colList) {
+          colList.innerHTML = `<strong>Detected columns:</strong> ${csvHeaders.map(h => `<code style="background:#e2e8f0;padding:0.125rem 0.375rem;border-radius:0.25rem;margin:0.125rem;display:inline-block;">${h}</code>`).join(' ')}`;
+          colList.style.display = 'block';
+        }
 
         // Enable mapping button
         document.getElementById('openCsvMappingBtn').disabled = false;
 
+        console.log('CSV loaded:', file.name, '- Columns:', csvHeaders);
+
       } catch (err) {
         showStatus('Error reading CSV: ' + err.message, false);
+        console.error('CSV parse error:', err);
       }
     });
 
     // Parse CSV without applying mappings - just raw data
     function parseCSVRaw(text) {
-      const lines = text.trim().split('\n');
+      // Remove BOM (Byte Order Mark) if present - common in Excel CSVs
+      if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1);
+        console.log('CSV: Removed BOM from file');
+      }
+
+      // Normalize line endings and split
+      const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
       if (lines.length < 2) return { headers: [], rows: [] };
 
       // Handle quoted values properly
@@ -3286,25 +3304,34 @@
           if (char === '"') {
             inQuotes = !inQuotes;
           } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
+            result.push(current);
             current = '';
           } else {
             current += char;
           }
         }
-        result.push(current.trim());
+        result.push(current);
         return result;
       }
 
-      const headers = parseLine(lines[0]).map(h => h.replace(/"/g, ''));
+      // Parse headers - trim whitespace and quotes, filter empty
+      const rawHeaders = parseLine(lines[0]);
+      const headers = rawHeaders
+        .map(h => h.trim().replace(/^"|"$/g, '').trim())  // Remove quotes and trim
+        .filter(h => h.length > 0);  // Remove empty headers
+
+      console.log('CSV Headers detected:', headers);
+      console.log('CSV Headers count:', headers.length);
+
       const rows = [];
 
       for (let i = 1; i < lines.length; i++) {
         const values = parseLine(lines[i]);
-        if (values.length > 0 && values.some(v => v)) { // Skip empty rows
+        if (values.length > 0 && values.some(v => v && v.trim())) { // Skip empty rows
           const row = {};
           headers.forEach((h, idx) => {
-            row[h] = values[idx] || '';
+            const val = values[idx] || '';
+            row[h] = val.trim().replace(/^"|"$/g, '');  // Trim and remove quotes
           });
           rows.push(row);
         }
