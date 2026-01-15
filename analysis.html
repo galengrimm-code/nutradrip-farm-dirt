@@ -427,8 +427,18 @@
             <div id="multiSummaryContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;"></div>
           </div>
 
-          <!-- Coefficients Table -->
-          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; overflow: hidden; margin-bottom: 1rem;">
+          <!-- Interpretation / Key Findings - BEFORE the table -->
+          <div id="multiInterpretation" style="margin-bottom: 1rem;"></div>
+
+          <!-- Collinearity Warning -->
+          <div id="multiCollinearityWarning" style="display: none; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #92400e; font-size: 0.9rem;">⚠️ Collinearity Warning</h4>
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #78350f;">Some variables are highly correlated with each other, which can make coefficient estimates unreliable.</p>
+            <div id="collinearityDetails" style="font-size: 0.8rem; color: #78350f;"></div>
+          </div>
+
+          <!-- Coefficients Table - AFTER interpretation -->
+          <div id="multiCoeffTableContainer" style="background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; overflow: hidden; margin-bottom: 1rem;">
             <div style="background: #f8fafc; padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0;">
               <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;">📈 Regression Coefficients</h4>
               <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: #64748b;">Each coefficient shows the nutrient's effect on yield while holding other nutrients constant</p>
@@ -451,19 +461,6 @@
             <div style="padding: 0.5rem 1rem; background: #f8fafc; font-size: 0.75rem; color: #64748b;">
               Significance: *** p < 0.001, ** p < 0.01, * p < 0.05, . p < 0.1
             </div>
-          </div>
-
-          <!-- Collinearity Warning -->
-          <div id="multiCollinearityWarning" style="display: none; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
-            <h4 style="margin: 0 0 0.5rem 0; color: #92400e; font-size: 0.9rem;">⚠️ Collinearity Warning</h4>
-            <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #78350f;">Some variables are highly correlated with each other, which can make coefficient estimates unreliable.</p>
-            <div id="collinearityDetails" style="font-size: 0.8rem; color: #78350f;"></div>
-          </div>
-
-          <!-- Interpretation Help -->
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
-            <h4 style="margin: 0 0 0.75rem 0; color: #1e293b; font-size: 0.9rem;">💡 How to Interpret</h4>
-            <div id="multiInterpretation" style="font-size: 0.8rem; color: #475569;"></div>
           </div>
 
           <!-- Yield Predictor -->
@@ -522,8 +519,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.25";
-    const BUILD_DATE = "2026-01-15T09:47:03";
+    const APP_VERSION = "v1.0.26";
+    const BUILD_DATE = "2026-01-15T10:28:47";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3680,23 +3677,102 @@
       const year = document.getElementById('yieldYearSelect').value;
       const field = document.getElementById('yieldFieldSelect').value;
       const operationName = localStorage.getItem('operationName') || 'Soil Analysis';
-      const yieldData = document.getElementById('yieldContent').innerHTML;
 
       // Format year label
       let yearLabel = year;
       if (year === 'avg') yearLabel = 'All (Averaged)';
       else if (year === 'combined') yearLabel = 'All (Combined)';
 
+      // Detect which tab is active
+      const isMultiTab = document.getElementById('yieldMultiTab').style.display !== 'none';
+
+      let reportContent = '';
+      let reportTitle = '';
+
+      if (isMultiTab) {
+        // Export MVR results
+        reportTitle = 'Multivariate Regression Analysis';
+
+        // Check if model has been run
+        if (!lastMultiModel) {
+          alert('Please run the regression analysis first before exporting.');
+          return;
+        }
+
+        // Get selected variables
+        const selectedVars = Array.from(document.querySelectorAll('.multi-var-checkbox:checked'))
+          .map(cb => CONFIG.NUTRIENT_NAMES[cb.value] || cb.value);
+
+        // Model Summary
+        reportContent = `
+          <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #166534;">Model Summary</h3>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; text-align: center;">
+              <div><div style="font-size: 1.5rem; font-weight: 700; color: #166534;">${(lastMultiModel.R2 * 100).toFixed(1)}%</div><div style="font-size: 0.8rem; color: #64748b;">R² (Variance Explained)</div></div>
+              <div><div style="font-size: 1.5rem; font-weight: 700; color: #1e40af;">${(lastMultiModel.adjR2 * 100).toFixed(1)}%</div><div style="font-size: 0.8rem; color: #64748b;">Adjusted R²</div></div>
+              <div><div style="font-size: 1.5rem; font-weight: 700; color: #7c3aed;">${lastMultiModel.Fstat.toFixed(2)}</div><div style="font-size: 0.8rem; color: #64748b;">F-statistic</div></div>
+              <div><div style="font-size: 1.5rem; font-weight: 700; color: #475569;">${lastMultiModel.n}</div><div style="font-size: 0.8rem; color: #64748b;">Observations</div></div>
+            </div>
+          </div>
+
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+            <h3 style="margin: 0 0 0.5rem 0; color: #1e293b;">Variables Included</h3>
+            <p style="margin: 0; color: #475569;">${selectedVars.join(', ')}</p>
+          </div>
+
+          ${document.getElementById('multiInterpretation').innerHTML}
+
+          <div style="margin-top: 1rem;">
+            <h3 style="margin: 0 0 0.75rem 0; color: #1e293b;">Regression Coefficients</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="background: #f1f5f9;">
+                  <th style="padding: 0.75rem; text-align: left; border: 1px solid #e2e8f0;">Variable</th>
+                  <th style="padding: 0.75rem; text-align: right; border: 1px solid #e2e8f0;">Coefficient</th>
+                  <th style="padding: 0.75rem; text-align: right; border: 1px solid #e2e8f0;">Std Error</th>
+                  <th style="padding: 0.75rem; text-align: right; border: 1px solid #e2e8f0;">t-value</th>
+                  <th style="padding: 0.75rem; text-align: right; border: 1px solid #e2e8f0;">p-value</th>
+                  <th style="padding: 0.75rem; text-align: center; border: 1px solid #e2e8f0;">Sig.</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lastMultiModel.vars.map((v, i) => {
+                  const coef = lastMultiModel.beta[i];
+                  const se = lastMultiModel.seBeta[i];
+                  const t = lastMultiModel.tStats[i];
+                  const p = lastMultiModel.pValues[i];
+                  const sig = p < 0.001 ? '***' : p < 0.01 ? '**' : p < 0.05 ? '*' : p < 0.1 ? '.' : '-';
+                  const bgColor = p < 0.05 ? '#f0fdf4' : '';
+                  return `<tr style="background: ${bgColor};">
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0;">${v === 'Intercept' ? '(Intercept)' : CONFIG.NUTRIENT_NAMES[v] || v}</td>
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${coef >= 0 ? '+' : ''}${coef.toFixed(4)}</td>
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${se.toFixed(4)}</td>
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${t.toFixed(3)}</td>
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${p < 0.0001 ? '<0.0001' : p.toFixed(4)}</td>
+                    <td style="padding: 0.5rem; border: 1px solid #e2e8f0; text-align: center; font-weight: 700;">${sig}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+            <p style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">Significance: *** p < 0.001, ** p < 0.01, * p < 0.05, . p < 0.1</p>
+          </div>
+        `;
+      } else {
+        // Export Individual Correlations
+        reportTitle = 'Individual Correlations';
+        reportContent = document.getElementById('yieldContent').innerHTML;
+      }
+
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`<!DOCTYPE html><html><head><title>${operationName} - Yield Correlation</title><style>${getReportStyles()}</style></head><body>
-        <h1>${operationName} - Yield Correlation Analysis</h1>
+        <h1>${operationName} - Yield Correlation: ${reportTitle}</h1>
         <p>Generated: ${new Date().toLocaleString()}</p>
         <div class="summary">
           <div class="summary-box"><div class="number">${crop === 'all' ? 'All' : crop}</div><div class="label">Crop</div></div>
           <div class="summary-box"><div class="number">${yearLabel}</div><div class="label">Yield Year</div></div>
           <div class="summary-box"><div class="number">${field === 'all' ? 'All' : field}</div><div class="label">Field</div></div>
         </div>
-        ${yieldData}
+        ${reportContent}
         <div class="footer">Soil Sample Analysis App</div>
       </body></html>`);
       printWindow.document.close();
