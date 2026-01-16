@@ -527,8 +527,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.44";
-    const BUILD_DATE = "2026-01-15T17:26:34";
+    const APP_VERSION = "v1.0.47";
+    const BUILD_DATE = "2026-01-15T18:35:46";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -591,6 +591,7 @@
 
     let tokenClient, accessToken = null, tokenExpiry = null;
     let sampleData = [];
+    let yieldData = []; // Raw yield points (for getting available yield years)
     let year1 = null, year2 = null;
     let selectedComparisonFields = new Set(); // Track which fields are included in comparison
 
@@ -665,7 +666,7 @@
 
     // IndexedDB for large datasets
     const DB_NAME = 'SoilAppDB';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2; // v2: Added yield object store
 
     function openDB() {
       return new Promise((resolve, reject) => {
@@ -677,6 +678,7 @@
           const db = e.target.result;
           if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
           if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
         };
       });
     }
@@ -684,14 +686,29 @@
     async function loadFromIndexedDB() {
       try {
         const db = await openDB();
-        const tx = db.transaction(['samples'], 'readonly');
+        // Check if yield store exists (may not on older DBs)
+        const storeNames = Array.from(db.objectStoreNames);
+        const hasYield = storeNames.includes('yield');
+        const stores = hasYield ? ['samples', 'yield'] : ['samples'];
+        const tx = db.transaction(stores, 'readonly');
+
         const samplesData = await new Promise((resolve, reject) => {
           const req = tx.objectStore('samples').get('all');
           req.onsuccess = () => resolve(req.result?.data || []);
           req.onerror = reject;
         });
+
+        let yieldDataResult = [];
+        if (hasYield) {
+          yieldDataResult = await new Promise((resolve, reject) => {
+            const req = tx.objectStore('yield').get('all');
+            req.onsuccess = () => resolve(req.result?.data || []);
+            req.onerror = reject;
+          });
+        }
+
         db.close();
-        return samplesData;
+        return { samples: samplesData, yield: yieldDataResult };
       } catch (e) { return null; }
     }
 
@@ -699,14 +716,18 @@
       try {
         // Check IndexedDB first if flagged
         if (localStorage.getItem('usingIndexedDB') === 'true') {
-          const idbSamples = await loadFromIndexedDB();
-          if (idbSamples && idbSamples.length > 0) {
-            sampleData = idbSamples;
-            console.log('Loaded from IndexedDB:', sampleData.length, 'samples');
+          const idbData = await loadFromIndexedDB();
+          if (idbData && idbData.samples && idbData.samples.length > 0) {
+            sampleData = idbData.samples;
+            yieldData = idbData.yield || [];
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples,', yieldData.length, 'yield points');
           }
         } else {
           const saved = localStorage.getItem('soilSamples');
+          const yieldSaved = localStorage.getItem('yieldData');
           if (saved) sampleData = JSON.parse(saved);
+          if (yieldSaved) yieldData = JSON.parse(yieldSaved);
+          console.log('Loaded from localStorage:', sampleData.length, 'samples,', yieldData.length, 'yield points');
         }
       } catch (e) { console.error(e); }
       populateSelectors();
@@ -750,8 +771,18 @@
       // Yield selectors
       const yieldYearSel = document.getElementById('yieldYearSelect');
       const yieldYears = getYieldYears();
-      yieldYearSel.innerHTML = '<option value="avg">All Years (Average)</option><option value="combined">All Years (Combined)</option>';
-      yieldYears.forEach(y => { yieldYearSel.innerHTML += `<option value="${y}">${y}</option>`; });
+      const totalSamplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).length;
+      yieldYearSel.innerHTML = `<option value="avg">All Years (Average) - ${totalSamplesWithYield.toLocaleString()} samples</option>`;
+      yieldYearSel.innerHTML += `<option value="combined">All Years (Combined) - ${totalSamplesWithYield.toLocaleString()} samples</option>`;
+      yieldYears.forEach(y => {
+        if (y.count > 0) {
+          // Year has matched yield data
+          yieldYearSel.innerHTML += `<option value="${y.year}">${y.year} (${y.count.toLocaleString()} samples)</option>`;
+        } else if (y.rawCount > 0) {
+          // Year has raw yield data but not matched to samples
+          yieldYearSel.innerHTML += `<option value="${y.year}" disabled>${y.year} - ${y.rawCount.toLocaleString()} yield pts (not matched)</option>`;
+        }
+      });
 
       // Soil sample year selector
       const soilYearSel = document.getElementById('soilYearSelect');
@@ -844,13 +875,46 @@
     }
     
     function getYieldYears() {
-      const years = new Set();
+      const yearCounts = {};  // Matched samples with yield correlations
+      const rawYearCounts = {}; // Raw yield points by year (may not be matched)
+
+      // Count matched yield correlations on soil samples
       sampleData.forEach(s => {
         if (s.yieldCorrelations) {
-          Object.keys(s.yieldCorrelations).forEach(y => years.add(parseInt(y)));
+          Object.keys(s.yieldCorrelations).forEach(y => {
+            const year = parseInt(y);
+            yearCounts[year] = (yearCounts[year] || 0) + 1;
+          });
         }
       });
-      return [...years].sort((a, b) => b - a);
+
+      // Also check raw yieldData for unmatched years
+      if (yieldData && yieldData.length > 0) {
+        yieldData.forEach(y => {
+          if (y.year) {
+            rawYearCounts[y.year] = (rawYearCounts[y.year] || 0) + 1;
+          }
+        });
+      }
+
+      // Debug logging
+      console.log('=== YIELD YEARS DEBUG ===');
+      console.log('Years in yieldCorrelations (matched):', yearCounts);
+      console.log('Years in raw yieldData:', rawYearCounts);
+      console.log('Total samples:', sampleData.length);
+      console.log('Total yield points:', yieldData.length);
+      console.log('Samples with yieldCorrelations:', sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0).length);
+
+      // Merge: include years from both matched and raw data
+      const allYears = new Set([...Object.keys(yearCounts), ...Object.keys(rawYearCounts)]);
+      return Array.from(allYears)
+        .map(y => parseInt(y))
+        .sort((a, b) => b - a) // Sort newest first
+        .map(year => ({
+          year,
+          count: yearCounts[year] || 0,
+          rawCount: rawYearCounts[year] || 0
+        }));
     }
 
     function setupTabs() {

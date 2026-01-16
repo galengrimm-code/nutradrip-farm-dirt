@@ -680,15 +680,29 @@
               <div class="shp-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 500;">Sample ID <span style="font-weight: 400; color: #64748b;">← attribute:</span></label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
-                  <select id="shpMapSampleId" class="shp-map-select" style="flex: 1;"></select>
+                  <select id="shpMapSampleId" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('SampleId'); updateUnmappedFromDropdowns();"></select>
                   <span id="shpPreviewSampleId" class="shp-preview-values"></span>
                 </div>
               </div>
               <div class="shp-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 500;">Field Name <span style="font-weight: 400; color: #64748b;">← attribute:</span></label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
-                  <select id="shpMapField" class="shp-map-select" style="flex: 1;"></select>
+                  <select id="shpMapField" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('Field'); updateUnmappedFromDropdowns();"></select>
                   <span id="shpPreviewField" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="shp-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Sample Year <span style="font-weight: 400; color: #64748b;">← attribute:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="shpMapYear" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('Year'); updateUnmappedFromDropdowns();"></select>
+                  <span id="shpPreviewYear" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="shp-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Sample Depth <span style="font-weight: 400; color: #64748b;">← attribute:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="shpMapDepth" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('Depth'); updateUnmappedFromDropdowns();"></select>
+                  <span id="shpPreviewDepth" class="shp-preview-values"></span>
                 </div>
               </div>
             </div>
@@ -777,8 +791,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.44";
-    const BUILD_DATE = "2026-01-15T17:26:34";
+    const APP_VERSION = "v1.0.47";
+    const BUILD_DATE = "2026-01-15T18:35:46";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -921,7 +935,7 @@
 
     // IndexedDB for large datasets (localStorage has ~5MB limit)
     const DB_NAME = 'SoilAppDB';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2; // v2: Added yield object store
     let indexedDBAvailable = false;
 
     function openDB() {
@@ -944,6 +958,9 @@
           if (!db.objectStoreNames.contains('boundaries')) {
             db.createObjectStore('boundaries', { keyPath: 'id' });
           }
+          if (!db.objectStoreNames.contains('yield')) {
+            db.createObjectStore('yield', { keyPath: 'id' });
+          }
         };
       });
     }
@@ -951,9 +968,10 @@
     async function saveToIndexedDB() {
       try {
         const db = await openDB();
-        const tx = db.transaction(['samples', 'boundaries'], 'readwrite');
+        const tx = db.transaction(['samples', 'boundaries', 'yield'], 'readwrite');
         const samplesStore = tx.objectStore('samples');
         const boundariesStore = tx.objectStore('boundaries');
+        const yieldStore = tx.objectStore('yield');
 
         // Clear and save samples
         await new Promise((resolve, reject) => {
@@ -979,9 +997,21 @@
           putReq.onerror = reject;
         });
 
+        // Clear and save yield data
+        await new Promise((resolve, reject) => {
+          const clearReq = yieldStore.clear();
+          clearReq.onsuccess = resolve;
+          clearReq.onerror = reject;
+        });
+        await new Promise((resolve, reject) => {
+          const putReq = yieldStore.put({ id: 'all', data: yieldData });
+          putReq.onsuccess = resolve;
+          putReq.onerror = reject;
+        });
+
         db.close();
         localStorage.setItem('usingIndexedDB', 'true');
-        console.log('Data saved to IndexedDB');
+        console.log('Data saved to IndexedDB (samples:', sampleData.length, ', yield:', yieldData.length, ')');
         return true;
       } catch (e) {
         console.error('IndexedDB save failed:', e);
@@ -992,7 +1022,11 @@
     async function loadFromIndexedDB() {
       try {
         const db = await openDB();
-        const tx = db.transaction(['samples', 'boundaries'], 'readonly');
+        // Check if yield store exists (may not on older DBs)
+        const storeNames = Array.from(db.objectStoreNames);
+        const hasYield = storeNames.includes('yield');
+        const stores = hasYield ? ['samples', 'boundaries', 'yield'] : ['samples', 'boundaries'];
+        const tx = db.transaction(stores, 'readonly');
         const samplesStore = tx.objectStore('samples');
         const boundariesStore = tx.objectStore('boundaries');
 
@@ -1008,8 +1042,18 @@
           req.onerror = reject;
         });
 
+        let yieldDataResult = [];
+        if (hasYield) {
+          const yieldStore = tx.objectStore('yield');
+          yieldDataResult = await new Promise((resolve, reject) => {
+            const req = yieldStore.get('all');
+            req.onsuccess = () => resolve(req.result?.data || []);
+            req.onerror = reject;
+          });
+        }
+
         db.close();
-        return { samples: samplesData, boundaries: boundariesData };
+        return { samples: samplesData, boundaries: boundariesData, yield: yieldDataResult };
       } catch (e) {
         console.error('IndexedDB load failed:', e);
         return null;
@@ -1024,15 +1068,19 @@
           if (idbData && idbData.samples.length > 0) {
             sampleData = idbData.samples;
             fieldBoundaries = idbData.boundaries;
-            console.log('Loaded from IndexedDB:', sampleData.length, 'samples');
+            yieldData = idbData.yield || [];
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples,', yieldData.length, 'yield points');
             return;
           }
         }
         // Fallback to localStorage
         const s = localStorage.getItem('soilSamples');
         const b = localStorage.getItem('fieldBoundaries');
+        const y = localStorage.getItem('yieldData');
         if (s) sampleData = JSON.parse(s);
         if (b) fieldBoundaries = JSON.parse(b);
+        if (y) yieldData = JSON.parse(y);
+        console.log('Loaded from localStorage:', sampleData.length, 'samples,', yieldData.length, 'yield points');
       } catch (e) {
         console.error('Load error:', e);
       }
@@ -1043,16 +1091,19 @@
       try {
         const dataStr = JSON.stringify(sampleData);
         const boundariesStr = JSON.stringify(fieldBoundaries);
+        const yieldStr = JSON.stringify(yieldData);
 
         // Check if data is likely too large for localStorage (~4MB limit with safety margin)
-        if (dataStr.length + boundariesStr.length > 4000000) {
+        const totalSize = dataStr.length + boundariesStr.length + yieldStr.length;
+        if (totalSize > 4000000) {
           throw new Error('Data too large for localStorage');
         }
 
         localStorage.setItem('soilSamples', dataStr);
         localStorage.setItem('fieldBoundaries', boundariesStr);
+        localStorage.setItem('yieldData', yieldStr);
         localStorage.removeItem('usingIndexedDB');
-        console.log('Data saved to localStorage');
+        console.log('Data saved to localStorage:', sampleData.length, 'samples,', yieldData.length, 'yield points');
       } catch (e) {
         // localStorage quota exceeded or data too large - use IndexedDB
         console.log('localStorage quota exceeded, switching to IndexedDB...');
@@ -1061,6 +1112,7 @@
           // Clear localStorage to free up space
           localStorage.removeItem('soilSamples');
           localStorage.removeItem('fieldBoundaries');
+          localStorage.removeItem('yieldData');
           showStatus('Data saved (using IndexedDB for large dataset)', true);
         } else {
           showStatus('Warning: Could not save data locally. Data is synced to Google Sheets.', false);
@@ -4201,15 +4253,43 @@
 
     function populateShpMappingDropdowns() {
       function escapeHtml(str) {
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        // Escape HTML special characters AND single quotes for safe attribute values
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
       }
 
+      // Debug: log all attributes being added to dropdowns
+      console.log('=== SHP DROPDOWN DEBUG ===');
+      console.log('Total attributes to add:', shpAttributes.length);
+      console.log('All attributes:', shpAttributes);
+
+      // Build options - include ALL attributes
       const options = '<option value="">(skip)</option>' +
-        shpAttributes.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        shpAttributes.map((a, i) => {
+          const escaped = escapeHtml(a);
+          // Debug first few and any with special chars
+          if (i < 5 || /[^a-zA-Z0-9_]/.test(a)) {
+            console.log(`  Option ${i}: "${a}" -> escaped: "${escaped}"`);
+          }
+          return `<option value="${escaped}">${escaped}</option>`;
+        }).join('');
+
+      console.log('Options HTML length:', options.length);
+      console.log('Option count (should be', shpAttributes.length + 1, '):', (options.match(/<option/g) || []).length);
 
       // Required fields
       document.getElementById('shpMapSampleId').innerHTML = options;
       document.getElementById('shpMapField').innerHTML = options;
+      document.getElementById('shpMapYear').innerHTML = options;
+      document.getElementById('shpMapDepth').innerHTML = options;
+
+      // Debug: verify options were added
+      const sampleIdSelect = document.getElementById('shpMapSampleId');
+      console.log('SampleId dropdown option count:', sampleIdSelect.options.length);
 
       // Nutrient fields
       const nutrientContainer = document.getElementById('shpNutrientMappings');
@@ -4223,12 +4303,21 @@
         div.innerHTML = `
           <label style="font-size: 0.8rem; font-weight: 600; color: #166534;">${nutrient}</label>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <select id="shpMap${nutrient}" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('${nutrient}')">${options}</select>
+            <select id="shpMap${nutrient}" class="shp-map-select" style="flex: 1;" onchange="updateShpPreview('${nutrient}'); updateUnmappedFromDropdowns();">${options}</select>
             <span id="shpPreview${nutrient}" class="shp-preview-values"></span>
           </div>
         `;
         nutrientContainer.appendChild(div);
       });
+
+      // Final debug check
+      const phSelect = document.getElementById('shpMapPH');
+      if (phSelect) {
+        console.log('pH dropdown option count:', phSelect.options.length);
+        // List all options to verify ALL attributes are present
+        const allOptionValues = Array.from(phSelect.options).map(o => o.value);
+        console.log('pH ALL options:', allOptionValues);
+      }
     }
 
     function autoMapShpColumns() {
@@ -4237,6 +4326,8 @@
       // ID aliases
       const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid', 'org_id', 'objectid', 'sample id'];
       const fieldAliases = ['field', 'fieldname', 'field_name', 'farm', 'farmname', 'name', 'farm_field'];
+      const yearAliases = ['year', 'sampleyr', 'sample_year', 'cropyear', 'crop_year', 'cropyr', 'sampleyear', 'sampledate', 'sample_date', 'date'];
+      const depthAliases = ['depth', 'sampledepth', 'sample_depth', 'depth_in', 'depthin', 'depthunits'];
 
       function findMatch(aliasList) {
         for (const attr of shpAttributes) {
@@ -4249,6 +4340,8 @@
       // Map required fields
       document.getElementById('shpMapSampleId').value = findMatch(idAliases);
       document.getElementById('shpMapField').value = findMatch(fieldAliases);
+      document.getElementById('shpMapYear').value = findMatch(yearAliases);
+      document.getElementById('shpMapDepth').value = findMatch(depthAliases);
 
       // Extended aliases for lab formats
       const labAliases = {
@@ -4313,12 +4406,18 @@
       // Also mark required fields as mapped
       const sampleIdVal = document.getElementById('shpMapSampleId').value;
       const fieldVal = document.getElementById('shpMapField').value;
+      const yearVal = document.getElementById('shpMapYear').value;
+      const depthVal = document.getElementById('shpMapDepth').value;
       if (sampleIdVal) mappedAttrs.add(sampleIdVal);
       if (fieldVal) mappedAttrs.add(fieldVal);
+      if (yearVal) mappedAttrs.add(yearVal);
+      if (depthVal) mappedAttrs.add(depthVal);
 
       // Update preview for required fields
       updateShpPreview('SampleId');
       updateShpPreview('Field');
+      updateShpPreview('Year');
+      updateShpPreview('Depth');
 
       // Show unmapped attributes
       showUnmappedAttributes(mappedAttrs);
@@ -4374,6 +4473,30 @@
 
       section.style.display = 'block';
       list.innerHTML = unmapped.map(attr => `<span class="shp-unmapped-chip">${attr}</span>`).join('');
+    }
+
+    function updateUnmappedFromDropdowns() {
+      // Collect all currently mapped attributes from dropdowns
+      const mappedAttrs = new Set();
+      const nutrients = ['pH', 'Buffer_pH', 'P', 'P2', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
+
+      // Required fields
+      const sampleIdVal = document.getElementById('shpMapSampleId').value;
+      const fieldVal = document.getElementById('shpMapField').value;
+      const yearVal = document.getElementById('shpMapYear').value;
+      const depthVal = document.getElementById('shpMapDepth').value;
+      if (sampleIdVal) mappedAttrs.add(sampleIdVal);
+      if (fieldVal) mappedAttrs.add(fieldVal);
+      if (yearVal) mappedAttrs.add(yearVal);
+      if (depthVal) mappedAttrs.add(depthVal);
+
+      // Nutrient fields
+      nutrients.forEach(n => {
+        const select = document.getElementById(`shpMap${n}`);
+        if (select && select.value) mappedAttrs.add(select.value);
+      });
+
+      showUnmappedAttributes(mappedAttrs);
     }
 
     function closeShpMappingModal() {
@@ -4507,17 +4630,50 @@
         });
       }
 
+      // Get Year and Depth mappings from form
+      const yearMapping = document.getElementById('shpMapYear').value;
+      const depthMapping = document.getElementById('shpMapDepth').value;
+
       // Convert features to samples using mappings
       const samples = [];
       shpParsedFeatures.forEach((feature, idx) => {
         const coords = feature.geometry.coordinates;
         const props = feature.properties || {};
 
+        // Get year from mapping or fall back to global shpYear
+        let sampleYear = shpYear;
+        if (yearMapping && props[yearMapping]) {
+          const mappedYear = props[yearMapping];
+          // Handle various year formats
+          if (typeof mappedYear === 'number') {
+            sampleYear = mappedYear;
+          } else if (typeof mappedYear === 'string') {
+            // Try to extract year from date string or just parse
+            const parsed = parseInt(mappedYear);
+            if (!isNaN(parsed) && parsed > 1900 && parsed < 2100) {
+              sampleYear = parsed;
+            } else if (mappedYear.match(/\d{4}/)) {
+              sampleYear = parseInt(mappedYear.match(/\d{4}/)[0]);
+            }
+          }
+        }
+
+        // Get depth from mapping or fall back to global shpDepth
+        let sampleDepth = shpDepth || '6';
+        if (depthMapping && props[depthMapping]) {
+          const mappedDepth = props[depthMapping];
+          if (typeof mappedDepth === 'number') {
+            sampleDepth = String(mappedDepth);
+          } else {
+            sampleDepth = String(mappedDepth);
+          }
+        }
+
         const sample = {
           lat: coords[1],
           lon: coords[0],
-          year: shpYear,
-          depth: shpDepth || '6',
+          year: sampleYear,
+          depth: sampleDepth,
           sampleId: shpMappings.sampleId ? (props[shpMappings.sampleId] || `S${idx + 1}`) : `S${idx + 1}`,
           field: null // Will be assigned by GPS matching
         };

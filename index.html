@@ -223,8 +223,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.44";
-    const BUILD_DATE = "2026-01-15T17:26:34";
+    const APP_VERSION = "v1.0.47";
+    const BUILD_DATE = "2026-01-15T18:35:46";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -1376,7 +1376,7 @@
 
     // IndexedDB for large datasets
     const DB_NAME = 'SoilAppDB';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2; // v2: Added yield object store
 
     function openDB() {
       return new Promise((resolve, reject) => {
@@ -1388,6 +1388,7 @@
           const db = e.target.result;
           if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
           if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
         };
       });
     }

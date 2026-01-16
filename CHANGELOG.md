@@ -4,6 +4,35 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.46] - January 15, 2026
+
+### Shapefile Attribute Mapping Bug Fix
+- **Fixed**: All shapefile attributes now appear in every dropdown
+- **Added HTML escaping**: Properly escape special characters (parentheses, dashes, quotes) in attribute names
+- **Debug logging**: Console shows all detected attributes vs what's added to dropdowns
+- **New dropdowns**: Added Sample Year and Sample Depth mapping fields
+- **Year/Depth from shapefile**: Can now map year and depth from shapefile attributes (overrides form values)
+- **Year aliases**: Auto-detects year, cropyear, sampledate, etc.
+- **Depth aliases**: Auto-detects depth, sampledepth, depth_in, etc.
+- **Live unmapped updates**: Unmapped attributes list updates as you change dropdown selections
+
+---
+
+## [v1.0.45] - January 15, 2026
+
+### Yield Data Persistence Fix
+- **Fixed**: Yield data now persists across page refreshes
+- **Root cause**: Raw `yieldData[]` array was not being saved to IndexedDB
+- **IndexedDB v2**: Added 'yield' object store for storing raw yield points
+- **All pages updated**: import.html, analysis.html, index.html now use DB_VERSION 2
+
+### Yield Year Dropdown Improvements
+- **Shows matched vs unmatched**: Years with yield data but not matched to soil samples now appear (disabled)
+- **Debug logging**: Console shows detailed breakdown of matched vs raw yield years
+- **Better diagnostics**: Helps identify when yield import succeeded but matching failed
+
+---
+
 ## [v1.0.29] - January 15, 2026
 
 ### Yield Outlier Detection Improvements
