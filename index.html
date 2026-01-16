@@ -319,8 +319,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.59";
-    const BUILD_DATE = "2026-01-16T12:56:35";
+    const APP_VERSION = "v1.0.60";
+    const BUILD_DATE = "2026-01-16T16:00:03";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -2227,10 +2227,23 @@
       return html;
     }
 
+    // Calculate distance between two lat/lon points in feet
+    function getDistanceFeet(lat1, lon1, lat2, lon2) {
+      const R = 20902231; // Earth's radius in feet
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
     function renderCompareMode() {
       // Get samples from selected year (later) and compare year (earlier)
       const laterYear = selectedYear;
       const earlierYear = compareYear;
+      const MAX_DISTANCE_FEET = 200; // Maximum distance to match baseline samples
 
       // Update the compare info bar with year values
       document.getElementById('compareFromYear').textContent = earlierYear;
@@ -2248,60 +2261,83 @@
 
       // Calculate change stats
       const changes = [];
-      
+      let noMatchCount = 0;
+
       // For each later sample, find nearest earlier sample and show change
       laterSamples.forEach(laterSample => {
         const value = laterSample[selectedAttribute];
         if (value === undefined || value === null) return;
-        
+
         // Find nearest earlier sample (same field or closest by location)
-        let earlierSample = earlierSamples.find(s => s.field === laterSample.field && s.sampleId === laterSample.sampleId);
-        if (!earlierSample) {
+        let earlierSample = null;
+        let minDistFeet = Infinity;
+
+        // First try exact sampleId match
+        const idMatch = earlierSamples.find(s => s.field === laterSample.field && s.sampleId === laterSample.sampleId);
+        if (idMatch) {
+          earlierSample = idMatch;
+          minDistFeet = getDistanceFeet(laterSample.lat, laterSample.lon, idMatch.lat, idMatch.lon);
+        } else {
           // Find closest by location within same field
           const fieldEarlier = earlierSamples.filter(s => s.field === laterSample.field);
-            if (fieldEarlier.length > 0) {
-              let minDist = Infinity;
-              fieldEarlier.forEach(s => {
-                const dist = Math.sqrt((s.lat - laterSample.lat) ** 2 + (s.lon - laterSample.lon) ** 2);
-                if (dist < minDist) { minDist = dist; earlierSample = s; }
-              });
+          fieldEarlier.forEach(s => {
+            const dist = getDistanceFeet(laterSample.lat, laterSample.lon, s.lat, s.lon);
+            if (dist < minDistFeet) {
+              minDistFeet = dist;
+              earlierSample = s;
             }
-          }
-          
-          const earlierValue = earlierSample ? earlierSample[selectedAttribute] : null;
-          const change = earlierValue !== null && earlierValue !== undefined ? value - earlierValue : null;
-          const percentChange = earlierValue && earlierValue !== 0 ? ((value - earlierValue) / earlierValue) * 100 : 0;
-          
-          const color = change !== null ? Utils.getChangeColor(change, percentChange) : '#94a3b8';
-          const size = fieldModeActive ? 44 : 32;
-          const fontSize = fieldModeActive ? 12 : 10;
-          
-          let displayVal;
-          const attrDecimals = Utils.getDecimals(selectedAttribute);
-          if (change !== null) {
-            const sign = change >= 0 ? '+' : '';
-            displayVal = sign + Utils.formatNumber(change, attrDecimals);
-          } else {
-            displayVal = Utils.formatNumber(value, attrDecimals);
-          }
-          
-          const icon = L.divIcon({
-            html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
-            className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
           });
-          const marker = L.marker([laterSample.lat, laterSample.lon], { icon }).addTo(map);
-          
-          const decimals = Utils.getDecimals(selectedAttribute);
-          let popupText = `<strong>Sample ${laterSample.sampleId || ''}</strong><br>Field: ${laterSample.field || 'Unknown'}`;
-          popupText += `<br>${earlierYear}: ${earlierValue !== null ? Utils.formatNumber(earlierValue, decimals) : 'N/A'}`;
+        }
+
+        // Check if nearest baseline is within 200 feet
+        const hasNearbyBaseline = earlierSample && minDistFeet <= MAX_DISTANCE_FEET;
+
+        const earlierValue = hasNearbyBaseline ? earlierSample[selectedAttribute] : null;
+        const change = earlierValue !== null && earlierValue !== undefined ? value - earlierValue : null;
+        const percentChange = earlierValue && earlierValue !== 0 ? ((value - earlierValue) / earlierValue) * 100 : 0;
+
+        // Gray out if no baseline sample within 200 feet
+        const color = hasNearbyBaseline && change !== null ? Utils.getChangeColor(change, percentChange) : '#94a3b8';
+        const size = fieldModeActive ? 44 : 32;
+        const fontSize = fieldModeActive ? 12 : 10;
+
+        let displayVal;
+        const attrDecimals = Utils.getDecimals(selectedAttribute);
+        if (hasNearbyBaseline && change !== null) {
+          const sign = change >= 0 ? '+' : '';
+          displayVal = sign + Utils.formatNumber(change, attrDecimals);
+        } else {
+          // Show current value (grayed out) if no baseline match
+          displayVal = Utils.formatNumber(value, attrDecimals);
+          noMatchCount++;
+        }
+
+        const icon = L.divIcon({
+          html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${displayVal}</div>`,
+          className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
+        });
+        const marker = L.marker([laterSample.lat, laterSample.lon], { icon }).addTo(map);
+
+        const decimals = Utils.getDecimals(selectedAttribute);
+        let popupText = `<strong>Sample ${laterSample.sampleId || ''}</strong><br>Field: ${laterSample.field || 'Unknown'}`;
+        if (hasNearbyBaseline) {
+          popupText += `<br>${earlierYear}: ${Utils.formatNumber(earlierValue, decimals)}`;
           popupText += `<br>${laterYear}: ${Utils.formatNumber(value, decimals)}`;
           if (change !== null) {
             popupText += `<br><strong>Change: ${change >= 0 ? '+' : ''}${Utils.formatNumber(change, decimals)} (${percentChange >= 0 ? '+' : ''}${Utils.formatNumber(percentChange, 0)}%)</strong>`;
+            popupText += `<br><span style="color: #64748b; font-size: 0.8em;">Baseline ${Math.round(minDistFeet)} ft away</span>`;
             changes.push(change);
           }
-          marker.bindPopup(popupText);
-          currentLayers.push(marker);
-        });
+        } else {
+          popupText += `<br>${laterYear}: ${Utils.formatNumber(value, decimals)}`;
+          popupText += `<br><em style="color: #94a3b8;">No baseline within 200 ft</em>`;
+          if (earlierSample) {
+            popupText += `<br><span style="color: #94a3b8; font-size: 0.8em;">Nearest: ${Math.round(minDistFeet)} ft</span>`;
+          }
+        }
+        marker.bindPopup(popupText);
+        currentLayers.push(marker);
+      });
       
       // Update stats for compare mode
       const attrName = CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute;
@@ -2316,14 +2352,19 @@
         document.getElementById('statsAvg').textContent = (avg >= 0 ? '+' : '') + avg.toFixed(changeDecimals);
         document.getElementById('statsHigh').textContent = (high >= 0 ? '+' : '') + high.toFixed(changeDecimals);
         document.getElementById('statsLow').textContent = (low >= 0 ? '+' : '') + low.toFixed(changeDecimals);
-        document.getElementById('statsNote').textContent = 'Year-over-year change';
+        document.getElementById('statsNote').textContent = noMatchCount > 0
+          ? `${changes.length} matched, ${noMatchCount} unmatched`
+          : 'Year-over-year change';
 
         // Update compare info bar summary
         const sign = avg >= 0 ? '+' : '';
         const direction = avg > 0.5 ? 'increase' : (avg < -0.5 ? 'decrease' : 'no change');
         const summaryColor = avg > 0.5 ? '#16a34a' : (avg < -0.5 ? '#dc2626' : '#64748b');
-        document.getElementById('compareSummary').innerHTML =
-          `<span style="font-weight: 600; color: ${summaryColor}">${attrName}: ${sign}${avg.toFixed(changeDecimals)}${unit ? ' ' + unit : ''} avg ${direction}</span>`;
+        let summaryHtml = `<span style="font-weight: 600; color: ${summaryColor}">${attrName}: ${sign}${avg.toFixed(changeDecimals)}${unit ? ' ' + unit : ''} avg ${direction}</span>`;
+        if (noMatchCount > 0) {
+          summaryHtml += `<span style="color: #94a3b8; font-size: 0.85em; margin-left: 8px;">(${noMatchCount} gray = no baseline)</span>`;
+        }
+        document.getElementById('compareSummary').innerHTML = summaryHtml;
       } else {
         document.getElementById('compareSummary').innerHTML =
           `<span style="color: #94a3b8;">No matching samples between ${earlierYear} and ${laterYear}</span>`;
