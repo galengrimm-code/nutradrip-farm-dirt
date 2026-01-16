@@ -69,12 +69,22 @@
       select, input { font-size: 14px !important; padding: 0.5rem; min-width: 0; width: 100%; }
       .legend { display: none; } /* Hide legend on mobile */
       .mobile-toolbar { display: flex !important; }
-      .stats-box { bottom: 60px !important; right: 0.5rem !important; font-size: 0.75rem !important; padding: 0 !important; min-width: 100px !important; }
-      .stats-box h4 { font-size: 0.7rem !important; }
-      .stats-box .stats-header { display: flex !important; cursor: pointer; padding: 0.4rem 0.5rem; }
-      .stats-box .stats-content { padding: 0 0.5rem 0.5rem 0.5rem; }
+      /* Compact stats box on mobile */
+      .stats-box { bottom: 60px !important; right: 0.5rem !important; font-size: 0.7rem !important; padding: 0 !important; min-width: 90px !important; max-width: 110px !important; }
+      .stats-box h4 { font-size: 0.65rem !important; }
+      .stats-box .stats-header { display: flex !important; cursor: pointer; padding: 6px 8px; }
+      .stats-box .stats-content { padding: 0 8px 6px 8px; }
+      .stats-box .stats-content > div { margin-bottom: 1px !important; }
+      .stats-box #statsNote { margin-top: 4px !important; font-size: 9px !important; }
       .stats-box.collapsed .stats-content { display: none !important; }
       .stats-box .stats-toggle { display: inline !important; }
+      /* Hide stats box in Field View mode */
+      .stats-box.field-view-hidden { display: none !important; }
+      /* Hide nav tabs in Field View mode */
+      .nav-links.field-view-hidden { display: none !important; }
+      /* Back button to show nav */
+      .back-to-menu-btn { display: none; background: rgba(255,255,255,0.95); border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 0.7rem; font-weight: 500; cursor: pointer; position: absolute; top: 10px; left: 10px; z-index: 1001; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+      .back-to-menu-btn.visible { display: flex !important; align-items: center; gap: 4px; }
 
       /* Compare mode is desktop-only - hide all compare elements on mobile */
       #compareYearStack { display: none !important; }
@@ -193,6 +203,7 @@
     
     <div class="main-content" style="position: relative;">
       <div id="map"></div>
+      <button id="backToMenuBtn" class="back-to-menu-btn" onclick="showNavTabs()">← Menu</button>
       <div id="statsBox" class="stats-box" style="position: absolute; top: 80px; right: 10px; background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; font-size: 13px; min-width: 140px;">
         <div class="stats-header" onclick="toggleStatsBox()" style="font-weight: 600; margin-bottom: 6px; color: #374151; display: flex; justify-content: space-between; align-items: center;">
           <span id="statsTitle">Field Attribute Stats</span>
@@ -223,8 +234,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.47";
-    const BUILD_DATE = "2026-01-15T18:35:46";
+    const APP_VERSION = "v1.0.48";
+    const BUILD_DATE = "2026-01-16T08:00:24";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -989,11 +1000,12 @@
     }
 
     function setupEventListeners() {
-      document.getElementById('fieldSelect').addEventListener('change', (e) => { 
-        selectedField = e.target.value; 
+      document.getElementById('fieldSelect').addEventListener('change', (e) => {
+        selectedField = e.target.value;
         updateYearSelector(); // Update years based on selected field
-        updateMap(); 
-        zoomToField(selectedField); 
+        updateMap();
+        zoomToField(selectedField);
+        updateMobileFieldViewUI(); // Update mobile UI when field changes
       });
       document.getElementById('attributeSelect').addEventListener('change', (e) => { selectedAttribute = e.target.value; updateYearSelector(); updateCompareYearOptions(); updateMap(); updateLegend(); });
       document.getElementById('yearSelect').addEventListener('change', (e) => {
@@ -1555,6 +1567,47 @@
 
     const ZOOM_THRESHOLD = 15; // Zoom level threshold for switching views
 
+    // Threshold for mobile Field View detection
+    const MOBILE_FIELD_VIEW_ZOOM = 14;
+
+    // Detect if we're in "Field View" mode on mobile (zoomed in or single field selected)
+    function isMobileFieldViewMode() {
+      if (!isMobileDevice()) return false;
+      const zoomLevel = map.getZoom();
+      // Field View = zoomed in past threshold OR viewing a single field
+      return zoomLevel > MOBILE_FIELD_VIEW_ZOOM || selectedField !== 'all';
+    }
+
+    // Update mobile UI based on Field View vs All Fields View
+    function updateMobileFieldViewUI() {
+      if (!isMobileDevice()) return;
+
+      const isFieldView = isMobileFieldViewMode();
+      const statsBox = document.getElementById('statsBox');
+      const navLinks = document.querySelector('.nav-links');
+      const backBtn = document.getElementById('backToMenuBtn');
+
+      if (isFieldView) {
+        // Hide stats box and nav tabs in Field View
+        statsBox.classList.add('field-view-hidden');
+        navLinks.classList.add('field-view-hidden');
+        backBtn.classList.add('visible');
+      } else {
+        // Show stats box and nav tabs in All Fields View
+        statsBox.classList.remove('field-view-hidden');
+        navLinks.classList.remove('field-view-hidden');
+        backBtn.classList.remove('visible');
+      }
+    }
+
+    // Show nav tabs when back button is clicked
+    function showNavTabs() {
+      const navLinks = document.querySelector('.nav-links');
+      const backBtn = document.getElementById('backToMenuBtn');
+      navLinks.classList.remove('field-view-hidden');
+      backBtn.classList.remove('visible');
+    }
+
     function updateZoomIndicator() {
       const zoomLevel = map.getZoom();
       const isZoomedOut = zoomLevel < ZOOM_THRESHOLD && selectedField === 'all';
@@ -1569,6 +1622,9 @@
         viewModeEl.textContent = 'Sample View';
         viewModeEl.style.color = '#3b82f6';
       }
+
+      // Update mobile UI based on view mode
+      updateMobileFieldViewUI();
     }
 
     function updateMap() {

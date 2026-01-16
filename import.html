@@ -791,8 +791,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.47";
-    const BUILD_DATE = "2026-01-15T18:35:46";
+    const APP_VERSION = "v1.0.48";
+    const BUILD_DATE = "2026-01-16T08:00:24";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4221,12 +4221,19 @@
         return;
       }
 
-      // Extract attribute names from first feature
-      const firstProps = shpParsedFeatures[0].properties || {};
-      shpAttributes = Object.keys(firstProps);
+      // Extract ALL attribute names from ALL features (not just first)
+      // Some shapefiles have sparse data where first record doesn't have all columns
+      const allAttributeSet = new Set();
+      shpParsedFeatures.forEach((feature, i) => {
+        const props = feature.properties || {};
+        Object.keys(props).forEach(key => allAttributeSet.add(key));
+      });
+      shpAttributes = Array.from(allAttributeSet);
 
-      console.log('Shapefile attributes:', shpAttributes);
-      console.log('Sample count:', shpParsedFeatures.length);
+      console.log('=== SHAPEFILE ATTRIBUTE EXTRACTION ===');
+      console.log('Total features scanned:', shpParsedFeatures.length);
+      console.log('Total unique attributes found:', shpAttributes.length);
+      console.log('All attributes:', shpAttributes);
 
       // Update summary bar
       document.getElementById('shpSummaryText').textContent = `Found ${shpParsedFeatures.length} sample points`;
@@ -4310,13 +4317,15 @@
         nutrientContainer.appendChild(div);
       });
 
-      // Final debug check
-      const phSelect = document.getElementById('shpMapPH');
-      if (phSelect) {
-        console.log('pH dropdown option count:', phSelect.options.length);
-        // List all options to verify ALL attributes are present
-        const allOptionValues = Array.from(phSelect.options).map(o => o.value);
-        console.log('pH ALL options:', allOptionValues);
+      // Final debug check - use SampleId dropdown (consistent ID)
+      const sampleIdDropdown = document.getElementById('shpMapSampleId');
+      console.log('=== DROPDOWN VERIFICATION ===');
+      console.log('SampleId dropdown option count:', sampleIdDropdown.options.length);
+      console.log('Expected count:', shpAttributes.length + 1, '(attributes + skip option)');
+      if (sampleIdDropdown.options.length !== shpAttributes.length + 1) {
+        console.error('MISMATCH! Some attributes were not added to dropdown');
+        console.log('All shpAttributes:', shpAttributes);
+        console.log('All dropdown options:', Array.from(sampleIdDropdown.options).map(o => o.value));
       }
     }
 
