@@ -652,7 +652,10 @@
               <span style="font-size: 1.1rem;">📋</span>
               <strong style="color: #1e40af;">Map shapefile attributes to soil sample fields:</strong>
             </div>
-            <div style="font-size: 0.8rem; color: #1e40af; display: flex; align-items: center; gap: 0.5rem;">
+            <p style="margin: 0 0 0.75rem 0; font-size: 0.8rem; color: #475569;">
+              The dropdown options below show ALL attributes found in your shapefile. Select which shapefile attribute corresponds to each soil sample field. Preview values are shown to help verify correct mapping.
+            </p>
+            <div style="font-size: 0.8rem; color: #1e40af; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
               <span style="background: #dbeafe; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">Standard Field</span>
               <span>←</span>
               <span style="background: #e0e7ff; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">Shapefile Attribute</span>
@@ -660,7 +663,7 @@
               <span style="background: #f0fdf4; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-style: italic;">Preview values</span>
             </div>
             <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #64748b;">
-              Lat/Lon are extracted from point geometry. For each field, select which shapefile attribute contains that data.
+              Lat/Lon are extracted from point geometry.
             </p>
           </div>
 
@@ -718,7 +721,7 @@
           <!-- Unmapped Attributes -->
           <div id="shpUnmappedSection" style="background: #fefce8; border: 1px solid #fde047; border-radius: 0.5rem; padding: 1rem; display: none;">
             <h4 style="margin: 0 0 0.5rem 0; color: #854d0e; font-size: 0.9rem;">📦 Unmapped Shapefile Attributes</h4>
-            <p style="margin: 0 0 0.5rem 0; font-size: 0.7rem; color: #a16207;">These attributes exist in your shapefile but aren't mapped to standard fields. They'll be imported as-is.</p>
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.75rem; color: #a16207;">These attributes were found in your shapefile but haven't been mapped above. They will be imported as custom fields. If you need any of these, select them in the dropdowns above.</p>
             <div id="shpUnmappedList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
           </div>
 
@@ -791,8 +794,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.53";
-    const BUILD_DATE = "2026-01-16T08:46:42";
+    const APP_VERSION = "v1.0.54";
+    const BUILD_DATE = "2026-01-16T09:02:09";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
