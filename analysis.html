@@ -552,8 +552,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.61";
-    const BUILD_DATE = "2026-01-16T16:03:25";
+    const APP_VERSION = "v1.0.62";
+    const BUILD_DATE = "2026-01-16T16:14:20";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4587,15 +4587,21 @@
                        buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
 
+      const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
+
       if (backupTime) {
         const date = new Date(parseInt(backupTime));
         const backupStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> Data backup: ${backupStr}`;
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #22c55e;">Data backup: ${backupStr}</span>`;
+      } else if (sampleData.length === 0) {
+        // No data yet - don't show backup warning
+        footer.innerHTML = versionInfo;
       } else {
-        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> No backup yet`;
+        // Has data but no backup - show warning
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #f59e0b;">No backup yet</span>`;
       }
     }
   </script>
-  <div class="backup-footer" id="backupFooter">No backup yet</div>
+  <div class="backup-footer" id="backupFooter"></div>
 </body>
 </html>
