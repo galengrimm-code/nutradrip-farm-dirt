@@ -155,15 +155,16 @@
       <div style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 0.5rem;">
         <h4 style="margin: 0 0 0.75rem 0; font-size: 0.875rem; color: #374151;">📋 Setup Instructions for New Users:</h4>
         <ol style="margin: 0; padding-left: 1.25rem; color: #64748b; font-size: 0.8125rem; line-height: 1.6;">
-          <li>Create a new Google Sheet</li>
-          <li>Create 3 tabs named exactly: <strong>Samples</strong>, <strong>Fields</strong>, <strong>Settings</strong></li>
-          <li>Copy the Sheet ID from the URL and paste above</li>
-          <li>Share the sheet with anyone who needs access</li>
-          <li>Click "Save Settings" below</li>
+          <li>Click "Create New Google Sheet" below</li>
+          <li>Rename first tab to <strong>Samples</strong>, add tabs <strong>Fields</strong> and <strong>Settings</strong></li>
+          <li>Copy Sheet ID from URL (between /d/ and /edit)</li>
+          <li>Paste above and click "Save Sheet Configuration"</li>
         </ol>
-        <button class="button" style="margin-top: 1rem; background: #3b82f6; color: white;" onclick="window.open('https://docs.google.com/spreadsheets/create', '_blank')">
-          📄 Create New Google Sheet
-        </button>
+        <div style="margin-top: 1rem;">
+          <button class="button" style="background: #22c55e; color: white; width: 100%;" onclick="window.open('https://sheets.new', '_blank')">
+            📄 Create New Google Sheet
+          </button>
+        </div>
       </div>
       
       <div class="btn-row" style="margin-top: 1rem;">
@@ -270,13 +271,13 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.56";
-    const BUILD_DATE = "2026-01-16T09:14:18";
+    const APP_VERSION = "v1.0.57";
+    const BUILD_DATE = "2026-01-16T10:34:31";
 
     const CONFIG = {
-      CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com', 
-      API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E', 
-      get SHEET_ID() { return localStorage.getItem('googleSheetId') || '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY'; }
+      CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
+      API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
+      get SHEET_ID() { return localStorage.getItem('googleSheetId') || null; }
     };
     const defaults = { pH_min: 6.3, pH_max: 6.9, P_min: 20, K_min: 150, OM_min: 3.0, Ca_sat_min: 65, Ca_sat_max: 75, Mg_sat_min: 12, Mg_sat_max: 15, K_sat_min: 3.0, H_sat_max: 5.0, bufferPercent: 25 };
     
@@ -455,6 +456,11 @@
       const authBtn = document.getElementById('authBtn'), userInfo = document.getElementById('userInfo');
       if (isSignedIn) { userInfo.textContent = 'Connected'; authBtn.textContent = '✓ Signed In'; authBtn.classList.add('signed-in'); }
       else { userInfo.textContent = ''; authBtn.textContent = 'Sign In to Edit'; authBtn.classList.remove('signed-in'); }
+      console.log('[Sheets] Sign-in state changed:', isSignedIn);
+      // Update connection status indicator when sign-in state changes
+      if (typeof updateConnectionStatusIndicator === 'function') {
+        updateConnectionStatusIndicator();
+      }
     }
     function loadSettings() { try { const saved = localStorage.getItem('soilSettings'), settings = saved ? JSON.parse(saved) : defaults; Object.entries(settings).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); loadColumnMapping(); loadNutrientVisibility(); loadDecimalPlaces(); loadSheetConfig(); loadBackupSettings(); } catch (e) {} }
 
@@ -750,65 +756,111 @@
       const operationName = localStorage.getItem('operationName') || '';
       document.getElementById('sheetId').value = sheetId;
       document.getElementById('operationName').value = operationName;
-      
+
+      console.log('[Sheets] Loaded sheet config:', { sheetId: sheetId ? sheetId.substring(0, 10) + '...' : '(none)', operationName });
+
       // Update app title if operation name is set
       if (operationName) {
         const subtitle = document.querySelector('.top-bar p');
         if (subtitle) subtitle.textContent = operationName;
       }
+
+      // Show initial connection status
+      updateConnectionStatusIndicator();
     }
     
     function saveSheetConfig() {
       const sheetId = document.getElementById('sheetId').value.trim();
       const operationName = document.getElementById('operationName').value.trim();
-      
+
+      console.log('[Sheets] Saving sheet config:', { sheetId: sheetId ? sheetId.substring(0, 10) + '...' : '(none)', operationName });
+
       if (sheetId) {
         localStorage.setItem('googleSheetId', sheetId);
       } else {
         localStorage.removeItem('googleSheetId');
       }
-      
+
       if (operationName) {
         localStorage.setItem('operationName', operationName);
       } else {
         localStorage.removeItem('operationName');
       }
-      
+
+      console.log('[Sheets] Sheet config saved successfully');
       showStatus('✓ Sheet configuration saved! Refresh other pages to apply.', true);
+      updateConnectionStatusIndicator();
     }
-    
+
+    function updateConnectionStatusIndicator() {
+      const sheetId = localStorage.getItem('googleSheetId');
+      const statusEl = document.getElementById('connectionStatus');
+
+      if (!sheetId) {
+        statusEl.innerHTML = '<span style="color: #64748b;">📋 No sheet configured - enter a Sheet ID above</span>';
+      } else if (!SheetsAPI.isSignedIn) {
+        statusEl.innerHTML = '<span style="color: #f59e0b;">🔑 Sheet ID saved - sign in to test connection</span>';
+      } else {
+        statusEl.innerHTML = '<span style="color: #64748b;">📋 Sheet ID configured - click "Test Connection" to verify</span>';
+      }
+    }
+
     async function testSheetConnection() {
       const sheetId = document.getElementById('sheetId').value.trim();
       const statusEl = document.getElementById('connectionStatus');
-      
+
+      console.log('[Sheets] Testing connection to sheet:', sheetId);
+
       if (!sheetId) {
         statusEl.innerHTML = '<span style="color: #ef4444;">⚠️ Please enter a Sheet ID first</span>';
         return;
       }
-      
+
       if (!SheetsAPI.isSignedIn) {
         statusEl.innerHTML = '<span style="color: #f59e0b;">⚠️ Please sign in with Google first</span>';
         return;
       }
-      
+
       statusEl.innerHTML = '<span style="color: #3b82f6;">🔄 Testing connection...</span>';
-      
+
       try {
+        // First get sheet metadata
+        console.log('[Sheets] Fetching sheet metadata...');
         const response = await gapi.client.sheets.spreadsheets.get({
           spreadsheetId: sheetId
         });
-        
+
+        const sheetTitle = response.result.properties.title;
         const sheets = response.result.sheets.map(s => s.properties.title);
+        console.log('[Sheets] Found sheets:', sheets);
+
         const requiredSheets = ['Samples', 'Fields', 'Settings'];
         const missingSheets = requiredSheets.filter(s => !sheets.includes(s));
-        
+
         if (missingSheets.length > 0) {
+          console.log('[Sheets] Missing required tabs:', missingSheets);
           statusEl.innerHTML = `<span style="color: #f59e0b;">⚠️ Connected but missing tabs: ${missingSheets.join(', ')}<br><small>Please create these tabs in your Google Sheet</small></span>`;
         } else {
-          statusEl.innerHTML = `<span style="color: #22c55e;">✓ Connected successfully!<br><small>Sheet: ${response.result.properties.title}</small></span>`;
+          // Try to read samples to get count
+          console.log('[Sheets] Reading samples tab...');
+          let sampleCount = 0;
+          try {
+            const samplesResponse = await gapi.client.sheets.spreadsheets.values.get({
+              spreadsheetId: sheetId,
+              range: 'Samples!A:A'
+            });
+            const rows = samplesResponse.result.values || [];
+            sampleCount = Math.max(0, rows.length - 1); // Subtract header row
+            console.log('[Sheets] Found', sampleCount, 'samples');
+          } catch (sampleErr) {
+            console.log('[Sheets] Could not read samples (tab may be empty):', sampleErr.message);
+          }
+
+          const sampleText = sampleCount > 0 ? `Found ${sampleCount} samples` : 'No samples yet';
+          statusEl.innerHTML = `<span style="color: #22c55e;">✅ Connected successfully - ${sampleText}<br><small>Sheet: ${sheetTitle}</small></span>`;
         }
       } catch (e) {
-        console.error('Connection test failed:', e);
+        console.error('[Sheets] Connection test failed:', e);
         if (e.status === 404) {
           statusEl.innerHTML = '<span style="color: #ef4444;">❌ Sheet not found. Check the Sheet ID.</span>';
         } else if (e.status === 403) {

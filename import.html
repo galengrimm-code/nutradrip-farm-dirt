@@ -794,13 +794,13 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.56";
-    const BUILD_DATE = "2026-01-16T09:14:18";
+    const APP_VERSION = "v1.0.57";
+    const BUILD_DATE = "2026-01-16T10:34:31";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      get SHEET_ID() { return localStorage.getItem('googleSheetId') || '1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY'; },
+      get SHEET_ID() { return localStorage.getItem('googleSheetId') || null; },
       DECIMAL_PLACES: {
         pH: 2, Buffer_pH: 2, OM: 2, P: 0, P2: 0, K: 0, CEC: 1,
         Ca_sat: 1, Mg_sat: 1, K_Sat: 1, H_Sat: 1, Na_Sat: 1,

@@ -45,11 +45,6 @@ CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent
 API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E'
 ```
 
-### Default Google Sheet ID
-```
-1buu-8KXoM1kRJSOAWtHaAk40seQT5kqGFY9RICYwdRY
-```
-
 ### Required Google Sheet Tabs
 | Tab Name | Columns |
 |----------|---------|
@@ -57,12 +52,21 @@ API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E'
 | **Fields** | id, name, boundary (JSON), acres, created |
 | **Settings** | key, min, target, max |
 
-### Self-Service Setup (New Farmers)
-Users can configure their own Google Sheet in Settings:
-1. Create new Google Sheet with required tabs
-2. Enter Sheet ID in Settings page
-3. Save configuration (stored in localStorage as `googleSheetId`)
-4. Each user/operation has isolated data
+### New User Flow
+When a new user opens the app (no Sheet ID, no local data):
+1. Welcome screen is displayed with setup options
+2. User can: Create New Google Sheet, Enter existing Sheet ID, or Try Demo Mode
+3. "Create New Google Sheet" opens `sheets.new` to create a blank sheet
+4. User creates 3 tabs: Samples, Fields, Settings
+5. User copies Sheet ID from URL and pastes it in the app
+6. Sheet ID is saved to localStorage as `googleSheetId`
+7. App reloads and connects to user's sheet
+
+### Demo Mode
+- Preloaded with 9 sample data points across 2 demo fields
+- Read-only - allows users to explore features without connecting a sheet
+- Yellow banner displayed at top indicating demo mode
+- "Connect Your Sheet" button exits demo and shows welcome screen
 
 ---
 
