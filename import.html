@@ -794,8 +794,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.54";
-    const BUILD_DATE = "2026-01-16T09:02:09";
+    const APP_VERSION = "v1.0.55";
+    const BUILD_DATE = "2026-01-16T09:05:57";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4062,6 +4062,20 @@
 
     // Perform the CSV import
     async function csvImportConfirm() {
+      // Validate required year
+      const yearInput = document.getElementById('sampleYear').value.trim();
+      if (!yearInput) {
+        showStatus('Sample Year is required', false);
+        document.getElementById('sampleYear').focus();
+        return;
+      }
+      const year = parseInt(yearInput);
+      if (isNaN(year) || year < 1900 || year > 2100) {
+        showStatus('Please enter a valid year (e.g., 2024)', false);
+        document.getElementById('sampleYear').focus();
+        return;
+      }
+
       // Save mapping if requested
       if (document.getElementById('csvSaveMapping').checked) {
         const name = document.getElementById('csvMappingName').value.trim();
@@ -4070,8 +4084,7 @@
         }
       }
 
-      // Get year and depth from the form
-      const year = parseInt(document.getElementById('sampleYear').value) || new Date().getFullYear();
+      // Get depth from the form
       const depth = document.getElementById('sampleDepth').value || '6';
 
       // Map the data
