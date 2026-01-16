@@ -791,8 +791,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.51";
-    const BUILD_DATE = "2026-01-16T08:31:11";
+    const APP_VERSION = "v1.0.52";
+    const BUILD_DATE = "2026-01-16T08:35:46";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4279,14 +4279,18 @@
       console.log('Total attributes to add:', shpAttributes.length);
       console.log('All attributes:', shpAttributes);
 
-      // Build options - include ALL attributes
+      // Sort attributes alphabetically (case-insensitive)
+      const sortedAttributes = [...shpAttributes].sort((a, b) => {
+        // Extract leading letters for primary sort (handles "B (M3)" sorting under B)
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        return aLower.localeCompare(bLower);
+      });
+
+      // Build options - include ALL attributes sorted A-Z, with (skip) first
       const options = '<option value="">(skip)</option>' +
-        shpAttributes.map((a, i) => {
+        sortedAttributes.map((a, i) => {
           const escaped = escapeHtml(a);
-          // Debug first few and any with special chars
-          if (i < 5 || /[^a-zA-Z0-9_]/.test(a)) {
-            console.log(`  Option ${i}: "${a}" -> escaped: "${escaped}"`);
-          }
           return `<option value="${escaped}">${escaped}</option>`;
         }).join('');
 
