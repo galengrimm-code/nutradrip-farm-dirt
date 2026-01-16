@@ -552,8 +552,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.50";
-    const BUILD_DATE = "2026-01-16T08:27:15";
+    const APP_VERSION = "v1.0.51";
+    const BUILD_DATE = "2026-01-16T08:31:11";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3363,7 +3363,7 @@
         if (v.pValue < 0.05) {
           const effect = v.coef >= 0 ? 'positive' : 'negative';
           const effectDesc = v.coef >= 0 ? 'Higher values = higher yields' : 'Higher values = lower yields';
-          const noteText = v.coef < 0 ? ' <span style="color: #92400e; font-size: 0.75rem;">(Note: This may indicate high-${v.displayName} soils have other limiting factors, not that ${v.displayName} hurts yield)</span>' : '';
+          const noteText = v.coef < 0 ? ` <span style="color: #92400e; font-size: 0.75rem;">(Note: This may indicate high-${v.displayName} soils have other limiting factors, not that ${v.displayName} hurts yield)</span>` : '';
           keyFindings += `<div style="padding: 0.5rem; background: #f0fdf4; border-left: 3px solid #22c55e; margin-bottom: 0.5rem; border-radius: 0 0.25rem 0.25rem 0;">
             <strong style="color: #166534;">${v.displayName}</strong> <span style="color: #166534;">(${v.sig})</span> - Strong ${effect} effect. ${effectDesc}.${v.coef < 0 ? noteText : ''}
           </div>`;
