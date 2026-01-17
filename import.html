@@ -1103,8 +1103,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.67";
-    const BUILD_DATE = "2026-01-17T07:58:06";
+    const APP_VERSION = "v1.0.68";
+    const BUILD_DATE = "2026-01-17T08:22:04";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -3142,8 +3142,8 @@
           : 0;
         const coverageMatchColor = coverageMatchRate >= 95 ? '#22c55e' : (coverageMatchRate >= 80 ? '#f59e0b' : '#ef4444');
 
-        // Calculate unmatched in coverage area
-        const unmatchedInCoverage = correlationResults.samplesInCoverageArea - correlationResults.samplesWithYield;
+        // Get unmatched in coverage (yield was close but not close enough)
+        const unmatchedInCoverage = correlationResults.samplesInCoverageButNoMatch || 0;
         const unmatchedPct = correlationResults.samplesInCoverageArea > 0
           ? Math.round((unmatchedInCoverage / correlationResults.samplesInCoverageArea) * 100)
           : 0;
@@ -3166,18 +3166,27 @@
         }
 
         // Yield-to-Sample Matching section
+        let matchingRows = `
+              <span style="color: #64748b;">Soil samples in yield coverage:</span>
+              <span style="font-weight: 600; text-align: right;">${correlationResults.samplesInCoverageArea.toLocaleString()}</span>
+              <span style="color: #64748b;">Successfully matched:</span>
+              <span style="font-weight: 600; color: ${coverageMatchColor}; text-align: right;">${correlationResults.samplesWithYield.toLocaleString()} (${coverageMatchRate}%)</span>`;
+
+        // Only show "no yield within radius" row if there are gaps
+        if (unmatchedInCoverage > 0) {
+          matchingRows += `
+              <span style="color: #64748b;">No yield within radius:</span>
+              <span style="font-weight: 600; color: #f59e0b; text-align: right;">${unmatchedInCoverage.toLocaleString()} (${unmatchedPct}%)</span>`;
+        }
+
+        matchingRows += `
+              <span style="color: #64748b;">Avg yield points per sample:</span>
+              <span style="font-weight: 600; text-align: right;">${correlationResults.avgYieldPointsPerSample}</span>`;
+
         statusHtml += `
           <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
             <div style="font-weight: 600; color: #475569; margin-bottom: 0.5rem; font-size: 0.8rem;">Yield-to-Sample Matching</div>
-            <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1rem; font-size: 0.85rem;">
-              <span style="color: #64748b;">Samples in yield coverage area:</span>
-              <span style="font-weight: 600; text-align: right;">${correlationResults.samplesInCoverageArea.toLocaleString()}</span>
-              <span style="color: #64748b;">Samples successfully matched:</span>
-              <span style="font-weight: 600; color: ${coverageMatchColor}; text-align: right;">${correlationResults.samplesWithYield.toLocaleString()} (${coverageMatchRate}%)</span>
-              <span style="color: #64748b;">Samples with no yield match:</span>
-              <span style="font-weight: 600; color: ${unmatchedInCoverage > 0 ? '#f59e0b' : '#64748b'}; text-align: right;">${unmatchedInCoverage.toLocaleString()} (${unmatchedPct}%)</span>
-              <span style="color: #64748b;">Avg yield points per sample:</span>
-              <span style="font-weight: 600; text-align: right;">${correlationResults.avgYieldPointsPerSample}</span>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1rem; font-size: 0.85rem;">${matchingRows}
             </div>
           </div>`;
 
@@ -3405,6 +3414,7 @@
         return {
           totalSamples: sampleData.length,
           samplesInCoverageArea: 0,
+          samplesInCoverageButNoMatch: 0,
           samplesWithYield: 0,
           samplesWithoutYield: sampleData.length,
           totalYieldPoints: 0,
@@ -3419,29 +3429,9 @@
       // Helper for async breathing
       const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
 
-      // Calculate bounding box of yield data (coverage area)
-      let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-      for (const yp of yearYield) {
-        if (yp.lat < minLat) minLat = yp.lat;
-        if (yp.lat > maxLat) maxLat = yp.lat;
-        if (yp.lon < minLon) minLon = yp.lon;
-        if (yp.lon > maxLon) maxLon = yp.lon;
-      }
-      // Add radius buffer to bounding box
-      minLat -= radiusLatDeg;
-      maxLat += radiusLatDeg;
-      minLon -= radiusLonDeg;
-      maxLon += radiusLonDeg;
-
-      // Count samples in yield coverage area (within bounding box)
-      let samplesInCoverageArea = 0;
-      for (const sample of sampleData) {
-        if (sample.lat && sample.lon &&
-            sample.lat >= minLat && sample.lat <= maxLat &&
-            sample.lon >= minLon && sample.lon <= maxLon) {
-          samplesInCoverageArea++;
-        }
-      }
+      // Use 2x radius for "coverage detection" - samples where yield data is nearby but maybe not quite close enough
+      const coverageRadiusLatDeg = radiusLatDeg * 2;
+      const coverageRadiusLonDeg = radiusLonDeg * 2;
 
       // Track results
       let samplesWithYieldCount = 0;
@@ -3479,24 +3469,41 @@
       console.log(`Total yield points for ${yieldYear_int}: ${yearYield.length}`);
       console.log(`Search radius: ${radiusFeet}ft`);
 
+      // Track samples in coverage area (yield nearby within 2x radius)
+      let samplesInCoverageArea = 0;
+      let samplesInCoverageButNoMatch = 0;
+
       // Process each soil sample - find nearby yield points
       for (let sIdx = 0; sIdx < sampleData.length; sIdx++) {
         const sample = sampleData[sIdx];
 
         if (!sample.lat || !sample.lon) continue;
 
-        // Find all yield points within radius of this sample
+        // Find all yield points within matching radius AND check for coverage (2x radius)
         const nearbyYieldPoints = [];
+        let hasYieldInCoverage = false;
+
         for (let yIdx = 0; yIdx < yearYield.length; yIdx++) {
           const yp = yearYield[yIdx];
           const latDiff = Math.abs(sample.lat - yp.lat);
           const lonDiff = Math.abs(sample.lon - yp.lon);
+
+          // Check if within matching radius
           if (latDiff <= radiusLatDeg && lonDiff <= radiusLonDeg) {
             nearbyYieldPoints.push(yp);
+          }
+          // Check if within coverage radius (2x) - only need to find one
+          if (!hasYieldInCoverage && latDiff <= coverageRadiusLatDeg && lonDiff <= coverageRadiusLonDeg) {
+            hasYieldInCoverage = true;
           }
         }
 
         const field = sample.field || 'Unknown';
+
+        // Track coverage area (samples where yield data is nearby)
+        if (hasYieldInCoverage) {
+          samplesInCoverageArea++;
+        }
 
         if (nearbyYieldPoints.length > 0) {
           // Calculate average yield from nearby points
@@ -3527,6 +3534,10 @@
           if (fieldStats[field]) {
             fieldStats[field].samplesWithoutYield++;
           }
+          // Track samples in coverage but no match (yield was close but not close enough)
+          if (hasYieldInCoverage) {
+            samplesInCoverageButNoMatch++;
+          }
         }
 
         // Breathe every 100 samples to keep UI responsive
@@ -3552,14 +3563,15 @@
         : 0;
 
       console.log('=== YIELD MATCHING RESULTS ===');
-      console.log(`Samples in coverage area: ${samplesInCoverageArea}`);
-      console.log(`Samples with yield data: ${samplesWithYieldCount}`);
-      console.log(`Samples without yield data: ${samplesWithoutYieldCount}`);
+      console.log(`Samples in yield coverage: ${samplesInCoverageArea}`);
+      console.log(`Successfully matched: ${samplesWithYieldCount}`);
+      console.log(`In coverage but no match: ${samplesInCoverageButNoMatch}`);
       console.log(`Avg yield points per matched sample: ${avgYieldPointsPerSample}`);
 
       return {
         totalSamples: sampleData.length,
         samplesInCoverageArea,
+        samplesInCoverageButNoMatch,
         samplesWithYield: samplesWithYieldCount,
         samplesWithoutYield: samplesWithoutYieldCount,
         totalYieldPoints: yearYield.length,
@@ -3608,33 +3620,45 @@
       const existingDebug = document.getElementById('gpsDebugSection');
       if (existingDebug) existingDebug.remove();
 
-      // Calculate unmatched in coverage area
-      const unmatchedInCoverage = (results.samplesInCoverageArea || 0) - results.samplesWithYield;
+      // Get unmatched in coverage (from results, not calculated)
+      const unmatchedInCoverage = results.samplesInCoverageButNoMatch || 0;
       const unmatchedPct = results.samplesInCoverageArea > 0
         ? Math.round((unmatchedInCoverage / results.samplesInCoverageArea) * 100)
         : 0;
+
+      // Build summary stats - show 3 boxes if no gaps, 4 if there are gaps
+      let statsBoxes = `
+            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">${(results.samplesInCoverageArea || 0).toLocaleString()}</div>
+              <div style="font-size: 0.7rem; color: #64748b;">In Yield Coverage</div>
+            </div>
+            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #22c55e;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #16a34a;">${results.samplesWithYield.toLocaleString()}</div>
+              <div style="font-size: 0.7rem; color: #64748b;">Matched (${coverageMatchRate}%)</div>
+            </div>`;
+
+      // Only show "No Match" box if there are gaps
+      if (unmatchedInCoverage > 0) {
+        statsBoxes += `
+            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #f59e0b;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #d97706;">${unmatchedInCoverage.toLocaleString()}</div>
+              <div style="font-size: 0.7rem; color: #64748b;">No Match (${unmatchedPct}%)</div>
+            </div>`;
+      }
+
+      statsBoxes += `
+            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
+              <div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">${results.avgYieldPointsPerSample}</div>
+              <div style="font-size: 0.7rem; color: #64748b;">Avg Pts/Sample</div>
+            </div>`;
+
+      const gridCols = unmatchedInCoverage > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)';
 
       // Summary stats with coverage area focus
       document.getElementById('yieldSummaryStats').innerHTML = `
         <div style="grid-column: span 4; margin-bottom: 0.5rem;">
           <div style="font-weight: 600; color: #475569; font-size: 0.8rem; margin-bottom: 0.5rem;">This Import (Year ${results.yieldYear})</div>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
-            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
-              <div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">${(results.samplesInCoverageArea || 0).toLocaleString()}</div>
-              <div style="font-size: 0.7rem; color: #64748b;">In Coverage Area</div>
-            </div>
-            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #22c55e;">
-              <div style="font-size: 1.25rem; font-weight: 700; color: #16a34a;">${results.samplesWithYield.toLocaleString()}</div>
-              <div style="font-size: 0.7rem; color: #64748b;">Matched (${coverageMatchRate}%)</div>
-            </div>
-            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid ${unmatchedInCoverage > 0 ? '#f59e0b' : '#e2e8f0'};">
-              <div style="font-size: 1.25rem; font-weight: 700; color: ${unmatchedInCoverage > 0 ? '#d97706' : '#64748b'};">${unmatchedInCoverage.toLocaleString()}</div>
-              <div style="font-size: 0.7rem; color: #64748b;">No Match (${unmatchedPct}%)</div>
-            </div>
-            <div style="text-align: center; padding: 0.5rem; background: white; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
-              <div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">${results.avgYieldPointsPerSample}</div>
-              <div style="font-size: 0.7rem; color: #64748b;">Avg Pts/Sample</div>
-            </div>
+          <div style="display: grid; grid-template-columns: ${gridCols}; gap: 0.5rem;">${statsBoxes}
           </div>
         </div>
         <div style="grid-column: span 4; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: #f0fdf4; border-radius: 0.375rem; border: 1px solid #bbf7d0;">
