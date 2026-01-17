@@ -640,22 +640,48 @@
           <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
             <h4 style="margin: 0 0 0.5rem 0; color: #991b1b; font-size: 0.9rem;">📍 Required Fields</h4>
             <p style="margin: 0 0 0.75rem 0; font-size: 0.7rem; color: #991b1b;">Latitude and Longitude are required. Select the CSV column that contains each value.</p>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
               <div class="csv-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 600; color: #dc2626;">Latitude * <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
-                <select id="csvMapLat" class="csv-map-select"></select>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapLat" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('Lat')"></select>
+                  <span id="csvPreviewLat" class="shp-preview-values"></span>
+                </div>
               </div>
               <div class="csv-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 600; color: #dc2626;">Longitude * <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
-                <select id="csvMapLon" class="csv-map-select"></select>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapLon" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('Lon')"></select>
+                  <span id="csvPreviewLon" class="shp-preview-values"></span>
+                </div>
               </div>
               <div class="csv-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 500;">Sample ID <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
-                <select id="csvMapSampleId" class="csv-map-select"></select>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapSampleId" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('SampleId')"></select>
+                  <span id="csvPreviewSampleId" class="shp-preview-values"></span>
+                </div>
               </div>
               <div class="csv-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 500;">Field Name <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
-                <select id="csvMapField" class="csv-map-select"></select>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapField" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('Field')"></select>
+                  <span id="csvPreviewField" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Sample Year <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapYear" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('Year')"></select>
+                  <span id="csvPreviewYear" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Sample Depth <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="csvMapDepth" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('Depth')"></select>
+                  <span id="csvPreviewDepth" class="shp-preview-values"></span>
+                </div>
               </div>
             </div>
           </div>
@@ -1077,8 +1103,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.64";
-    const BUILD_DATE = "2026-01-17T06:02:50";
+    const APP_VERSION = "v1.0.65";
+    const BUILD_DATE = "2026-01-17T07:36:37";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4831,38 +4857,80 @@
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
-      console.log('Populating dropdowns with headers:', csvHeaders);
-      console.log('Number of headers:', csvHeaders.length);
+      console.log('CSV Column Mapping - Headers detected:', csvHeaders);
+      console.log('Total columns:', csvHeaders.length);
 
       const options = '<option value="">(skip)</option>' +
         csvHeaders.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
 
-      console.log('Generated options count:', csvHeaders.length + 1);
-
-      // Required fields
+      // Required fields - now including Year and Depth
       document.getElementById('csvMapLat').innerHTML = options;
       document.getElementById('csvMapLon').innerHTML = options;
       document.getElementById('csvMapSampleId').innerHTML = options;
       document.getElementById('csvMapField').innerHTML = options;
+      document.getElementById('csvMapYear').innerHTML = options;
+      document.getElementById('csvMapDepth').innerHTML = options;
 
-      // Verify options were added
-      console.log('Lat dropdown options:', document.getElementById('csvMapLat').options.length);
+      console.log('Dropdown populated with', csvHeaders.length + 1, 'options (including skip)');
 
       // Nutrient fields - get all standard fields
       const nutrientContainer = document.getElementById('csvNutrientMappings');
       nutrientContainer.innerHTML = '';
 
-      const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts'];
+      const nutrients = ['pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts', 'EC', 'P2'];
 
       nutrients.forEach(nutrient => {
         const div = document.createElement('div');
         div.className = 'csv-mapping-field';
         div.innerHTML = `
           <label style="font-size: 0.8rem; font-weight: 600; color: #166534;">${nutrient}</label>
-          <select id="csvMap${nutrient}" class="csv-map-select" title="Select CSV column for ${nutrient}">${options}</select>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="csvMap${nutrient}" class="csv-map-select" style="flex: 1;" onchange="updateCsvPreview('${nutrient}')">${options}</select>
+            <span id="csvPreview${nutrient}" class="shp-preview-values"></span>
+          </div>
         `;
         nutrientContainer.appendChild(div);
       });
+    }
+
+    // Update preview values when dropdown selection changes
+    function updateCsvPreview(fieldName) {
+      const selectId = `csvMap${fieldName}`;
+      const previewId = `csvPreview${fieldName}`;
+
+      const select = document.getElementById(selectId);
+      const preview = document.getElementById(previewId);
+      if (!select || !preview) return;
+
+      const colName = select.value;
+      if (!colName) {
+        preview.textContent = '';
+        preview.title = '';
+        return;
+      }
+
+      // Get sample values from first few rows
+      const values = csvParsedData.slice(0, 3)
+        .map(row => row[colName])
+        .filter(v => v !== null && v !== undefined && v !== '')
+        .map(v => {
+          const num = parseFloat(v);
+          return !isNaN(num) ? num.toFixed(1) : String(v).substring(0, 15);
+        });
+
+      if (values.length > 0) {
+        preview.textContent = values.join(', ') + '...';
+        preview.title = `Sample values: ${values.join(', ')}`;
+      } else {
+        preview.textContent = '(empty)';
+        preview.title = 'No values found';
+      }
+    }
+
+    // Update all previews after auto-mapping
+    function updateAllCsvPreviews() {
+      const fields = ['Lat', 'Lon', 'SampleId', 'Field', 'Year', 'Depth', 'pH', 'Buffer_pH', 'P', 'K', 'OM', 'CEC', 'Ca', 'Mg', 'Na', 'S', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'NO3', 'NH4', 'Soluble_Salts', 'EC', 'P2'];
+      fields.forEach(f => updateCsvPreview(f));
     }
 
     // Auto-map columns using aliases
@@ -4870,15 +4938,28 @@
       const aliases = getAliases();
 
       // Location aliases
-      const latAliases = ['lat', 'latitude', 'y', 'point_y', 'lat_wgs84'];
-      const lonAliases = ['lon', 'lng', 'longitude', 'x', 'point_x', 'long', 'lon_wgs84'];
-      const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid', 'sample id', 'lab #'];
-      const fieldAliases = ['field', 'fieldname', 'field_name', 'farm', 'farmname', 'name'];
+      const latAliases = ['lat', 'latitude', 'y', 'point_y', 'lat_wgs84', 'pt_lat', 'latitud'];
+      const lonAliases = ['lon', 'lng', 'longitude', 'x', 'point_x', 'long', 'lon_wgs84', 'pt_lon', 'longitud'];
+      const idAliases = ['sampleid', 'sample_id', 'id', 'pointid', 'point_id', 'fid', 'sample id', 'lab #', 'labid', 'lab_id', 'sample #', 'sample number'];
+      const fieldAliases = ['field', 'fieldname', 'field_name', 'farm', 'farmname', 'name', 'field name', 'grower'];
+      const yearAliases = ['year', 'sample_year', 'sampleyear', 'crop_year', 'cropyear', 'sample year', 'yr'];
+      const depthAliases = ['depth', 'sample_depth', 'sampledepth', 'sample depth', 'depth_in', 'depthrange'];
 
-      function findMatch(aliasList) {
+      // Find exact match first, then partial match
+      function findMatch(aliasList, requireExact = false) {
+        // Exact match
         for (const header of csvHeaders) {
           const h = header.toLowerCase().trim();
           if (aliasList.includes(h)) return header;
+        }
+        // Partial match (header contains alias)
+        if (!requireExact) {
+          for (const header of csvHeaders) {
+            const h = header.toLowerCase().trim();
+            for (const alias of aliasList) {
+              if (h.includes(alias) || alias.includes(h)) return header;
+            }
+          }
         }
         return '';
       }
@@ -4888,35 +4969,40 @@
       document.getElementById('csvMapLon').value = findMatch(lonAliases);
       document.getElementById('csvMapSampleId').value = findMatch(idAliases);
       document.getElementById('csvMapField').value = findMatch(fieldAliases);
+      document.getElementById('csvMapYear').value = findMatch(yearAliases);
+      document.getElementById('csvMapDepth').value = findMatch(depthAliases);
 
-      // Extended aliases for common lab formats (Midwest Labs, Ward Labs, etc.)
+      // Extended aliases for common lab formats (Midwest Labs, Ward Labs, AgSource, etc.)
       const labAliases = {
-        'pH': ['ph', 'wph', 'water ph', 'soil ph', '1:1 ph', 'ph 1:1'],
-        'Buffer_pH': ['bph', 'buffer ph', 'buffer_ph', 'sikora', 'smp'],
-        'P': ['p', 'bray p1', 'bray p-1', 'mehlich p', 'olsen p', 'p1', 'p (m3)'],
-        'K': ['k', 'aa k', 'potassium', 'k (m3)', 'mehlich k'],
-        'OM': ['om', 'om (loi)', 'organic matter', 'om%', 'o.m.', 'loi'],
-        'CEC': ['cec', 'c.e.c.', 'cation exchange'],
-        'Ca': ['ca', 'aa ca', 'calcium'],
-        'Mg': ['mg', 'aa mg', 'magnesium'],
-        'Na': ['na', 'aa na', 'sodium'],
-        'S': ['s', 'sulfur', 'so4-s', 'sulfate'],
-        'Zn': ['zn', 'dtpa-zn', 'zinc'],
-        'Mn': ['mn', 'dtpa-mn', 'manganese'],
-        'Fe': ['fe', 'dtpa-fe', 'iron'],
-        'Cu': ['cu', 'dtpa-cu', 'copper'],
-        'Boron': ['b', 'dtpa-b', 'boron', 'hot water b'],
-        'Ca_sat': ['ca sat %', 'ca sat', 'ca%', 'ca base sat', '%ca'],
-        'Mg_sat': ['mg sat %', 'mg sat', 'mg%', 'mg base sat', '%mg'],
-        'K_Sat': ['k sat %', 'k sat', 'k%', 'k base sat', '%k'],
-        'H_Sat': ['h sat %', 'h sat', 'h%', '%h'],
-        'Na_Sat': ['na sat %', 'na sat', 'na%', '%na'],
-        'NO3': ['no3-n (ppm)', 'no3-n', 'no3', 'nitrate', 'nitrate-n'],
-        'NH4': ['nh4-n', 'nh4', 'ammonium', 'ammonium-n']
+        'pH': ['ph', 'wph', 'water ph', 'soil ph', '1:1 ph', 'ph 1:1', 'ph_1_1', 'soil_ph', 'ph water'],
+        'Buffer_pH': ['bph', 'buffer ph', 'buffer_ph', 'sikora', 'smp', 'buffer', 'bph_sikora'],
+        'P': ['p', 'bray p1', 'bray p-1', 'mehlich p', 'olsen p', 'p1', 'p (m3)', 'phosphorus', 'p_m3', 'bray-1 p', 'bray1', 'p ppm'],
+        'P2': ['p2', 'bray p2', 'bray-2 p', 'p-2', 'bray2'],
+        'K': ['k', 'aa k', 'potassium', 'k (m3)', 'mehlich k', 'exch k', 'k_m3', 'k ppm'],
+        'OM': ['om', 'om (loi)', 'organic matter', 'om%', 'o.m.', 'loi', 'soil om', 'organic', 'soil om(%)'],
+        'CEC': ['cec', 'c.e.c.', 'cation exchange', 'cec meq'],
+        'Ca': ['ca', 'aa ca', 'calcium', 'ca ppm'],
+        'Mg': ['mg', 'aa mg', 'magnesium', 'mg ppm'],
+        'Na': ['na', 'aa na', 'sodium', 'na ppm'],
+        'S': ['s', 'sulfur', 'so4-s', 'sulfate', 's ppm', 'so4'],
+        'Zn': ['zn', 'dtpa-zn', 'zinc', 'zn ppm'],
+        'Mn': ['mn', 'dtpa-mn', 'manganese', 'mn ppm'],
+        'Fe': ['fe', 'dtpa-fe', 'iron', 'fe ppm'],
+        'Cu': ['cu', 'dtpa-cu', 'copper', 'cu ppm'],
+        'Boron': ['b', 'dtpa-b', 'boron', 'hot water b', 'b ppm'],
+        'Ca_sat': ['ca sat %', 'ca sat', 'ca%', 'ca base sat', '%ca', 'ca_sat', 'ca%bs', '%ca sat', 'ca bs', 'casat'],
+        'Mg_sat': ['mg sat %', 'mg sat', 'mg%', 'mg base sat', '%mg', 'mg_sat', 'mg%bs', '%mg sat', 'mg bs', 'mgsat'],
+        'K_Sat': ['k sat %', 'k sat', 'k%', 'k base sat', '%k', 'k_sat', 'k%bs', '%k sat', 'k bs', 'ksat'],
+        'H_Sat': ['h sat %', 'h sat', 'h%', '%h', 'h_sat', 'h%bs', 'h bs', 'hsat', 'hydrogen'],
+        'Na_Sat': ['na sat %', 'na sat', 'na%', '%na', 'na_sat', 'na%bs', 'na bs', 'nasat'],
+        'NO3': ['no3-n (ppm)', 'no3-n', 'no3', 'nitrate', 'nitrate-n', 'no3n'],
+        'NH4': ['nh4-n', 'nh4', 'ammonium', 'ammonium-n', 'nh4n'],
+        'Soluble_Salts': ['soluble salts', 'salts', 'ss', 'soluble_salts', 'sol salts'],
+        'EC': ['ec', 'electrical conductivity', 'e.c.', 'conductivity']
       };
 
       // Map nutrient fields using stored aliases + lab aliases
-      const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'H_Sat', 'Na_Sat'];
+      const nutrients = ['pH', 'P', 'P2', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'H_Sat', 'Na_Sat', 'EC'];
 
       nutrients.forEach(nutrient => {
         const select = document.getElementById(`csvMap${nutrient}`);
@@ -4928,10 +5014,11 @@
         const nutrientAliases = [...new Set([...storedAliases.map(a => a.toLowerCase()), ...defaultLabAliases])];
         let matched = '';
 
+        // Exact match first
         for (const header of csvHeaders) {
           const h = header.toLowerCase().trim();
           for (const alias of nutrientAliases) {
-            if (alias.toLowerCase() === h || header === alias) {
+            if (alias === h) {
               matched = header;
               break;
             }
@@ -4939,7 +5026,32 @@
           if (matched) break;
         }
 
+        // Partial match if no exact match
+        if (!matched) {
+          for (const header of csvHeaders) {
+            const h = header.toLowerCase().trim();
+            for (const alias of nutrientAliases) {
+              // Check if header contains alias or alias contains header (for short field names)
+              if (h.includes(alias) && alias.length >= 2) {
+                matched = header;
+                break;
+              }
+            }
+            if (matched) break;
+          }
+        }
+
         if (matched) select.value = matched;
+      });
+
+      // Update all previews after auto-mapping
+      updateAllCsvPreviews();
+
+      console.log('Auto-mapping complete. Mapped columns:', {
+        lat: document.getElementById('csvMapLat').value,
+        lon: document.getElementById('csvMapLon').value,
+        field: document.getElementById('csvMapField').value,
+        year: document.getElementById('csvMapYear').value
       });
     }
 
