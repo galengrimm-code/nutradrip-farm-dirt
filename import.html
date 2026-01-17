@@ -264,6 +264,7 @@
               <option value="corn">🌽 Corn</option>
               <option value="soybeans">🫘 Soybeans</option>
               <option value="wheat">🌾 Wheat</option>
+              <option value="amylose">🍚 Amylose</option>
             </select>
           </div>
           <div class="form-group">
@@ -296,6 +297,7 @@
               <option value="corn">🌽 Corn</option>
               <option value="soybeans">🫘 Soybeans</option>
               <option value="wheat">🌾 Wheat</option>
+              <option value="amylose">🍚 Amylose</option>
             </select>
           </div>
           <div class="form-group">
@@ -1101,8 +1103,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.66";
-    const BUILD_DATE = "2026-01-17T07:47:52";
+    const APP_VERSION = "v1.0.67";
+    const BUILD_DATE = "2026-01-17T07:58:06";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2247,7 +2249,8 @@
     const CROP_DEFAULTS = {
       corn: { yieldMin: 20, yieldMax: 400, moistureMin: 8, moistureMax: 35 },
       soybeans: { yieldMin: 10, yieldMax: 120, moistureMin: 8, moistureMax: 20 },
-      wheat: { yieldMin: 15, yieldMax: 150, moistureMin: 8, moistureMax: 20 }
+      wheat: { yieldMin: 15, yieldMax: 150, moistureMin: 8, moistureMax: 20 },
+      amylose: { yieldMin: 15, yieldMax: 300, moistureMin: 8, moistureMax: 35 }
     };
 
     // Common yield field aliases from different monitors

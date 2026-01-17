@@ -552,8 +552,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.66";
-    const BUILD_DATE = "2026-01-17T07:47:52";
+    const APP_VERSION = "v1.0.67";
+    const BUILD_DATE = "2026-01-17T07:58:06";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -2241,6 +2241,8 @@
       const cropLower = (cropFilter || '').toLowerCase();
       if (cropLower.includes('soy') || cropLower.includes('bean')) {
         return { min: 20, max: 100 };  // Soybeans: 20-100 bu/ac
+      } else if (cropLower === 'amylose') {
+        return { min: 40, max: 280 };  // Amylose corn: 40-280 bu/ac (typically 15-30% lower than regular corn)
       } else if (cropLower.includes('corn') || cropLower.includes('maize')) {
         return { min: 50, max: 350 };  // Corn: 50-350 bu/ac
       }
