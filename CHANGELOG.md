@@ -4,6 +4,26 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.70] - January 17, 2026
+
+### Client/Farm Organizational Structure
+- **New**: Hierarchical organization for multi-client operations (Client → Farm → Field)
+- **Settings page**: "Active Operation" card to select which client/farm to view
+- **Settings page**: "Manage Clients & Farms" card to add/edit/delete clients and farms
+- **Auto-filtering**: All pages automatically filter by active client/farm selection
+- **Import page**: Assign field boundaries to a specific client/farm when importing
+- **Quick-add buttons**: Create new clients or farms directly from the import page
+- **Field Management**: Table now shows which farm/client each field belongs to
+- **Data migration**: Existing fields automatically assigned to default client/farm on first load
+
+### How It Works
+1. Go to Settings → "Manage Clients & Farms" to create clients and farms
+2. Select active client/farm in "Active Operation" section
+3. Map, Analysis, and Import pages automatically filter to show only selected data
+4. When importing boundaries, choose which client/farm they belong to
+
+---
+
 ## [v1.0.46] - January 15, 2026
 
 ### Shapefile Attribute Mapping Bug Fix
