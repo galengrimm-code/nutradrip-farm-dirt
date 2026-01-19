@@ -555,8 +555,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.72";
-    const BUILD_DATE = "2026-01-19T07:36:02";
+    const APP_VERSION = "v1.0.73";
+    const BUILD_DATE = "2026-01-19T07:53:12";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -868,10 +868,13 @@
     async function loadFromIndexedDB() {
       try {
         const db = await openDB();
-        // Check if yield store exists (may not on older DBs)
+        // Check which stores exist
         const storeNames = Array.from(db.objectStoreNames);
         const hasYield = storeNames.includes('yield');
-        const stores = hasYield ? ['samples', 'yield'] : ['samples'];
+        const hasBoundaries = storeNames.includes('boundaries');
+        const stores = ['samples'];
+        if (hasBoundaries) stores.push('boundaries');
+        if (hasYield) stores.push('yield');
         const tx = db.transaction(stores, 'readonly');
 
         const samplesData = await new Promise((resolve, reject) => {
@@ -879,6 +882,15 @@
           req.onsuccess = () => resolve(req.result?.data || []);
           req.onerror = reject;
         });
+
+        let boundariesData = {};
+        if (hasBoundaries) {
+          boundariesData = await new Promise((resolve, reject) => {
+            const req = tx.objectStore('boundaries').get('all');
+            req.onsuccess = () => resolve(req.result?.data || {});
+            req.onerror = reject;
+          });
+        }
 
         let yieldDataResult = [];
         if (hasYield) {
@@ -890,7 +902,7 @@
         }
 
         db.close();
-        return { samples: samplesData, yield: yieldDataResult };
+        return { samples: samplesData, boundaries: boundariesData, yield: yieldDataResult };
       } catch (e) { return null; }
     }
 
@@ -902,7 +914,11 @@
           if (idbData && idbData.samples && idbData.samples.length > 0) {
             sampleData = idbData.samples;
             yieldData = idbData.yield || [];
-            console.log('Loaded from IndexedDB:', sampleData.length, 'samples,', yieldData.length, 'yield points');
+            // Also load boundaries from IndexedDB if available
+            if (idbData.boundaries && Object.keys(idbData.boundaries).length > 0) {
+              fieldBoundaries = idbData.boundaries;
+            }
+            console.log('Loaded from IndexedDB:', sampleData.length, 'samples,', yieldData.length, 'yield points,', Object.keys(fieldBoundaries).length, 'fields');
           }
         } else {
           const saved = localStorage.getItem('soilSamples');

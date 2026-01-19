@@ -337,8 +337,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.72";
-    const BUILD_DATE = "2026-01-19T07:36:02";
+    const APP_VERSION = "v1.0.73";
+    const BUILD_DATE = "2026-01-19T07:53:12";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -2614,11 +2614,16 @@
     function zoomToField(fieldName) {
       if (fieldName === 'all') {
         const allCoords = [];
-        Object.values(fieldBoundaries).forEach(p => { const a = Array.isArray(p[0]?.[0]) ? p.flat() : p; allCoords.push(...a); });
+        Object.values(fieldBoundaries).forEach(fieldData => {
+          const p = fieldData.boundary || fieldData;
+          const a = Array.isArray(p[0]?.[0]) ? p.flat() : p;
+          allCoords.push(...a);
+        });
         sampleData.forEach(s => allCoords.push([s.lat, s.lon]));
         if (allCoords.length > 0) map.fitBounds(allCoords, { padding: [50,50] });
       } else if (fieldBoundaries[fieldName]) {
-        const p = fieldBoundaries[fieldName];
+        const fieldData = fieldBoundaries[fieldName];
+        const p = fieldData.boundary || fieldData;
         const a = Array.isArray(p[0]?.[0]) ? p.flat() : p;
         map.fitBounds(a, { padding: [50,50] });
       }

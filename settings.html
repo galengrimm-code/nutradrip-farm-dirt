@@ -352,8 +352,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.72";
-    const BUILD_DATE = "2026-01-19T07:36:02";
+    const APP_VERSION = "v1.0.73";
+    const BUILD_DATE = "2026-01-19T07:53:12";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -505,9 +505,54 @@
       }
     }
 
-    // Load field boundaries from localStorage
-    function loadFieldBoundaries() {
+    // IndexedDB for large datasets
+    const DB_NAME = 'SoilAppDB';
+    const DB_VERSION = 2;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
+        };
+      });
+    }
+
+    async function loadBoundariesFromIndexedDB() {
       try {
+        const db = await openDB();
+        const storeNames = Array.from(db.objectStoreNames);
+        if (!storeNames.includes('boundaries')) { db.close(); return null; }
+        const tx = db.transaction(['boundaries'], 'readonly');
+        const boundariesData = await new Promise((resolve, reject) => {
+          const req = tx.objectStore('boundaries').get('all');
+          req.onsuccess = () => resolve(req.result?.data || {});
+          req.onerror = reject;
+        });
+        db.close();
+        return boundariesData;
+      } catch (e) { return null; }
+    }
+
+    // Load field boundaries from localStorage or IndexedDB
+    async function loadFieldBoundaries() {
+      try {
+        // Check IndexedDB first if flagged
+        if (localStorage.getItem('usingIndexedDB') === 'true') {
+          const idbBoundaries = await loadBoundariesFromIndexedDB();
+          if (idbBoundaries && Object.keys(idbBoundaries).length > 0) {
+            fieldBoundaries = idbBoundaries;
+            console.log('Loaded boundaries from IndexedDB:', Object.keys(fieldBoundaries).length, 'fields');
+            return fieldBoundaries;
+          }
+        }
+        // Fallback to localStorage
         const saved = localStorage.getItem('fieldBoundaries');
         fieldBoundaries = saved ? JSON.parse(saved) : {};
       } catch (e) {
@@ -639,11 +684,8 @@
     }
 
     // Get fields filtered by active client/farm selection
+    // Note: fieldBoundaries must be loaded before calling this (via loadClientManagement)
     function getActiveFields() {
-      loadFieldBoundaries();
-      loadFarmsData();
-      loadActiveSelection();
-
       const allFieldNames = Object.keys(fieldBoundaries);
 
       if (activeClientId === 'all' && activeFarmId === 'all') {
@@ -686,8 +728,8 @@
     let modalFarms = [];
 
     // Load and render client management UI
-    function loadClientManagement() {
-      loadFieldBoundaries();
+    async function loadClientManagement() {
+      await loadFieldBoundaries();
       updateActiveClientSelector();
       updateActiveFarmSelector();
       updateActiveOperationStats();
