@@ -1122,8 +1122,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.73";
-    const BUILD_DATE = "2026-01-19T07:53:12";
+    const APP_VERSION = "v1.0.74";
+    const BUILD_DATE = "2026-01-19T08:10:50";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -1310,7 +1310,7 @@
       let defaultFarm = existingFarms.find(f => f.clientId === defaultClient.id && f.isDefault);
 
       if (!defaultFarm) {
-        defaultFarm = { id: generateId('frm'), clientId: defaultClient.id, name: 'Default Farm', isDefault: true, createdAt: new Date().toISOString() };
+        defaultFarm = { id: generateId('frm'), clientId: defaultClient.id, name: operationName + ' Farm', isDefault: true, createdAt: new Date().toISOString() };
         existingFarms.push(defaultFarm);
         localStorage.setItem('farmsData', JSON.stringify(existingFarms));
       }
@@ -1424,7 +1424,7 @@
       farmsData.push({
         id: newFarmId,
         clientId: newClientId,
-        name: 'Default Farm',
+        name: name.trim() + ' Farm',
         isDefault: true,
         createdAt: new Date().toISOString()
       });
