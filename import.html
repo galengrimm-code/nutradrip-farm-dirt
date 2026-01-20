@@ -1121,8 +1121,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.89";
-    const BUILD_DATE = "2026-01-20T11:57:19";
+    const APP_VERSION = "v1.0.90";
+    const BUILD_DATE = "2026-01-20T13:06:40";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4747,19 +4747,20 @@
       const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
                        buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
+      const legalLinks = `<span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <a href="privacy-policy.html" style="color: #94a3b8; text-decoration: none;">Privacy</a> <span style="color: #cbd5e1;">·</span> <a href="terms-of-service.html" style="color: #94a3b8; text-decoration: none;">Terms</a>`;
 
       const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
 
       if (backupTime) {
         const date = new Date(parseInt(backupTime));
         const backupStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #22c55e;">Data backup: ${backupStr}</span>`;
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #22c55e;">Data backup: ${backupStr}</span>${legalLinks}`;
       } else if (sampleData.length === 0) {
         // No data yet - don't show backup warning
-        footer.innerHTML = versionInfo;
+        footer.innerHTML = versionInfo + legalLinks;
       } else {
         // Has data but no backup - show warning
-        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #f59e0b;">No backup yet</span>`;
+        footer.innerHTML = `${versionInfo} <span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <span style="color: #f59e0b;">No backup yet</span>${legalLinks}`;
       }
     }
 
