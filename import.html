@@ -1122,8 +1122,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.81";
-    const BUILD_DATE = "2026-01-20T08:07:54";
+    const APP_VERSION = "v1.0.82";
+    const BUILD_DATE = "2026-01-20T08:17:47";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -4270,20 +4270,9 @@
       try {
         await SheetsAPI.initializeSheets();
 
-        // Only clear tabs that have local data to replace them
-        // This prevents accidentally wiping Sheets when local data fails to load
-        if (clientsData.length > 0) {
-          try { await clearSheetsData('Clients'); } catch (e) { console.warn('Could not clear Clients tab'); }
-        }
-        if (farmsData.length > 0) {
-          try { await clearSheetsData('Farms'); } catch (e) { console.warn('Could not clear Farms tab'); }
-        }
-        if (Object.keys(fieldBoundaries).length > 0) {
-          await clearSheetsData('Fields');
-        }
-        if (sampleData.length > 0) {
-          await clearSheetsData('Samples');
-        }
+        // NEVER clear data from Sheets - only append
+        // This prevents data loss if local data fails to load properly
+        // Users can manually clean up duplicates in Sheets if needed
 
         // Write clients
         if (clientsData.length > 0) {
