@@ -1122,8 +1122,8 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.78";
-    const BUILD_DATE = "2026-01-20T07:32:14";
+    const APP_VERSION = "v1.0.79";
+    const BUILD_DATE = "2026-01-20T07:41:52";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -1207,28 +1207,53 @@
       onSignInChange(s) {},
       
       async initializeSheets() {
-        // Create headers if needed for all tabs
+        // Helper to create a tab if it doesn't exist
+        async function ensureTabExists(tabName) {
+          try {
+            await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: CONFIG.SHEET_ID, range: `${tabName}!A1` });
+            return true; // Tab exists
+          } catch (e) {
+            if (e.result?.error?.code === 400 || e.result?.error?.message?.includes('Unable to parse range')) {
+              // Tab doesn't exist - create it
+              try {
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                  spreadsheetId: CONFIG.SHEET_ID,
+                  resource: {
+                    requests: [{ addSheet: { properties: { title: tabName } } }]
+                  }
+                });
+                console.log(`Created ${tabName} tab`);
+                return true;
+              } catch (createError) {
+                console.error(`Failed to create ${tabName} tab:`, createError);
+                return false;
+              }
+            }
+            return false;
+          }
+        }
 
-        // Clients tab
+        // Ensure all tabs exist
+        await ensureTabExists('Clients');
+        await ensureTabExists('Farms');
+        await ensureTabExists('Fields');
+        await ensureTabExists('Samples');
+
+        // Clients tab headers
         try {
           const clientsCheck = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: CONFIG.SHEET_ID, range: 'Clients!A1:D1' });
           if (!clientsCheck.result.values || clientsCheck.result.values.length === 0) {
             await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: CONFIG.SHEET_ID, range: 'Clients!A1:D1', valueInputOption: 'RAW', resource: { values: [['id', 'name', 'createdAt', 'updatedAt']] } });
           }
-        } catch (e) {
-          // Tab might not exist - user needs to create it manually
-          console.warn('Clients tab not found - please create it in Google Sheets');
-        }
+        } catch (e) { console.warn('Could not set Clients headers:', e); }
 
-        // Farms tab
+        // Farms tab headers
         try {
           const farmsCheck = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: CONFIG.SHEET_ID, range: 'Farms!A1:E1' });
           if (!farmsCheck.result.values || farmsCheck.result.values.length === 0) {
             await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: CONFIG.SHEET_ID, range: 'Farms!A1:E1', valueInputOption: 'RAW', resource: { values: [['id', 'clientId', 'name', 'createdAt', 'updatedAt']] } });
           }
-        } catch (e) {
-          console.warn('Farms tab not found - please create it in Google Sheets');
-        }
+        } catch (e) { console.warn('Could not set Farms headers:', e); }
 
         // Fields tab (now includes farmId)
         const fieldsCheck = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: CONFIG.SHEET_ID, range: 'Fields!A1:F1' });
