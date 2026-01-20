@@ -159,9 +159,10 @@
       
       <div class="threshold-grid">
         <div class="threshold-row" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
-          <label style="font-weight: 600; color: #374151;">Google Sheet ID</label>
-          <input type="text" id="sheetId" placeholder="Enter your Google Sheet ID" style="width: 100%; font-family: monospace;">
-          <small style="color: #64748b;">Find this in your Google Sheet URL: docs.google.com/spreadsheets/d/<strong>[SHEET_ID]</strong>/edit</small>
+          <label style="font-weight: 600; color: #374151;">Google Sheet URL</label>
+          <input type="text" id="sheetId" placeholder="Paste the full Google Sheet URL or just the ID" style="width: 100%; font-family: monospace;">
+          <small style="color: #64748b;">Paste the full URL, e.g., https://docs.google.com/spreadsheets/d/1ABC.../edit</small>
+          <p id="sheetIdDetected" style="color: #22c55e; font-size: 0.8125rem; margin: 0.25rem 0 0 0; display: none;"></p>
         </div>
         <div class="threshold-row" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
           <label style="font-weight: 600; color: #374151;">Operation Name</label>
@@ -174,7 +175,7 @@
         <ol style="margin: 0; padding-left: 1.25rem; color: #64748b; font-size: 0.8125rem; line-height: 1.6;">
           <li>Click "Create New Google Sheet" below</li>
           <li>Rename first tab to <strong>Samples</strong>, add tabs <strong>Fields</strong> and <strong>Settings</strong></li>
-          <li>Copy Sheet ID from URL (between /d/ and /edit)</li>
+          <li>Copy the full URL from your browser's address bar</li>
           <li>Paste above and click "Save Sheet Configuration"</li>
         </ol>
         <div style="margin-top: 1rem;">
@@ -353,8 +354,8 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.90";
-    const BUILD_DATE = "2026-01-20T13:06:40";
+    const APP_VERSION = "v1.0.91";
+    const BUILD_DATE = "2026-01-20T13:23:52";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
@@ -1555,6 +1556,16 @@
     }
 
     // Sheet Configuration Functions
+    function extractSheetId(input) {
+      // If input contains a Google Sheets URL, extract the ID
+      if (input.includes('docs.google.com') || input.includes('/d/')) {
+        const match = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match) return match[1];
+      }
+      // Otherwise assume it's already just the ID
+      return input;
+    }
+
     function loadSheetConfig() {
       const sheetId = localStorage.getItem('googleSheetId') || '';
       const operationName = localStorage.getItem('operationName') || '';
@@ -1574,15 +1585,31 @@
     }
     
     function saveSheetConfig() {
-      const sheetId = document.getElementById('sheetId').value.trim();
+      const input = document.getElementById('sheetId').value.trim();
       const operationName = document.getElementById('operationName').value.trim();
+
+      // Extract Sheet ID from URL if needed
+      const sheetId = input ? extractSheetId(input) : '';
 
       console.log('[Sheets] Saving sheet config:', { sheetId: sheetId ? sheetId.substring(0, 10) + '...' : '(none)', operationName });
 
+      const detectedEl = document.getElementById('sheetIdDetected');
+
       if (sheetId) {
+        if (sheetId.length < 20) {
+          showStatus('Could not find a valid Sheet ID - check the URL', false);
+          detectedEl.style.display = 'none';
+          return;
+        }
         localStorage.setItem('googleSheetId', sheetId);
+        // Show what was detected
+        detectedEl.textContent = `✓ Sheet ID detected: ${sheetId.substring(0, 25)}...`;
+        detectedEl.style.display = 'block';
+        // Update the input to show just the ID for clarity
+        document.getElementById('sheetId').value = sheetId;
       } else {
         localStorage.removeItem('googleSheetId');
+        detectedEl.style.display = 'none';
       }
 
       if (operationName) {
@@ -1601,16 +1628,17 @@
       const statusEl = document.getElementById('connectionStatus');
 
       if (!sheetId) {
-        statusEl.innerHTML = '<span style="color: #64748b;">📋 No sheet configured - enter a Sheet ID above</span>';
+        statusEl.innerHTML = '<span style="color: #64748b;">📋 No sheet configured - enter a Google Sheet URL above</span>';
       } else if (!SheetsAPI.isSignedIn) {
-        statusEl.innerHTML = '<span style="color: #f59e0b;">🔑 Sheet ID saved - sign in to test connection</span>';
+        statusEl.innerHTML = '<span style="color: #f59e0b;">🔑 Sheet connected - sign in to test connection</span>';
       } else {
-        statusEl.innerHTML = '<span style="color: #64748b;">📋 Sheet ID configured - click "Test Connection" to verify</span>';
+        statusEl.innerHTML = '<span style="color: #64748b;">📋 Sheet connected - click "Test Connection" to verify</span>';
       }
     }
 
     async function testSheetConnection() {
-      const sheetId = document.getElementById('sheetId').value.trim();
+      const input = document.getElementById('sheetId').value.trim();
+      const sheetId = input ? extractSheetId(input) : '';
       const statusEl = document.getElementById('connectionStatus');
 
       console.log('[Sheets] Testing connection to sheet:', sheetId);

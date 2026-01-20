@@ -292,7 +292,7 @@
             <ol style="color: #78350f; font-size: 0.7rem; margin: 0; padding-left: 1.25rem; line-height: 1.6;">
               <li>Rename the first tab to <strong>Samples</strong> (right-click tab → Rename)</li>
               <li>Add 2 more tabs: <strong>Fields</strong> and <strong>Settings</strong> (click + button)</li>
-              <li>Copy the Sheet ID from URL: docs.google.com/spreadsheets/d/<strong style="background:#fef3c7;">[THIS PART]</strong>/edit</li>
+              <li>Copy the full URL from your browser</li>
               <li>Paste it below and click Connect</li>
             </ol>
           </div>
@@ -301,14 +301,15 @@
           </p>
 
           <div style="border-top: 1px solid #e2e8f0; padding-top: 1rem;">
-            <p style="color: #64748b; font-size: 0.8125rem; margin: 0 0 0.75rem 0; font-weight: 500;">Already have a Sheet ID?</p>
+            <p style="color: #64748b; font-size: 0.8125rem; margin: 0 0 0.75rem 0; font-weight: 500;">Already have a Google Sheet?</p>
             <div style="display: flex; gap: 0.5rem;">
-              <input type="text" id="welcomeSheetId" placeholder="Paste Sheet ID here..."
+              <input type="text" id="welcomeSheetId" placeholder="Paste Google Sheet URL or ID..."
                 style="flex: 1; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; font-family: monospace;">
               <button onclick="connectWelcomeSheet()" style="padding: 0.75rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer;">
                 Connect
               </button>
             </div>
+            <p id="welcomeSheetDetected" style="color: #22c55e; font-size: 0.75rem; margin: 0.5rem 0 0 0; display: none;"></p>
           </div>
 
           <div style="border-top: 1px solid #e2e8f0; margin-top: 1.5rem; padding-top: 1rem;">
@@ -338,8 +339,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.90";
-    const BUILD_DATE = "2026-01-20T13:06:40";
+    const APP_VERSION = "v1.0.91";
+    const BUILD_DATE = "2026-01-20T13:23:52";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -1155,17 +1156,37 @@
       }, 500);
     }
 
+    function extractSheetId(input) {
+      // If input contains a Google Sheets URL, extract the ID
+      if (input.includes('docs.google.com') || input.includes('/d/')) {
+        const match = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        if (match) return match[1];
+      }
+      // Otherwise assume it's already just the ID
+      return input;
+    }
+
     function connectWelcomeSheet() {
-      const sheetId = document.getElementById('welcomeSheetId').value.trim();
-      if (!sheetId) {
-        Utils.showStatus('Please enter a Sheet ID', false);
+      const input = document.getElementById('welcomeSheetId').value.trim();
+      if (!input) {
+        Utils.showStatus('Please enter a Google Sheet URL or ID', false);
         return;
       }
+
+      // Extract Sheet ID from URL if needed
+      const sheetId = extractSheetId(input);
+
       // Validate format (basic check)
       if (sheetId.length < 20) {
-        Utils.showStatus('Sheet ID looks too short - check the URL', false);
+        Utils.showStatus('Could not find a valid Sheet ID - check the URL', false);
         return;
       }
+
+      // Show what was detected
+      const detectedEl = document.getElementById('welcomeSheetDetected');
+      detectedEl.textContent = `✓ Sheet ID detected: ${sheetId.substring(0, 20)}...`;
+      detectedEl.style.display = 'block';
+
       // Save and reload
       localStorage.setItem('googleSheetId', sheetId);
       hideWelcomeScreen();
