@@ -1121,13 +1121,22 @@
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.91";
-    const BUILD_DATE = "2026-01-20T13:23:52";
+    const APP_VERSION = "v1.0.92";
+    const BUILD_DATE = "2026-01-20T13:26:48";
 
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      get SHEET_ID() { return localStorage.getItem('googleSheetId') || null; },
+      get SHEET_ID() {
+        const stored = localStorage.getItem('googleSheetId');
+        if (!stored) return null;
+        // Extract ID from URL if it's a full URL
+        if (stored.includes('docs.google.com') || stored.includes('/d/')) {
+          const match = stored.match(/\/d\/([a-zA-Z0-9-_]+)/);
+          if (match) return match[1];
+        }
+        return stored;
+      },
       DECIMAL_PLACES: {
         pH: 2, Buffer_pH: 2, OM: 2, P: 0, P2: 0, K: 0, CEC: 1,
         Ca_sat: 1, Mg_sat: 1, K_Sat: 1, H_Sat: 1, Na_Sat: 1,

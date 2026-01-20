@@ -339,14 +339,23 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.91";
-    const BUILD_DATE = "2026-01-20T13:23:52";
+    const APP_VERSION = "v1.0.92";
+    const BUILD_DATE = "2026-01-20T13:26:48";
 
     // ========== CONFIG ==========
     const CONFIG = {
       CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
       API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      get SHEET_ID() { return localStorage.getItem('googleSheetId') || null; },
+      get SHEET_ID() {
+        const stored = localStorage.getItem('googleSheetId');
+        if (!stored) return null;
+        // Extract ID from URL if it's a full URL
+        if (stored.includes('docs.google.com') || stored.includes('/d/')) {
+          const match = stored.match(/\/d\/([a-zA-Z0-9-_]+)/);
+          if (match) return match[1];
+        }
+        return stored;
+      },
       DEFAULT_LAT: 39.8528,
       DEFAULT_LON: -95.5347,
       DEFAULT_ZOOM: 13,
