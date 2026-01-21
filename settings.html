@@ -352,24 +352,18 @@
 
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
+  <script src="js/core/data.js"></script>
+  <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.98";
-    const BUILD_DATE = "2026-01-21T12:51:33";
+    const APP_VERSION = "v1.0.99";
+    const BUILD_DATE = "2026-01-21T12:54:00";
 
+    // Reference shared data config
     const CONFIG = {
-      CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
-      API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      get SHEET_ID() {
-        const stored = localStorage.getItem('googleSheetId');
-        if (!stored) return null;
-        // Extract ID from URL if it's a full URL
-        if (stored.includes('docs.google.com') || stored.includes('/d/')) {
-          const match = stored.match(/\/d\/([a-zA-Z0-9-_]+)/);
-          if (match) return match[1];
-        }
-        return stored;
-      }
+      get CLIENT_ID() { return DataCore.config.CLIENT_ID; },
+      get API_KEY() { return DataCore.config.API_KEY; },
+      get SHEET_ID() { return DataCore.config.SHEET_ID; }
     };
     const defaults = { pH_min: 6.3, pH_max: 6.9, P_min: 20, K_min: 150, OM_min: 3.0, Ca_sat_min: 65, Ca_sat_max: 75, Mg_sat_min: 12, Mg_sat_max: 15, K_sat_min: 3.0, H_sat_max: 5.0, bufferPercent: 25 };
     
@@ -469,86 +463,31 @@
     let activeClientId = 'all';
     let activeFarmId = 'all';
 
-    // Generate unique IDs for clients and farms
-    function generateId(prefix) {
-      return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
+    // Use shared functions from DataCore
+    const generateId = DataCore.generateId;
+    const openDB = DataCore.openDB;
 
-    // Load clients from localStorage
     function loadClientsData() {
-      try {
-        const saved = localStorage.getItem('clientsData');
-        clientsData = saved ? JSON.parse(saved) : [];
-      } catch (e) {
-        console.error('Error loading clients:', e);
-        clientsData = [];
-      }
+      clientsData = DataCore.loadClientsData();
       return clientsData;
     }
 
-    // Save clients to localStorage
     function saveClientsData() {
-      try {
-        localStorage.setItem('clientsData', JSON.stringify(clientsData));
-      } catch (e) {
-        console.error('Error saving clients:', e);
-      }
+      DataCore.saveClientsData(clientsData);
     }
 
-    // Load farms from localStorage
     function loadFarmsData() {
-      try {
-        const saved = localStorage.getItem('farmsData');
-        farmsData = saved ? JSON.parse(saved) : [];
-      } catch (e) {
-        console.error('Error loading farms:', e);
-        farmsData = [];
-      }
+      farmsData = DataCore.loadFarmsData();
       return farmsData;
     }
 
-    // Save farms to localStorage
     function saveFarmsData() {
-      try {
-        localStorage.setItem('farmsData', JSON.stringify(farmsData));
-      } catch (e) {
-        console.error('Error saving farms:', e);
-      }
-    }
-
-    // IndexedDB for large datasets
-    const DB_NAME = 'SoilAppDB';
-    const DB_VERSION = 2;
-
-    function openDB() {
-      return new Promise((resolve, reject) => {
-        if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
-          if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
-          if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
-        };
-      });
+      DataCore.saveFarmsData(farmsData);
     }
 
     async function loadBoundariesFromIndexedDB() {
-      try {
-        const db = await openDB();
-        const storeNames = Array.from(db.objectStoreNames);
-        if (!storeNames.includes('boundaries')) { db.close(); return null; }
-        const tx = db.transaction(['boundaries'], 'readonly');
-        const boundariesData = await new Promise((resolve, reject) => {
-          const req = tx.objectStore('boundaries').get('all');
-          req.onsuccess = () => resolve(req.result?.data || {});
-          req.onerror = reject;
-        });
-        db.close();
-        return boundariesData;
-      } catch (e) { return null; }
+      const data = await DataCore.loadFromIndexedDB();
+      return data ? data.boundaries : null;
     }
 
     // Load field boundaries from localStorage or IndexedDB
@@ -564,8 +503,7 @@
           }
         }
         // Fallback to localStorage
-        const saved = localStorage.getItem('fieldBoundaries');
-        fieldBoundaries = saved ? JSON.parse(saved) : {};
+        fieldBoundaries = DataCore.loadFieldBoundaries();
       } catch (e) {
         console.error('Error loading field boundaries:', e);
         fieldBoundaries = {};
@@ -575,23 +513,19 @@
 
     // Save field boundaries to localStorage
     function saveFieldBoundaries() {
-      try {
-        localStorage.setItem('fieldBoundaries', JSON.stringify(fieldBoundaries));
-      } catch (e) {
-        console.error('Error saving field boundaries:', e);
-      }
+      DataCore.saveFieldBoundaries(fieldBoundaries);
     }
 
     // Load active selection from localStorage
     function loadActiveSelection() {
-      activeClientId = localStorage.getItem('activeClientId') || 'all';
-      activeFarmId = localStorage.getItem('activeFarmId') || 'all';
+      const selection = DataCore.loadActiveSelection();
+      activeClientId = selection.clientId;
+      activeFarmId = selection.farmId;
     }
 
     // Save active selection to localStorage
     function saveActiveSelection() {
-      localStorage.setItem('activeClientId', activeClientId);
-      localStorage.setItem('activeFarmId', activeFarmId);
+      DataCore.saveActiveSelection(activeClientId, activeFarmId);
     }
 
     // Migration: Convert legacy fieldBoundaries format to new format with farmId
@@ -1089,58 +1023,8 @@
       showStatus(`Client "${client.name}" deleted`, true);
     }
 
-    let tokenClient;
-    let accessToken = null;
-    let tokenExpiry = null;
-    
-    const SheetsAPI = {
-      isSignedIn: false,
-      async init() {
-        return new Promise((resolve, reject) => {
-          gapi.load('client', async () => {
-            try {
-              await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'] });
-              tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CONFIG.CLIENT_ID,
-                scope: 'https://www.googleapis.com/auth/spreadsheets',
-                callback: (response) => {
-                  if (response.error) return;
-                  accessToken = response.access_token;
-                  tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
-                  localStorage.setItem('googleAccessToken', accessToken);
-                  localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
-                  gapi.client.setToken({ access_token: accessToken });
-                  this.isSignedIn = true;
-                  this.onSignInChange(true);
-                },
-              });
-              // Check for saved token
-              const savedToken = localStorage.getItem('googleAccessToken');
-              const savedExpiry = localStorage.getItem('googleTokenExpiry');
-              if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
-                accessToken = savedToken;
-                tokenExpiry = parseInt(savedExpiry);
-                gapi.client.setToken({ access_token: accessToken });
-                this.isSignedIn = true;
-                this.onSignInChange(true);
-              }
-              resolve(true);
-            } catch (e) { reject(e); }
-          });
-        });
-      },
-      async signIn() { tokenClient.requestAccessToken({ prompt: 'consent' }); },
-      async signOut() { 
-        if (accessToken) google.accounts.oauth2.revoke(accessToken);
-        accessToken = null;
-        tokenExpiry = null;
-        localStorage.removeItem('googleAccessToken');
-        localStorage.removeItem('googleTokenExpiry');
-        this.isSignedIn = false;
-        this.onSignInChange(false);
-      },
-      onSignInChange(s) {}
-    };
+    // Use shared SheetsAPI from DataCore
+    const SheetsAPI = DataCore.SheetsAPI;
 
     // Auto-sync clients and farms to Google Sheets
     async function syncClientsAndFarmsToSheets() {
@@ -1714,7 +1598,8 @@
     
     function saveSettings() { const settings = {}; Object.keys(defaults).forEach(k => { const i = document.getElementById(k); if (i) settings[k] = parseFloat(i.value) || defaults[k]; }); localStorage.setItem('soilSettings', JSON.stringify(settings)); showStatus('✓ Settings saved', true); }
     function resetSettings() { if (!confirm('Reset all settings to defaults?')) return; Object.entries(defaults).forEach(([k, v]) => { const i = document.getElementById(k); if (i) i.value = v; }); localStorage.setItem('soilSettings', JSON.stringify(defaults)); showStatus('✓ Settings reset', true); }
-    function showStatus(msg, ok) { const el = document.getElementById('statusMessage'); el.textContent = msg; el.style.display = 'block'; el.style.background = ok ? '#dcfce7' : '#fee2e2'; el.style.color = ok ? '#166534' : '#991b1b'; setTimeout(() => el.style.display = 'none', 4000); }
+    // Use shared showStatus from Utils
+    const showStatus = window.Utils.showStatus;
 
     function updateBackupFooter() {
       const backupTime = localStorage.getItem('soilDataBackupTime');
