@@ -2,6 +2,8 @@
  * utils.js - Shared utility functions
  * Common utilities used across multiple pages (formatNumber, generateId, debounce, color functions, etc.)
  */
+(function() {
+'use strict';
 
 // ========== STATUS/UI ==========
 function showStatus(message, isSuccess = true) {
@@ -311,3 +313,5 @@ window.Utils = {
   debounce,
   throttle
 };
+
+})();

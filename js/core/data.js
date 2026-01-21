@@ -2,9 +2,11 @@
  * data.js - Core data management module
  * Handles localStorage, IndexedDB, Google Sheets API calls, and load/save functions
  */
+(function() {
+'use strict';
 
 // ========== DATA CONFIG ==========
-window.DataConfig = {
+const DataConfig = window.DataConfig = {
   CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
   API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
   get SHEET_ID() {
@@ -516,3 +518,5 @@ window.DataCore = {
   extractSheetId,
   isNewUser
 };
+
+})();
