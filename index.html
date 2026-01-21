@@ -337,26 +337,22 @@
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  
+  <script src="js/core/data.js"></script>
+
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.96";
-    const BUILD_DATE = "2026-01-21T11:01:52";
+    const APP_VERSION = "v1.0.97";
+    const BUILD_DATE = "2026-01-21T12:49:02";
 
     // ========== CONFIG ==========
+    // Reference shared data config and add app-specific config
     const CONFIG = {
-      CLIENT_ID: '714780458094-9rde31taeottmavhl5t0uo8b9kfpergc.apps.googleusercontent.com',
-      API_KEY: 'AIzaSyCOSDbrAlc3ct2-lRvJv1y7V0nV7haWc9E',
-      get SHEET_ID() {
-        const stored = localStorage.getItem('googleSheetId');
-        if (!stored) return null;
-        // Extract ID from URL if it's a full URL
-        if (stored.includes('docs.google.com') || stored.includes('/d/')) {
-          const match = stored.match(/\/d\/([a-zA-Z0-9-_]+)/);
-          if (match) return match[1];
-        }
-        return stored;
-      },
+      // Data config from shared module
+      get CLIENT_ID() { return DataCore.config.CLIENT_ID; },
+      get API_KEY() { return DataCore.config.API_KEY; },
+      get SHEET_ID() { return DataCore.config.SHEET_ID; },
+
+      // Map defaults
       DEFAULT_LAT: 39.8528,
       DEFAULT_LON: -95.5347,
       DEFAULT_ZOOM: 13,
@@ -486,222 +482,8 @@
     }
 
     // ========== SHEETS API ==========
-    let tokenClient;
-    let accessToken = null;
-    let tokenExpiry = null;
-
-    const SheetsAPI = {
-      isInitialized: false,
-      isSignedIn: false,
-      SHEETS: { FIELDS: 'Fields', SAMPLES: 'Samples', SETTINGS: 'Settings' },
-
-      async init() {
-        return new Promise((resolve, reject) => {
-          // Load the Google API client library
-          gapi.load('client', async () => {
-            try {
-              await gapi.client.init({
-                apiKey: CONFIG.API_KEY,
-                discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
-              });
-              this.isInitialized = true;
-
-              // Initialize the token client for Google Identity Services
-              tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CONFIG.CLIENT_ID,
-                scope: 'https://www.googleapis.com/auth/spreadsheets',
-                callback: (response) => {
-                  if (response.error) {
-                    console.error('Token error:', response);
-                    return;
-                  }
-                  accessToken = response.access_token;
-                  // Token expires in 1 hour, set expiry with buffer
-                  tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
-                  // Save token to localStorage
-                  localStorage.setItem('googleAccessToken', accessToken);
-                  localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
-                  gapi.client.setToken({ access_token: accessToken });
-                  this.isSignedIn = true;
-                  this.onSignInChange(true);
-                },
-              });
-
-              // Check for saved token (but don't set it yet - we'll try public access first)
-              const savedToken = localStorage.getItem('googleAccessToken');
-              const savedExpiry = localStorage.getItem('googleTokenExpiry');
-              if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
-                accessToken = savedToken;
-                tokenExpiry = parseInt(savedExpiry);
-                // Don't set token or mark as signed in yet - we'll do this after trying public access
-              }
-
-              // Set up token refresh check every 5 minutes
-              setInterval(() => this.checkTokenRefresh(), 300000);
-
-              resolve(true);
-            } catch (error) {
-              console.error('Error initializing Google API:', error);
-              reject(error);
-            }
-          });
-        });
-      },
-
-      // Restore saved OAuth token after public load attempt
-      restoreSavedToken() {
-        if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
-          gapi.client.setToken({ access_token: accessToken });
-          this.isSignedIn = true;
-          return true;
-        }
-        return false;
-      },
-      
-      checkTokenRefresh() {
-        // If token expires in less than 10 minutes, refresh it silently
-        if (this.isSignedIn && tokenExpiry && Date.now() > tokenExpiry - 600000) {
-          console.log('Token expiring soon, refreshing...');
-          tokenClient.requestAccessToken({ prompt: '' }); // Silent refresh
-        }
-      },
-
-      // Validate token by making a lightweight API call
-      async validateToken() {
-        try {
-          // Try to get spreadsheet metadata (lightweight call)
-          await gapi.client.sheets.spreadsheets.get({
-            spreadsheetId: CONFIG.SHEET_ID,
-            fields: 'spreadsheetId'  // Only request minimal data
-          });
-          return true;
-        } catch (e) {
-          console.log('Token validation failed:', e?.result?.error?.code || e.message);
-          return false;
-        }
-      },
-
-      // Attempt to refresh token and retry the operation
-      async refreshTokenAndRetry(operation) {
-        return new Promise((resolve, reject) => {
-          console.log('Attempting token refresh...');
-          const originalCallback = tokenClient.callback;
-          tokenClient.callback = async (response) => {
-            if (response.error) {
-              console.error('Token refresh failed:', response);
-              tokenClient.callback = originalCallback;
-              reject(new Error('Token refresh failed'));
-              return;
-            }
-            accessToken = response.access_token;
-            tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
-            localStorage.setItem('googleAccessToken', accessToken);
-            localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
-            gapi.client.setToken({ access_token: accessToken });
-            tokenClient.callback = originalCallback;
-
-            try {
-              const result = await operation();
-              resolve(result);
-            } catch (e) {
-              reject(e);
-            }
-          };
-          tokenClient.requestAccessToken({ prompt: '' });
-        });
-      },
-      
-      async signIn() { 
-        tokenClient.requestAccessToken({ prompt: 'consent' }); 
-      },
-      async signOut() { 
-        if (accessToken) {
-          google.accounts.oauth2.revoke(accessToken);
-          accessToken = null;
-          tokenExpiry = null;
-        }
-        localStorage.removeItem('googleAccessToken');
-        localStorage.removeItem('googleTokenExpiry');
-        this.isSignedIn = false;
-        this.onSignInChange(false);
-      },
-      onSignInChange(isSignedIn) { console.log('Sign-in state:', isSignedIn); },
-      
-      async getFields() {
-        try {
-          const sheetId = CONFIG.SHEET_ID;
-          console.log('Loading fields from sheet:', sheetId);
-          const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: sheetId,
-            range: `${this.SHEETS.FIELDS}!A2:E1000`
-          });
-          const rows = response.result.values || [];
-          return rows.map(row => ({
-            id: row[0], name: row[1],
-            boundary: row[2] ? JSON.parse(row[2]) : null,
-            acres: parseFloat(row[3]) || 0
-          }));
-        } catch (e) { 
-          console.error('getFields error:', e); 
-          throw e; // Re-throw so loadFromSheets knows it failed
-        }
-      },
-      
-      async getSamples() {
-        try {
-          const sheetId = CONFIG.SHEET_ID;
-          console.log('Loading samples from sheet:', sheetId);
-          const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: sheetId,
-            range: `${this.SHEETS.SAMPLES}!A1:ZZ10000`
-          });
-          const rows = response.result.values || [];
-          if (rows.length < 2) return [];
-          const headers = rows[0];
-          const samples = [];
-          for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const sample = {};
-            headers.forEach((header, idx) => {
-              const value = row[idx];
-              if (header === 'yieldCorrelations' && value) {
-                // Parse JSON object for yield correlations
-                try { sample[header] = JSON.parse(value); } catch (e) { sample[header] = null; }
-              } else if (header !== 'sampleId' && header !== 'field' && value) {
-                const num = parseFloat(value);
-                sample[header] = isNaN(num) ? value : num;
-              } else {
-                sample[header] = value || '';
-              }
-            });
-            samples.push(sample);
-          }
-          return samples;
-        } catch (e) { 
-          console.error('getSamples error:', e); 
-          throw e; // Re-throw so loadFromSheets knows it failed
-        }
-      },
-      
-      async getSettings() {
-        try {
-          const sheetId = CONFIG.SHEET_ID;
-          const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: sheetId,
-            range: `${this.SHEETS.SETTINGS}!A2:D100`
-          });
-          const rows = response.result.values || [];
-          const settings = {};
-          rows.forEach(row => {
-            settings[row[0]] = { min: parseFloat(row[1]) || null, target: parseFloat(row[2]) || null, max: parseFloat(row[3]) || null };
-          });
-          return settings;
-        } catch (e) { 
-          console.error('getSettings error:', e); 
-          return {}; // Settings are optional, don't throw
-        }
-      }
-    };
+    // Use shared SheetsAPI from DataCore module
+    const SheetsAPI = DataCore.SheetsAPI;
 
     // ========== UTILS ==========
     const Utils = {
@@ -980,128 +762,34 @@
     let activeClientId = 'all';
     let activeFarmId = 'all';
 
-    // Generate unique IDs for clients and farms
-    function generateId(prefix) {
-      return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
+    // Use shared functions from DataCore, wrapping to update local variables
+    const generateId = DataCore.generateId;
+    const migrateDataIfNeeded = DataCore.migrateDataIfNeeded;
 
-    // Load clients from localStorage
     function loadClientsData() {
-      try {
-        const saved = localStorage.getItem('clientsData');
-        clientsData = saved ? JSON.parse(saved) : [];
-      } catch (e) {
-        console.error('Error loading clients:', e);
-        clientsData = [];
-      }
+      clientsData = DataCore.loadClientsData();
       return clientsData;
     }
 
-    // Load farms from localStorage
     function loadFarmsData() {
-      try {
-        const saved = localStorage.getItem('farmsData');
-        farmsData = saved ? JSON.parse(saved) : [];
-      } catch (e) {
-        console.error('Error loading farms:', e);
-        farmsData = [];
-      }
+      farmsData = DataCore.loadFarmsData();
       return farmsData;
     }
 
-    // Load active selection from localStorage
     function loadActiveSelection() {
-      activeClientId = localStorage.getItem('activeClientId') || 'all';
-      activeFarmId = localStorage.getItem('activeFarmId') || 'all';
+      const selection = DataCore.loadActiveSelection();
+      activeClientId = selection.clientId;
+      activeFarmId = selection.farmId;
     }
 
-    // Migration: Convert legacy fieldBoundaries format to new format with farmId
-    function migrateDataIfNeeded() {
-      const dataVersion = localStorage.getItem('dataVersion');
-      if (dataVersion === '2') {
-        return false;
-      }
-
-      console.log('[Migration] Starting migration to version 2...');
-
-      // Load existing field boundaries
-      const saved = localStorage.getItem('fieldBoundaries');
-      const boundaries = saved ? JSON.parse(saved) : {};
-
-      // Check if there's any data to migrate
-      const hasLegacyBoundaries = Object.keys(boundaries).some(key => {
-        const val = boundaries[key];
-        return Array.isArray(val) || (val && !val.boundary);
-      });
-
-      if (!hasLegacyBoundaries) {
-        localStorage.setItem('dataVersion', '2');
-        return false;
-      }
-
-      // Migrate boundaries to new format WITHOUT creating default client/farm
-      // Fields will have no farmId until user creates a client/farm structure
-      const migratedBoundaries = {};
-      Object.entries(boundaries).forEach(([fieldName, fieldData]) => {
-        if (Array.isArray(fieldData)) {
-          migratedBoundaries[fieldName] = {
-            boundary: fieldData,
-            farmId: '',
-            createdAt: new Date().toISOString()
-          };
-        } else if (fieldData && !fieldData.boundary) {
-          migratedBoundaries[fieldName] = {
-            boundary: fieldData,
-            farmId: '',
-            createdAt: new Date().toISOString()
-          };
-        } else {
-          migratedBoundaries[fieldName] = fieldData;
-        }
-      });
-
-      localStorage.setItem('fieldBoundaries', JSON.stringify(migratedBoundaries));
-      localStorage.setItem('activeClientId', 'all');
-      localStorage.setItem('activeFarmId', 'all');
-      localStorage.setItem('dataVersion', '2');
-
-      console.log('[Migration] Complete');
-      return true;
-    }
-
-    // Get fields filtered by active client/farm selection
+    // Get fields filtered by active client/farm selection (uses local state)
     function getActiveFields() {
-      const allFieldNames = Object.keys(fieldBoundaries);
-
-      if (activeClientId === 'all' && activeFarmId === 'all') {
-        return allFieldNames;
-      }
-
-      if (activeFarmId !== 'all') {
-        return allFieldNames.filter(fieldName => {
-          const field = fieldBoundaries[fieldName];
-          return field && field.farmId === activeFarmId;
-        });
-      }
-
-      if (activeClientId !== 'all') {
-        const clientFarmIds = farmsData
-          .filter(f => f.clientId === activeClientId)
-          .map(f => f.id);
-        return allFieldNames.filter(fieldName => {
-          const field = fieldBoundaries[fieldName];
-          return field && clientFarmIds.includes(field.farmId);
-        });
-      }
-
-      return allFieldNames;
+      return DataCore.getActiveFields(fieldBoundaries, farmsData, activeClientId, activeFarmId);
     }
 
-    // Get boundary coordinates for a field (handles both legacy and new format)
+    // Get boundary coordinates for a field
     function getFieldBoundaryCoords(fieldName) {
-      const field = fieldBoundaries[fieldName];
-      if (!field) return null;
-      return field.boundary || field;
+      return DataCore.getFieldBoundaryCoords(fieldBoundaries, fieldName);
     }
 
     // Update active operation indicator
@@ -1135,12 +823,7 @@
     let isDemoMode = false;
 
     // ========== NEW USER / DEMO MODE ==========
-    function isNewUser() {
-      const sheetId = localStorage.getItem('googleSheetId');
-      const hasLocalData = localStorage.getItem('soilSamples');
-      // New user = no sheet configured AND no local data
-      return !sheetId && !hasLocalData;
-    }
+    const isNewUser = DataCore.isNewUser;
 
     function showWelcomeScreen() {
       const welcomeScreen = document.getElementById('welcomeScreen');
@@ -1166,15 +849,7 @@
       }, 500);
     }
 
-    function extractSheetId(input) {
-      // If input contains a Google Sheets URL, extract the ID
-      if (input.includes('docs.google.com') || input.includes('/d/')) {
-        const match = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        if (match) return match[1];
-      }
-      // Otherwise assume it's already just the ID
-      return input;
-    }
+    const extractSheetId = DataCore.extractSheetId;
 
     function connectWelcomeSheet() {
       const input = document.getElementById('welcomeSheetId').value.trim();
@@ -1852,43 +1527,9 @@
       }
     }
 
-    // IndexedDB for large datasets
-    const DB_NAME = 'SoilAppDB';
-    const DB_VERSION = 2; // v2: Added yield object store
-
-    function openDB() {
-      return new Promise((resolve, reject) => {
-        if (!window.indexedDB) { reject(new Error('IndexedDB not supported')); return; }
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
-          if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
-          if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
-        };
-      });
-    }
-
-    async function loadFromIndexedDB() {
-      try {
-        const db = await openDB();
-        const tx = db.transaction(['samples', 'boundaries'], 'readonly');
-        const samplesData = await new Promise((resolve, reject) => {
-          const req = tx.objectStore('samples').get('all');
-          req.onsuccess = () => resolve(req.result?.data || []);
-          req.onerror = reject;
-        });
-        const boundariesData = await new Promise((resolve, reject) => {
-          const req = tx.objectStore('boundaries').get('all');
-          req.onsuccess = () => resolve(req.result?.data || {});
-          req.onerror = reject;
-        });
-        db.close();
-        return { samples: samplesData, boundaries: boundariesData };
-      } catch (e) { return null; }
-    }
+    // IndexedDB functions from DataCore
+    const openDB = DataCore.openDB;
+    const loadFromIndexedDB = DataCore.loadFromIndexedDB;
 
     async function loadLocalData() {
       try {
