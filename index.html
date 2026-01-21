@@ -340,8 +340,8 @@
   
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.95";
-    const BUILD_DATE = "2026-01-21T10:51:12";
+    const APP_VERSION = "v1.0.96";
+    const BUILD_DATE = "2026-01-21T11:01:52";
 
     // ========== CONFIG ==========
     const CONFIG = {
@@ -2327,54 +2327,11 @@
         return filtered.length > 0 ? filtered : values; // Fallback to original if all filtered
       };
 
-      // Use absolute thresholds if defined for this attribute
-      const thresholds = CONFIG.FIELD_SHADING_THRESHOLDS[selectedAttribute];
-
       // Debug: track color distribution
       const colorCounts = { green: 0, yellow: 0, red: 0 };
 
-      if (thresholds && allFieldAvgs.length > 0) {
-        // Use absolute threshold-based coloring
-        console.log('Using absolute thresholds for', selectedAttribute, thresholds);
-
-        Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
-          let color;
-          const val = stats.avg;
-
-          if (isLowerBetter) {
-            // For "lower is better" (like Mg_sat): green if below green threshold, yellow in between, red above yellow
-            // thresholds: { green: 10, yellow: 15 } means: val <= 10 = green, 10-15 = yellow, > 15 = red
-            if (val <= thresholds.green) color = '#22c55e';      // Green (low/good)
-            else if (val <= thresholds.yellow) color = '#eab308'; // Yellow (medium)
-            else color = '#ef4444';                                // Red (high/bad)
-          } else {
-            // For "higher is better" (like P, K, OM): green if above green threshold, yellow in between, red below yellow
-            // thresholds: { yellow: 35, green: 70 } means: val >= 70 = green, 35-70 = yellow, < 35 = red
-            if (val >= thresholds.green) color = '#22c55e';      // Green (high/good)
-            else if (val >= thresholds.yellow) color = '#eab308'; // Yellow (medium)
-            else color = '#ef4444';                                // Red (low/bad)
-          }
-
-          fieldColors[fieldName] = color;
-          fieldColors[fieldName + '_stats'] = stats;
-
-          // Track color distribution
-          if (color === '#22c55e') colorCounts.green++;
-          else if (color === '#eab308') colorCounts.yellow++;
-          else if (color === '#ef4444') colorCounts.red++;
-        });
-
-        console.log('Field color distribution:', colorCounts, 'Total fields colored:', Object.keys(fieldAverages).length);
-
-        // Show visible range in legend (even for threshold-based coloring)
-        if (visibleFieldAvgs.length > 0) {
-          const sortedVisible = [...visibleFieldAvgs].sort((a, b) => a - b);
-          const unit = CONFIG.NUTRIENT_UNITS[selectedAttribute] || '';
-          updateLegendRange(sortedVisible[0], sortedVisible[sortedVisible.length - 1], unit);
-        } else {
-          updateLegendRange(null, null, null);
-        }
-      } else if (colorScaleAvgs.length > 1) {
+      // ALWAYS use relative coloring based on VISIBLE fields (dynamic zoom-based scaling)
+      if (colorScaleAvgs.length > 1) {
         // Fallback: relative coloring for attributes without defined thresholds
         // Use visible fields for color scale (dynamic zoom-based scaling)
         const filteredAvgs = removeOutliers(colorScaleAvgs);
