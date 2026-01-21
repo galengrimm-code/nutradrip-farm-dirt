@@ -338,11 +338,12 @@
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/core/data.js"></script>
+  <script src="js/core/utils.js"></script>
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.97";
-    const BUILD_DATE = "2026-01-21T12:49:02";
+    const APP_VERSION = "v1.0.98";
+    const BUILD_DATE = "2026-01-21T12:51:33";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -486,262 +487,43 @@
     const SheetsAPI = DataCore.SheetsAPI;
 
     // ========== UTILS ==========
-    const Utils = {
-      showStatus(message, isSuccess = true) {
-        const el = document.getElementById('statusMessage');
-        if (!el) return;
-        el.textContent = message;
-        el.style.display = 'block';
-        el.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
-        el.style.color = isSuccess ? '#166534' : '#991b1b';
-        setTimeout(() => el.style.display = 'none', 4000);
-      },
-
-      // Return the global settings object
+    // Extend shared Utils with page-specific methods
+    const Utils = Object.assign({}, window.Utils, {
+      // Return the global settings object (page-specific)
       loadSettings() {
         return settings;
       },
 
-      // Interpolate between two hex colors
-      interpolateColor(color1, color2, factor) {
-        const hex = c => parseInt(c, 16);
-        const r1 = hex(color1.slice(1,3)), g1 = hex(color1.slice(3,5)), b1 = hex(color1.slice(5,7));
-        const r2 = hex(color2.slice(1,3)), g2 = hex(color2.slice(3,5)), b2 = hex(color2.slice(5,7));
-        const r = Math.round(r1 + (r2 - r1) * factor);
-        const g = Math.round(g1 + (g2 - g1) * factor);
-        const b = Math.round(b1 + (b2 - b1) * factor);
-        return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-      },
-
-      // Get gradient color from red->yellow->green based on position (0-1)
-      getGradientColor(position, isLowerBetter = false) {
-        // Clamp position to 0-1
-        const p = Math.max(0, Math.min(1, isLowerBetter ? 1 - position : position));
-        // Color stops: red (#dc2626) -> orange (#f97316) -> yellow (#eab308) -> lime (#84cc16) -> green (#16a34a)
-        const stops = [
-          { pos: 0.0, color: '#dc2626' },  // red
-          { pos: 0.25, color: '#f97316' }, // orange
-          { pos: 0.5, color: '#eab308' },  // yellow
-          { pos: 0.75, color: '#84cc16' }, // lime
-          { pos: 1.0, color: '#16a34a' }   // green
-        ];
-        // Find the two stops to interpolate between
-        for (let i = 0; i < stops.length - 1; i++) {
-          if (p >= stops[i].pos && p <= stops[i+1].pos) {
-            const range = stops[i+1].pos - stops[i].pos;
-            const factor = (p - stops[i].pos) / range;
-            return this.interpolateColor(stops[i].color, stops[i+1].color, factor);
-          }
-        }
-        return stops[stops.length - 1].color;
-      },
-
-      // Get gradient color for change values (negative->neutral->positive)
-      getChangeGradientColor(percentChange) {
-        // Clamp to -30% to +30% range for color scaling
-        const clampedPct = Math.max(-30, Math.min(30, percentChange));
-        // Map to 0-1 where 0 = -30%, 0.5 = 0%, 1 = +30%
-        const position = (clampedPct + 30) / 60;
-        // Color stops: dark red -> light red -> gray -> light green -> dark green
-        const stops = [
-          { pos: 0.0, color: '#b91c1c' },  // dark red (-30%+)
-          { pos: 0.25, color: '#f87171' }, // light red
-          { pos: 0.45, color: '#d1d5db' }, // light gray
-          { pos: 0.55, color: '#d1d5db' }, // light gray (neutral zone)
-          { pos: 0.75, color: '#86efac' }, // light green
-          { pos: 1.0, color: '#15803d' }   // dark green (+30%+)
-        ];
-        for (let i = 0; i < stops.length - 1; i++) {
-          if (position >= stops[i].pos && position <= stops[i+1].pos) {
-            const range = stops[i+1].pos - stops[i].pos;
-            const factor = (position - stops[i].pos) / range;
-            return this.interpolateColor(stops[i].color, stops[i+1].color, factor);
-          }
-        }
-        return stops[stops.length - 1].color;
-      },
-
-      // Get median-based color using IQR to handle outliers
-      // isLowerBetter: if true, lower values get green, higher get red (for Mg_sat, H_Sat, etc.)
-      getMedianBasedColor(value, values, isLowerBetter = false) {
-        if (!values || values.length === 0) return '#94a3b8';
-        const sorted = [...values].sort((a, b) => a - b);
-        const len = sorted.length;
-
-        // Calculate quartiles
-        const q1 = sorted[Math.floor(len * 0.25)];
-        const q3 = sorted[Math.floor(len * 0.75)];
-        const iqr = q3 - q1;
-
-        // Use IQR-based bounds (ignore outliers beyond 1.5*IQR)
-        const lowerBound = Math.max(sorted[0], q1 - 1.5 * iqr);
-        const upperBound = Math.min(sorted[len - 1], q3 + 1.5 * iqr);
-        const range = upperBound - lowerBound;
-
-        if (range === 0) return '#eab308'; // All same value = yellow
-
-        // Clamp value to bounds for color calculation
-        const clampedValue = Math.max(lowerBound, Math.min(upperBound, value));
-        const position = (clampedValue - lowerBound) / range; // 0 to 1
-
-        // Use smooth gradient
-        return this.getGradientColor(position, isLowerBetter);
-      },
-      
-      // Get color for year-over-year change
-      getChangeColor(change, percentChange) {
-        // Use smooth gradient for change colors
-        return this.getChangeGradientColor(percentChange);
-      },
-      
-      getColor(value, attribute, settings = {}, bufferPercent = 25, allValues = null) {
-        // Sample ID gets neutral blue color
-        if (attribute === 'sampleId') return '#3b82f6';
-
-        // CEC and micronutrients use median-based coloring if allValues provided
-        const medianBasedAttrs = ['CEC', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S'];
-        if (medianBasedAttrs.includes(attribute) && allValues && allValues.length > 0) {
-          return this.getMedianBasedColor(value, allValues);
-        }
-
-        // Default thresholds if none provided
-        const defaultThresholds = {
-          pH: { min: 6.3, max: 6.9 },
-          P: { min: 20, max: null },
-          K: { min: 150, max: null },
-          OM: { min: 3.0, max: null },
-          Ca_sat: { min: 65, max: 75 },
-          Mg_sat: { min: null, max: 15 },
-          K_Sat: { min: 3.0, max: null },
-          H_Sat: { min: null, max: 5.0 }
-        };
-
-        const threshold = settings[attribute] || defaultThresholds[attribute];
-        const isLowerBetter = CONFIG.LOWER_IS_BETTER.includes(attribute);
-
-        if (!threshold) {
-          return '#94a3b8';
-        }
-
-        // Calculate position for smooth gradient (0 = worst, 1 = best)
-        if (threshold.min !== null && threshold.max !== null) {
-          // Range threshold (pH, Ca_sat) - optimal is in the middle
-          const buffer = (threshold.max - threshold.min) * (bufferPercent / 100);
-          const lowerBound = threshold.min - buffer;
-          const upperBound = threshold.max + buffer;
-
-          if (value >= threshold.min && value <= threshold.max) {
-            return '#16a34a'; // In optimal range = green
-          } else if (value < threshold.min) {
-            // Below optimal - calculate position from lowerBound to min
-            const pos = Math.max(0, (value - lowerBound) / (threshold.min - lowerBound));
-            return this.getGradientColor(pos * 0.5, false); // 0-0.5 range (red to yellow)
-          } else {
-            // Above optimal - calculate position from max to upperBound
-            const pos = Math.max(0, 1 - (value - threshold.max) / (upperBound - threshold.max));
-            return this.getGradientColor(pos * 0.5, false); // 0-0.5 range (red to yellow)
-          }
-        } else if (threshold.min !== null) {
-          // Minimum threshold (P, K, OM, K_Sat) - higher is better
-          const buffer = threshold.min * (bufferPercent / 100);
-          const lowerBound = threshold.min - buffer;
-          // Calculate position: 0 at lowerBound, 1 at min (optimal)
-          if (value >= threshold.min) {
-            // Above optimal - calculate gradient up to 2x min
-            const pos = Math.min(1, 0.5 + (value - threshold.min) / (threshold.min * 2) * 0.5);
-            return this.getGradientColor(pos, false);
-          } else {
-            // Below optimal
-            const pos = Math.max(0, (value - lowerBound) / (threshold.min - lowerBound)) * 0.5;
-            return this.getGradientColor(pos, false);
-          }
-        } else if (threshold.max !== null) {
-          // Maximum threshold (Mg_sat, H_Sat) - lower is better
-          const buffer = threshold.max * (bufferPercent / 100);
-          const upperBound = threshold.max + buffer;
-          if (value <= threshold.max) {
-            // Below max (good) - calculate gradient
-            const pos = 0.5 + (1 - value / threshold.max) * 0.5;
-            return this.getGradientColor(Math.min(1, pos), false);
-          } else {
-            // Above max (bad)
-            const pos = Math.max(0, 1 - (value - threshold.max) / (upperBound - threshold.max)) * 0.5;
-            return this.getGradientColor(pos, false);
-          }
-        }
-        return '#94a3b8';
-      },
-      
-      formatNumber(value, decimals = 1) {
-        if (value === null || value === undefined || isNaN(value)) return '-';
-        return Number(value).toFixed(decimals);
-      },
-
-      // Get decimal places for an attribute (checks user settings, then CONFIG defaults)
+      // Override getDecimals to use page CONFIG
       getDecimals(attr) {
-        // Check for user-customized settings first
-        const customDecimals = JSON.parse(localStorage.getItem('decimalPlaces') || '{}');
-        if (customDecimals[attr] !== undefined) {
-          return customDecimals[attr];
-        }
-        // Fall back to CONFIG defaults
-        if (CONFIG.DECIMAL_PLACES[attr] !== undefined) {
-          return CONFIG.DECIMAL_PLACES[attr];
-        }
-        // Default to 1 decimal for unknown attributes
-        return 1;
+        return window.Utils.getDecimals(attr, CONFIG.DECIMAL_PLACES);
       },
 
-      // Format a value using the configured decimal places for an attribute
+      // Override formatValue to use page CONFIG
       formatValue(value, attr) {
-        if (value === null || value === undefined || isNaN(value)) return '-';
-        const decimals = Utils.getDecimals(attr);
-        return Number(value).toFixed(decimals);
+        return window.Utils.formatValue(value, attr, CONFIG.DECIMAL_PLACES);
       },
 
-      getUniqueYears(samples) {
-        return [...new Set(samples.map(s => s.year).filter(y => y))].sort();
+      // Override getColor to use page CONFIG
+      getColor(value, attribute, settingsArg = {}, bufferPercent = 25, allValues = null) {
+        return window.Utils.getColor(value, attribute, settingsArg, bufferPercent, allValues, CONFIG.LOWER_IS_BETTER);
       },
-      
-      getUniqueFields(samples) {
-        return [...new Set(samples.map(s => s.field).filter(f => f))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      },
-      
-      groupByField(samples) {
-        const groups = {};
-        samples.forEach(s => {
-          const f = s.field || 'Unknown';
-          if (!groups[f]) groups[f] = [];
-          groups[f].push(s);
-        });
-        return groups;
-      },
-      
+
+      // Override calculateFieldAverage to use page CONFIG
       calculateFieldAverage(samples, nutrient) {
-        const values = samples.map(s => s[nutrient]).filter(v => this.isValidValue(v, nutrient));
-        if (values.length === 0) return null;
-        return values.reduce((a, b) => a + b, 0) / values.length;
+        return window.Utils.calculateFieldAverage(samples, nutrient, CONFIG.ZERO_MEANS_NO_DATA);
       },
 
-      // Check if a value represents actual data (not missing/placeholder)
-      // For certain attributes, 0 typically means "not tested" rather than actual zero
+      // Override isValidValue to use page CONFIG
       isValidValue(value, attribute) {
-        if (value === undefined || value === null || value === '') return false;
-        const num = parseFloat(value);
-        if (isNaN(num) || !isFinite(num)) return false;
-        // For attributes where 0 means "no data", filter out zeros
-        if (num === 0 && CONFIG.ZERO_MEANS_NO_DATA.includes(attribute)) {
-          return false;
-        }
-        return true;
+        return window.Utils.isValidValue(value, attribute, CONFIG.ZERO_MEANS_NO_DATA);
       },
 
-      // Get numeric value or null if invalid
+      // Override getNumericValue to use page CONFIG
       getNumericValue(value, attribute) {
-        if (!this.isValidValue(value, attribute)) return null;
-        return parseFloat(value);
+        return window.Utils.getNumericValue(value, attribute, CONFIG.ZERO_MEANS_NO_DATA);
       }
-    };
+    });
 
     // ========== APP STATE ==========
     let map;
