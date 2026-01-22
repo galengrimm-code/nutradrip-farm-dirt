@@ -342,8 +342,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.122";
-    const BUILD_DATE = "2026-01-22T08:54:14";
+    const APP_VERSION = "v1.0.123";
+    const BUILD_DATE = "2026-01-22T08:58:29";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1565,12 +1565,18 @@
       const zoomLevel = map.getZoom();
       const isZoomedOut = zoomLevel < ZOOM_THRESHOLD && selectedField === 'all'; // Only use field view when "All Fields" selected
 
-      // Stability mode - show CV values for sample locations
+      // Stability mode - show CV values
       if (isStabilityAttribute(selectedAttribute)) {
-        console.log('Rendering: Stability mode -', selectedAttribute);
-        drawBoundaries(false);
-        drawStabilityMarkers();
+        if (isZoomedOut && Object.keys(fieldBoundaries).length > 0) {
+          console.log('Rendering: Stability field shading (zoomed out)');
+          drawStabilityFieldShading();
+        } else {
+          console.log('Rendering: Stability markers (zoomed in)');
+          drawBoundaries(false);
+          drawStabilityMarkers();
+        }
         updateStabilityLegend();
+        updateZoomIndicator();
         return;
       }
 
@@ -2159,6 +2165,102 @@
       }
       if (legendRange) {
         legendRange.textContent = 'CV = Coefficient of Variation (lower = more stable)';
+      }
+    }
+
+    // Draw field-level stability shading (zoomed out view)
+    function drawStabilityFieldShading() {
+      const baseNutrient = getBaseNutrient(selectedAttribute);
+      const activeFields = getActiveFields();
+
+      // Calculate average CV for each field
+      const fieldCVs = {};
+      const allCVs = [];
+
+      activeFields.forEach(fieldName => {
+        // Get samples for this field
+        const fieldSamples = sampleData.filter(s => s.field === fieldName);
+        if (fieldSamples.length < 2) return; // Need multiple samples for CV
+
+        // Calculate stability data for this field's samples
+        const stabilityData = Utils.calculateStabilityData(fieldSamples);
+
+        // Get all CV values for the base nutrient across all locations in this field
+        const fieldLocationCVs = [];
+        Object.values(stabilityData).forEach(data => {
+          const cv = data.cvByNutrient[baseNutrient];
+          if (cv !== null && cv !== undefined) {
+            fieldLocationCVs.push(cv);
+          }
+        });
+
+        if (fieldLocationCVs.length > 0) {
+          const avgCV = fieldLocationCVs.reduce((a, b) => a + b, 0) / fieldLocationCVs.length;
+          fieldCVs[fieldName] = { avgCV, locationCount: fieldLocationCVs.length };
+          allCVs.push(avgCV);
+        }
+      });
+
+      // Draw boundaries with stability colors
+      const fieldColors = {};
+      Object.entries(fieldCVs).forEach(([fieldName, data]) => {
+        fieldColors[fieldName] = Utils.getStabilityColor(data.avgCV);
+      });
+
+      // Draw shaded boundaries
+      Object.entries(fieldBoundaries).forEach(([fieldName, fieldData]) => {
+        if (!activeFields.includes(fieldName)) return;
+
+        const coords = Utils.getFieldBoundaryCoords({ [fieldName]: fieldData }, fieldName);
+        if (!coords) return;
+
+        const color = fieldColors[fieldName] || '#94a3b8';
+        const cvData = fieldCVs[fieldName];
+        const polygons = Array.isArray(coords[0][0]) ? coords : [coords];
+
+        polygons.forEach((ring, idx) => {
+          const latLngs = ring.map(c => [c[0], c[1]]);
+          const poly = L.polygon(latLngs, {
+            color: color,
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.5
+          }).addTo(map);
+
+          // Build popup
+          let popupContent = `<strong>${fieldName}</strong><br>`;
+          if (cvData) {
+            const label = Utils.getStabilityLabel(cvData.avgCV);
+            popupContent += `<span style="color: ${color}; font-weight: 600;">Avg CV: ${cvData.avgCV.toFixed(1)}% (${label})</span><br>`;
+            popupContent += `<span style="color: #64748b; font-size: 11px;">${cvData.locationCount} sample locations</span>`;
+          } else {
+            popupContent += `<span style="color: #94a3b8;">No stability data</span>`;
+          }
+          poly.bindPopup(popupContent);
+          currentLayers.push(poly);
+
+          // Add field label with CV value
+          if (idx === 0 && map.getZoom() >= 12) {
+            const center = poly.getBounds().getCenter();
+            const labelText = cvData ? `${cvData.avgCV.toFixed(0)}%` : '-';
+            const label = L.marker(center, {
+              icon: L.divIcon({
+                html: `<div style="background:${color};color:white;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.3);box-shadow:0 1px 3px rgba(0,0,0,0.2);">${fieldName}: ${labelText}</div>`,
+                className: '',
+                iconAnchor: [0, 0]
+              }),
+              interactive: false
+            }).addTo(map);
+            currentLayers.push(label);
+          }
+        });
+      });
+
+      // Update stats
+      if (allCVs.length > 0) {
+        updateStats(allCVs, 'stability');
+      } else {
+        document.getElementById('statsBox').innerHTML = '<em>No stability data (need 2+ years at same locations)</em>';
       }
     }
 
