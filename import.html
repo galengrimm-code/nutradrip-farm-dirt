@@ -1123,8 +1123,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.119";
-    const BUILD_DATE = "2026-01-22T08:35:31";
+    const APP_VERSION = "v1.0.120";
+    const BUILD_DATE = "2026-01-22T08:47:45";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -4491,8 +4491,8 @@
     // ========== EXPORT FUNCTIONS ==========
     function getVisibleNutrients() {
       const saved = JSON.parse(localStorage.getItem('nutrientVisibility') || '{}');
-      const defaultVisible = ['sampleId', 'pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH'];
-      const allNutrients = ['sampleId', 'pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'P2', 'Na_Sat', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'];
+      const defaultVisible = ['sampleId', 'pH', 'P_Zn_Ratio', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH'];
+      const allNutrients = ['sampleId', 'pH', 'P_Zn_Ratio', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'P2', 'Na_Sat', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'];
       return allNutrients.filter(n => saved[n] !== undefined ? saved[n] : defaultVisible.includes(n));
     }
 
