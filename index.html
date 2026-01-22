@@ -342,8 +342,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.108";
-    const BUILD_DATE = "2026-01-22T07:19:36";
+    const APP_VERSION = "v1.0.109";
+    const BUILD_DATE = "2026-01-22T07:21:39";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -470,18 +470,40 @@
       const select = document.getElementById('attributeSelect');
       const currentValue = select.value;
       const visible = getVisibleNutrients();
-      
-      select.innerHTML = visible.map(n => 
+
+      // Build main nutrient options
+      let html = visible.map(n =>
         `<option value="${n.key}">${n.name}</option>`
       ).join('');
-      
+
+      // Add stability section with separator
+      const stabilityNutrients = ['P', 'K', 'OM', 'pH', 'CEC', 'Ca_sat', 'Mg_sat', 'Zn', 'S'];
+      html += '<option disabled>──────────────</option>';
+      html += '<option disabled>📊 Stability (CV%)</option>';
+      stabilityNutrients.forEach(key => {
+        const name = CONFIG.NUTRIENT_NAMES?.[key] || key;
+        html += `<option value="${key}_Stability">${name} Stability</option>`;
+      });
+
+      select.innerHTML = html;
+
       // Restore previous selection if still visible, otherwise default to P
-      if (visible.some(n => n.key === currentValue)) {
+      if (currentValue && (visible.some(n => n.key === currentValue) || currentValue.endsWith('_Stability'))) {
         select.value = currentValue;
       } else if (visible.some(n => n.key === 'P')) {
         select.value = 'P';
         selectedAttribute = 'P';
       }
+    }
+
+    // Check if attribute is a stability attribute
+    function isStabilityAttribute(attr) {
+      return attr && attr.endsWith('_Stability');
+    }
+
+    // Get base nutrient from stability attribute (e.g., "P_Stability" -> "P")
+    function getBaseNutrient(stabilityAttr) {
+      return stabilityAttr.replace('_Stability', '');
     }
 
     // ========== SHEETS API ==========
@@ -1541,6 +1563,15 @@
       const zoomLevel = map.getZoom();
       const isZoomedOut = zoomLevel < ZOOM_THRESHOLD && selectedField === 'all'; // Only use field view when "All Fields" selected
 
+      // Stability mode - show CV values for sample locations
+      if (isStabilityAttribute(selectedAttribute)) {
+        console.log('Rendering: Stability mode -', selectedAttribute);
+        drawBoundaries(false);
+        drawStabilityMarkers();
+        updateStabilityLegend();
+        return;
+      }
+
       // Compare mode - show year-over-year change (always show samples)
       if (compareMode && selectedYear !== 'all' && compareYear) {
         console.log('Rendering: Compare mode - baseline:', compareYear, 'compare to:', selectedYear);
@@ -1953,6 +1984,119 @@
 
       html += `</table></div>`;
       return html;
+    }
+
+    // ========== STABILITY VIEW ==========
+
+    // Draw stability markers showing CV for each sample location
+    function drawStabilityMarkers() {
+      const baseNutrient = getBaseNutrient(selectedAttribute);
+      const activeFields = getActiveFields();
+
+      // Filter samples by active fields and selected field
+      let filteredSamples = sampleData.filter(s => {
+        if (!activeFields.includes(s.field)) return false;
+        if (selectedField !== 'all' && s.field !== selectedField) return false;
+        return true;
+      });
+
+      // Calculate stability data
+      const stabilityData = Utils.calculateStabilityData(filteredSamples);
+
+      // Collect all CV values for stats
+      const allCVs = [];
+      const size = fieldModeActive ? 44 : 32;
+      const fontSize = fieldModeActive ? 11 : 9;
+
+      Object.entries(stabilityData).forEach(([hash, data]) => {
+        const cv = data.cvByNutrient[baseNutrient];
+        if (cv === null || cv === undefined) return;
+
+        allCVs.push(cv);
+
+        const color = Utils.getStabilityColor(cv);
+        const label = Utils.getStabilityLabel(cv);
+
+        const icon = L.divIcon({
+          html: `<div class="sample-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${fontSize}px;line-height:${size}px;">${cv.toFixed(0)}%</div>`,
+          className: '', iconSize: [size, size], iconAnchor: [size/2, size/2]
+        });
+
+        const marker = L.marker([data.lat, data.lon], { icon }).addTo(map);
+        marker.bindPopup(buildStabilityPopup(data, baseNutrient));
+        currentLayers.push(marker);
+      });
+
+      // Update stats display
+      if (allCVs.length > 0) {
+        updateStats(allCVs, 'stability');
+      } else {
+        document.getElementById('statsBox').innerHTML = '<em>No stability data (need 2+ years)</em>';
+      }
+    }
+
+    // Build popup for stability view
+    function buildStabilityPopup(data, highlightNutrient) {
+      let html = `<div style="max-height: 350px; overflow-y: auto; min-width: 240px;">`;
+      html += `<div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid #8b5cf6; padding-bottom: 4px;">`;
+      html += `📊 Stability Analysis</div>`;
+      html += `<div style="margin-bottom: 8px; color: #64748b; font-size: 12px;">`;
+      html += `<strong>Field:</strong> ${data.field || 'Unknown'}<br>`;
+      html += `<strong>Years:</strong> ${data.years.join(', ')} (${data.yearCount} samples)`;
+      html += `</div>`;
+
+      html += `<table style="width: 100%; font-size: 12px; border-collapse: collapse;">`;
+      html += `<tr style="background: #f1f5f9;"><th style="padding: 4px; text-align: left;">Nutrient</th><th style="padding: 4px; text-align: right;">CV%</th><th style="padding: 4px; text-align: center;">Rating</th></tr>`;
+
+      // Sort nutrients with highlighted one first
+      const nutrients = Object.keys(data.cvByNutrient).sort((a, b) => {
+        if (a === highlightNutrient) return -1;
+        if (b === highlightNutrient) return 1;
+        return a.localeCompare(b);
+      });
+
+      nutrients.forEach(nutrient => {
+        const cv = data.cvByNutrient[nutrient];
+        if (cv === null || cv === undefined) return;
+        const isHighlighted = nutrient === highlightNutrient;
+        const color = Utils.getStabilityColor(cv);
+        const label = Utils.getStabilityLabel(cv);
+        const name = CONFIG.NUTRIENT_NAMES?.[nutrient] || nutrient;
+        html += `<tr style="${isHighlighted ? 'background: #ede9fe; font-weight: 600;' : ''}">`;
+        html += `<td style="padding: 3px 6px; border-bottom: 1px solid #e2e8f0;">${name}</td>`;
+        html += `<td style="padding: 3px 6px; border-bottom: 1px solid #e2e8f0; text-align: right;">${cv.toFixed(1)}%</td>`;
+        html += `<td style="padding: 3px 6px; border-bottom: 1px solid #e2e8f0; text-align: center; color: ${color}; font-weight: 600;">${label}</td>`;
+        html += `</tr>`;
+      });
+
+      html += `</table>`;
+
+      // Show high variability warnings
+      if (data.highVariabilityNutrients && data.highVariabilityNutrients.length > 0) {
+        html += `<div style="margin-top: 8px; padding: 6px; background: #fef2f2; border-radius: 4px; font-size: 11px; color: #991b1b;">`;
+        html += `⚠️ <strong>Volatile:</strong> ${data.highVariabilityNutrients.map(n => n.attr).join(', ')}`;
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    // Update legend for stability view
+    function updateStabilityLegend() {
+      const legendText = document.getElementById('legendText');
+      const legendRange = document.getElementById('legendRange');
+
+      if (legendText) {
+        legendText.innerHTML = `
+          <span style="color: #16a34a; font-weight: 600;">● Stable (&lt;15%)</span>
+          <span style="color: #eab308; margin-left: 0.5rem; font-weight: 600;">● Moderate (15-30%)</span>
+          <span style="color: #ef4444; margin-left: 0.5rem; font-weight: 600;">● Volatile (&gt;30%)</span>
+        `;
+      }
+      if (legendRange) {
+        legendRange.textContent = 'CV = Coefficient of Variation (lower = more stable)';
+      }
     }
 
     // Calculate distance between two lat/lon points in feet
