@@ -292,6 +292,19 @@ const SheetsAPI = {
         });
         samples.push(sample);
       }
+      // Auto-calculate P_Zn_Ratio for samples that have P and Zn but no ratio
+      let calculatedRatios = 0;
+      samples.forEach(s => {
+        if ((s.P_Zn_Ratio === undefined || s.P_Zn_Ratio === null || s.P_Zn_Ratio === '') &&
+            s.P !== undefined && s.P !== '' &&
+            s.Zn !== undefined && s.Zn !== '' && s.Zn > 0) {
+          s.P_Zn_Ratio = s.P / s.Zn;
+          calculatedRatios++;
+        }
+      });
+      if (calculatedRatios > 0) {
+        console.log(`[Sheets] Auto-calculated P_Zn_Ratio for ${calculatedRatios} samples`);
+      }
       return samples;
     } catch (e) {
       console.error('getSamples error:', e);
