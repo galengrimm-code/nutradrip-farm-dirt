@@ -1527,12 +1527,11 @@
       });
 
       const years = Utils.getUniqueYears(filteredSamples);
-      const mostRecentYear = years.length > 0 ? years[years.length - 1] : null;
 
-      // When "All Fields" selected: hide "All Years" option for performance
+      // When "All Fields" selected: show "Most Recent" (per field) instead of "All Years"
       // When specific field selected: show "All Years" for detailed analysis
       if (selectedField === 'all') {
-        sel.innerHTML = ''; // No "All Years" option when viewing all fields
+        sel.innerHTML = '<option value="all">Most Recent</option>';
       } else {
         sel.innerHTML = '<option value="all">All Years</option>';
       }
@@ -1541,11 +1540,11 @@
 
       // Determine which year to select
       if (selectedField === 'all') {
-        // All Fields: default to most recent year for performance
-        if (mostRecentYear && (val === 'all' || !years.includes(parseInt(val)))) {
-          sel.value = mostRecentYear;
-          selectedYear = String(mostRecentYear);
-        } else if (years.includes(parseInt(val))) {
+        // All Fields: default to "Most Recent" (shows each field's latest year)
+        if (val === 'all' || !years.includes(parseInt(val))) {
+          sel.value = 'all';
+          selectedYear = 'all';
+        } else {
           sel.value = val;
         }
       } else {
@@ -1980,11 +1979,36 @@
       // Filter by active client/farm
       const activeFields = getActiveFields();
 
+      // Build map of most recent year per field (for "All Fields" + "All Years" view)
+      const mostRecentYearByField = {};
+      if (selectedField === 'all' && selectedYear === 'all') {
+        activeFields.forEach(fieldName => {
+          const fieldYears = sampleData
+            .filter(s => s.field === fieldName)
+            .map(s => s.year)
+            .filter(y => y);
+          if (fieldYears.length > 0) {
+            mostRecentYearByField[fieldName] = Math.max(...fieldYears);
+          }
+        });
+      }
+
       // Filter samples for selected year and active client/farm
       let filtered = sampleData.filter(s => {
         if (!activeFields.includes(s.field)) return false; // Filter by active client/farm
         if (selectedField !== 'all' && s.field !== selectedField) return false;
-        if (selectedYear !== 'all' && String(s.year) !== String(selectedYear)) return false;
+
+        // Year filtering logic
+        if (selectedYear !== 'all') {
+          // Specific year selected - filter to that year
+          if (String(s.year) !== String(selectedYear)) return false;
+        } else if (selectedField === 'all') {
+          // "All Fields" + "All Years" - show only most recent year per field
+          const mostRecent = mostRecentYearByField[s.field];
+          if (mostRecent && String(s.year) !== String(mostRecent)) return false;
+        }
+        // If specific field + "All Years", show all years (no filter)
+
         return true;
       });
 
