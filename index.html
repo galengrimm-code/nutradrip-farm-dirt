@@ -1514,7 +1514,6 @@
     function updateYearSelector() {
       const sel = document.getElementById('yearSelect');
       const val = sel.value;
-      sel.innerHTML = '<option value="all">All Years</option>';
 
       // Filter samples by selected field if one is selected
       let filteredSamples = selectedField === 'all'
@@ -1528,14 +1527,35 @@
       });
 
       const years = Utils.getUniqueYears(filteredSamples);
+      const mostRecentYear = years.length > 0 ? years[years.length - 1] : null;
+
+      // When "All Fields" selected: hide "All Years" option for performance
+      // When specific field selected: show "All Years" for detailed analysis
+      if (selectedField === 'all') {
+        sel.innerHTML = ''; // No "All Years" option when viewing all fields
+      } else {
+        sel.innerHTML = '<option value="all">All Years</option>';
+      }
+
       years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; sel.appendChild(o); });
 
-      // Keep previous selection if still valid, otherwise reset to 'all'
-      if (years.includes(parseInt(val))) {
-        sel.value = val;
+      // Determine which year to select
+      if (selectedField === 'all') {
+        // All Fields: default to most recent year for performance
+        if (mostRecentYear && (val === 'all' || !years.includes(parseInt(val)))) {
+          sel.value = mostRecentYear;
+          selectedYear = String(mostRecentYear);
+        } else if (years.includes(parseInt(val))) {
+          sel.value = val;
+        }
       } else {
-        sel.value = 'all';
-        selectedYear = 'all';
+        // Specific field: keep previous selection if valid, otherwise 'all'
+        if (years.includes(parseInt(val))) {
+          sel.value = val;
+        } else {
+          sel.value = 'all';
+          selectedYear = 'all';
+        }
       }
     }
 
