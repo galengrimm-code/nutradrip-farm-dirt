@@ -292,6 +292,150 @@ function getPZnRatioColor(value) {
   return '#ef4444'; // Red (problematic <5 or >12)
 }
 
+// ========== STABILITY ANALYSIS ==========
+
+// Generate location hash for grouping samples by position (~10m precision)
+function getLocationHash(lat, lon, precision = 4) {
+  return `${Number(lat).toFixed(precision)}_${Number(lon).toFixed(precision)}`;
+}
+
+// Calculate distance between two points in feet
+function getDistanceFeet(lat1, lon1, lat2, lon2) {
+  const R = 20902231; // Earth radius in feet
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Calculate CV (Coefficient of Variation) = (StdDev / Mean) × 100
+function calculateCV(values) {
+  if (!values || values.length < 2) return null;
+  const validValues = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+  if (validValues.length < 2) return null;
+  const mean = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+  if (mean === 0) return null;
+  const variance = validValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / validValues.length;
+  const stdDev = Math.sqrt(variance);
+  return (stdDev / Math.abs(mean)) * 100;
+}
+
+// Group samples by location and calculate CV for each nutrient
+function calculateStabilityData(samples, proximityFeet = 50) {
+  if (!samples || samples.length === 0) return {};
+
+  const locationGroups = {};
+  const nutrients = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S'];
+
+  // Group samples by location
+  samples.forEach(sample => {
+    if (!sample.lat || !sample.lon) return;
+
+    // Find existing group within proximity
+    let foundGroup = null;
+    for (const [hash, group] of Object.entries(locationGroups)) {
+      const dist = getDistanceFeet(sample.lat, sample.lon, group.lat, group.lon);
+      if (dist < proximityFeet) {
+        foundGroup = hash;
+        break;
+      }
+    }
+
+    const hash = foundGroup || getLocationHash(sample.lat, sample.lon);
+    if (!locationGroups[hash]) {
+      locationGroups[hash] = { lat: sample.lat, lon: sample.lon, field: sample.field, samples: [] };
+    }
+    locationGroups[hash].samples.push(sample);
+  });
+
+  // Calculate CV for each location and nutrient
+  const stabilityData = {};
+  for (const [hash, group] of Object.entries(locationGroups)) {
+    if (group.samples.length < 2) continue; // Need at least 2 samples for CV
+
+    stabilityData[hash] = {
+      lat: group.lat,
+      lon: group.lon,
+      field: group.field,
+      yearCount: group.samples.length,
+      years: [...new Set(group.samples.map(s => s.year))].sort(),
+      cvByNutrient: {},
+      highVariabilityNutrients: []
+    };
+
+    // Calculate CV for each nutrient
+    nutrients.forEach(attr => {
+      const values = group.samples
+        .map(s => s[attr])
+        .filter(v => v !== undefined && v !== null && !isNaN(v));
+      if (values.length >= 2) {
+        const cv = calculateCV(values);
+        if (cv !== null) {
+          stabilityData[hash].cvByNutrient[attr] = cv;
+          if (cv > 30) {
+            stabilityData[hash].highVariabilityNutrients.push({ attr, cv });
+          }
+        }
+      }
+    });
+
+    // Flag if any nutrient has high CV (>30%)
+    stabilityData[hash].hasHighVariability = stabilityData[hash].highVariabilityNutrients.length > 0;
+  }
+
+  return stabilityData;
+}
+
+// Get stability color based on CV value
+function getStabilityColor(cv) {
+  if (cv === null || cv === undefined) return '#94a3b8'; // grey
+  if (cv < 15) return '#16a34a';  // Green (stable)
+  if (cv < 30) return '#eab308';  // Yellow (moderate)
+  return '#ef4444';                // Red (volatile)
+}
+
+// Get stability label based on CV value
+function getStabilityLabel(cv) {
+  if (cv === null || cv === undefined) return 'Unknown';
+  if (cv < 15) return 'Stable';
+  if (cv < 30) return 'Moderate';
+  return 'Volatile';
+}
+
+// Get stability emoji based on CV value
+function getStabilityEmoji(cv) {
+  if (cv === null || cv === undefined) return '';
+  if (cv < 15) return '🟢';
+  if (cv < 30) return '🟡';
+  return '🔴';
+}
+
+// Calculate field-level stability for a nutrient
+function calculateFieldStability(samples, attr) {
+  const stabilityData = calculateStabilityData(samples);
+
+  // Get CVs for this attribute from all locations in the field
+  const cvValues = Object.values(stabilityData)
+    .map(d => d.cvByNutrient[attr])
+    .filter(cv => cv !== null && cv !== undefined);
+
+  if (cvValues.length === 0) return null;
+
+  const avgCV = cvValues.reduce((a, b) => a + b, 0) / cvValues.length;
+  const stabilityScore = Math.max(0, 100 - avgCV);
+
+  return {
+    avgCV,
+    stabilityScore,
+    locationCount: cvValues.length,
+    label: stabilityScore >= 85 ? 'Stable' : (stabilityScore >= 70 ? 'Moderate' : 'Volatile'),
+    color: stabilityScore >= 85 ? '#22c55e' : (stabilityScore >= 70 ? '#eab308' : '#ef4444'),
+    emoji: stabilityScore >= 85 ? '🟢' : (stabilityScore >= 70 ? '🟡' : '🔴')
+  };
+}
+
 // ========== EXPORT AS GLOBAL ==========
 window.Utils = {
   // Status/UI
@@ -310,6 +454,16 @@ window.Utils = {
   getChangeColor,
   getColor,
   getPZnRatioColor,
+
+  // Stability analysis
+  getLocationHash,
+  getDistanceFeet,
+  calculateCV,
+  calculateStabilityData,
+  getStabilityColor,
+  getStabilityLabel,
+  getStabilityEmoji,
+  calculateFieldStability,
 
   // Data helpers
   getUniqueYears,
