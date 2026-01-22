@@ -1123,8 +1123,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.120";
-    const BUILD_DATE = "2026-01-22T08:47:45";
+    const APP_VERSION = "v1.0.121";
+    const BUILD_DATE = "2026-01-22T08:51:04";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -4211,11 +4211,6 @@
             headers.push('yieldCorrelations');
             headersUpdated = true;
             console.log('Added yieldCorrelations column to Sheet headers');
-          }
-          if (!headers.includes('P_Zn_Ratio')) {
-            headers.push('P_Zn_Ratio');
-            headersUpdated = true;
-            console.log('Added P_Zn_Ratio column to Sheet headers');
           }
           if (headersUpdated) {
             // Update header row to include new columns
