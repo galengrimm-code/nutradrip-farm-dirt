@@ -342,8 +342,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.113";
-    const BUILD_DATE = "2026-01-22T07:45:41";
+    const APP_VERSION = "v1.0.114";
+    const BUILD_DATE = "2026-01-22T07:47:19";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -784,6 +784,8 @@
       try {
         await SheetsAPI.init();
         SheetsAPI.onSignInChange = handleSignInChange;
+        // Update UI with current sign-in state (may have been restored from localStorage)
+        handleSignInChange(SheetsAPI.isSignedIn);
       } catch (e) {
         console.warn('Google API init error:', e);
       }

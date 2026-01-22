@@ -148,11 +148,16 @@ const SheetsAPI = {
             },
           });
 
+          // Restore saved token from localStorage (for cross-page persistence)
           const savedToken = localStorage.getItem('googleAccessToken');
           const savedExpiry = localStorage.getItem('googleTokenExpiry');
           if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
             accessToken = savedToken;
             tokenExpiry = parseInt(savedExpiry);
+            // Actually restore the token to gapi client
+            gapi.client.setToken({ access_token: accessToken });
+            this.isSignedIn = true;
+            console.log('[Sheets] Restored saved auth token from localStorage');
           }
 
           setInterval(() => this.checkTokenRefresh(), 300000);
