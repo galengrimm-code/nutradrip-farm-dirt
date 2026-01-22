@@ -592,8 +592,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.124";
-    const BUILD_DATE = "2026-01-22T09:03:17";
+    const APP_VERSION = "v1.0.127";
+    const BUILD_DATE = "2026-01-22T11:34:51";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -814,6 +814,12 @@
           console.log('Loaded from localStorage:', sampleData.length, 'samples,', Object.keys(fieldBoundaries).length, 'fields,', yieldData.length, 'yield points');
         }
       } catch (e) { console.error(e); }
+      // Calculate P_Zn_Ratio on-the-fly for samples that have P and Zn
+      sampleData.forEach(s => {
+        if (s.P !== undefined && s.Zn !== undefined && s.Zn > 0) {
+          s.P_Zn_Ratio = s.P / s.Zn;
+        }
+      });
       populateSelectors();
       updateComparison();
       updateHistory('__all__');  // Default to All Fields view

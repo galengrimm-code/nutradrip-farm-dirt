@@ -131,7 +131,7 @@
       <div class="summary-grid">
         <div class="summary-item"><div class="number" id="fieldCount">0</div><div class="label">Fields</div></div>
         <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Samples</div></div>
-        <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div><div class="year-list" id="yearList" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
+        <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div><div class="year-list" id="yearList" style="font-size: 0.7rem; color: #64748b; margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; justify-content: center;"></div></div>
         <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div><div id="yieldFieldSummary" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
       </div>
       <div id="yieldFieldListContainer" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 0.5rem;">
@@ -1123,8 +1123,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.124";
-    const BUILD_DATE = "2026-01-22T09:03:17";
+    const APP_VERSION = "v1.0.127";
+    const BUILD_DATE = "2026-01-22T11:34:51";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -1744,15 +1744,17 @@
       document.getElementById('sampleCount').textContent = sampleData.length;
       const uniqueYears = [...new Set(sampleData.map(s => s.year).filter(y => y))].sort((a, b) => a - b);
       document.getElementById('yearCount').textContent = uniqueYears.length;
-      // Show sample count per year
+      // Show sample count per year as styled badges
       const yearCounts = {};
       sampleData.forEach(s => {
         if (s.year) {
           yearCounts[s.year] = (yearCounts[s.year] || 0) + 1;
         }
       });
-      const yearBreakdown = uniqueYears.map(y => `${y}: ${yearCounts[y]}`).join(', ');
-      document.getElementById('yearList').textContent = yearBreakdown;
+      const yearListEl = document.getElementById('yearList');
+      yearListEl.innerHTML = uniqueYears.map(y =>
+        `<span style="background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 0.25rem; white-space: nowrap;"><strong>${y}</strong>: ${yearCounts[y].toLocaleString()}</span>`
+      ).join('');
       // Count samples with yield correlations and build organized field list
       const samplesWithYield = sampleData.filter(s => s.yieldCorrelations && Object.keys(s.yieldCorrelations).length > 0);
       document.getElementById('yieldCount').textContent = samplesWithYield.length;
