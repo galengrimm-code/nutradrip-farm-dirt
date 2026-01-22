@@ -356,8 +356,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.106";
-    const BUILD_DATE = "2026-01-21T16:59:47";
+    const APP_VERSION = "v1.0.107";
+    const BUILD_DATE = "2026-01-22T07:18:14";
 
     // Reference shared data config
     const CONFIG = {
@@ -371,6 +371,7 @@
     const ALL_NUTRIENTS = {
       sampleId: { name: 'Sample ID', defaultVisible: true },
       pH: { name: 'pH', defaultVisible: true },
+      P_Zn_Ratio: { name: 'P:Zn Ratio', defaultVisible: true },
       P: { name: 'Phosphorus (P)', defaultVisible: true },
       K: { name: 'Potassium (K)', defaultVisible: true },
       OM: { name: 'Organic Matter', defaultVisible: true },
@@ -424,7 +425,8 @@
       NO3: 1,
       NH4: 1,
       Soluble_Salts: 2,
-      EC: 2
+      EC: 2,
+      P_Zn_Ratio: 1
     };
 
     // Default column aliases (must match import.html)

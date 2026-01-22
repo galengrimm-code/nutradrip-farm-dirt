@@ -283,6 +283,15 @@ function throttle(fn, limit) {
   };
 }
 
+// ========== P:Zn RATIO COLOR ==========
+// Get color for P:Zn ratio based on optimal range
+function getPZnRatioColor(value) {
+  if (value === null || value === undefined || isNaN(value)) return '#94a3b8'; // grey
+  if (value >= 8 && value <= 10) return '#16a34a';  // Green (optimal 8-10)
+  if ((value >= 5 && value < 8) || (value > 10 && value <= 12)) return '#eab308'; // Yellow (acceptable)
+  return '#ef4444'; // Red (problematic <5 or >12)
+}
+
 // ========== EXPORT AS GLOBAL ==========
 window.Utils = {
   // Status/UI
@@ -300,6 +309,7 @@ window.Utils = {
   getMedianBasedColor,
   getChangeColor,
   getColor,
+  getPZnRatioColor,
 
   // Data helpers
   getUniqueYears,

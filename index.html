@@ -342,8 +342,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.106";
-    const BUILD_DATE = "2026-01-21T16:59:47";
+    const APP_VERSION = "v1.0.107";
+    const BUILD_DATE = "2026-01-22T07:18:14";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -420,13 +420,15 @@
         NO3: 1,
         NH4: 1,
         Soluble_Salts: 2,
-        EC: 2
+        EC: 2,
+        P_Zn_Ratio: 1
       },
 
       // All nutrients in display order with default visibility
       ALL_NUTRIENTS: [
         { key: 'sampleId', name: 'Sample ID', defaultVisible: true },
         { key: 'pH', name: 'pH', defaultVisible: true },
+        { key: 'P_Zn_Ratio', name: 'P:Zn Ratio', defaultVisible: true },
         { key: 'P', name: 'Phosphorus (P)', defaultVisible: true },
         { key: 'K', name: 'Potassium (K)', defaultVisible: true },
         { key: 'OM', name: 'Organic Matter', defaultVisible: true },
@@ -1750,8 +1752,22 @@
       // Debug: track color distribution
       const colorCounts = { green: 0, yellow: 0, red: 0 };
 
+      // Special handling for P:Zn Ratio - use threshold-based coloring
+      if (selectedAttribute === 'P_Zn_Ratio') {
+        Object.entries(fieldAverages).forEach(([fieldName, stats]) => {
+          const color = Utils.getPZnRatioColor(stats.avg);
+          fieldColors[fieldName] = color;
+          fieldColors[fieldName + '_stats'] = stats;
+          if (color === '#16a34a') colorCounts.green++;
+          else if (color === '#eab308') colorCounts.yellow++;
+          else if (color === '#ef4444') colorCounts.red++;
+        });
+        // Update legend for P:Zn ratio
+        updateLegendRange(null, null, null); // Will use custom legend text
+        document.getElementById('legendText').innerHTML = '<span style="color:#16a34a">8-10 Optimal</span> <span style="color:#eab308">5-12 Acceptable</span> <span style="color:#ef4444">&lt;5 or &gt;12</span>';
+      }
       // ALWAYS use relative coloring based on VISIBLE fields (dynamic zoom-based scaling)
-      if (colorScaleAvgs.length > 1) {
+      else if (colorScaleAvgs.length > 1) {
         // Fallback: relative coloring for attributes without defined thresholds
         // Use visible fields for color scale (dynamic zoom-based scaling)
         const filteredAvgs = removeOutliers(colorScaleAvgs);
@@ -1886,7 +1902,12 @@
 
         let color, displayVal;
         if (hasValidData) {
-          color = Utils.getColor(numValue, selectedAttribute, settings, bufferPct, allValues);
+          // Use special color function for P:Zn Ratio
+          if (selectedAttribute === 'P_Zn_Ratio') {
+            color = Utils.getPZnRatioColor(numValue);
+          } else {
+            color = Utils.getColor(numValue, selectedAttribute, settings, bufferPct, allValues);
+          }
           displayVal = selectedAttribute === 'sampleId'
             ? rawValue
             : Utils.formatValue(numValue, selectedAttribute);
