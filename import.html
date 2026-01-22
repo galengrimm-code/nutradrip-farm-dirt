@@ -1123,8 +1123,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.117";
-    const BUILD_DATE = "2026-01-22T08:14:32";
+    const APP_VERSION = "v1.0.118";
+    const BUILD_DATE = "2026-01-22T08:31:00";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -4211,9 +4211,19 @@
           }
           if (headersUpdated) {
             // Update header row to include new columns
+            // Convert column index to letter (supports AA, AB, etc. for columns > 26)
+            function colToLetter(col) {
+              let letter = '';
+              while (col >= 0) {
+                letter = String.fromCharCode(65 + (col % 26)) + letter;
+                col = Math.floor(col / 26) - 1;
+              }
+              return letter;
+            }
+            const lastCol = colToLetter(headers.length - 1);
             await gapi.client.sheets.spreadsheets.values.update({
               spreadsheetId: CONFIG.SHEET_ID,
-              range: 'Samples!A1:' + String.fromCharCode(65 + headers.length - 1) + '1',
+              range: `Samples!A1:${lastCol}1`,
               valueInputOption: 'RAW',
               resource: { values: [headers] }
             });
