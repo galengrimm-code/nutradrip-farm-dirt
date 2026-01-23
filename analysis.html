@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.135";
-    const BUILD_DATE = "2026-01-23T07:26:59";
+    const APP_VERSION = "v1.0.136";
+    const BUILD_DATE = "2026-01-23T07:29:23";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1388,10 +1388,67 @@
 
             const graph = createDualLineGraph(yearData, color, attr);
 
-            // Calculate stability if multiple years of data
-            const stability = yearData.length > 1 ? window.Utils.calculateFieldStability(fieldSamples, attr) : null;
+            // Calculate linear regression for trend slope
+            const regressionData = yearData.map(d => ({ x: parseInt(d.year), y: d.avg }));
+            const regression = window.Utils.calculateLinearRegression(regressionData);
+            const slope = regression ? regression.slope : null;
 
-            // P:Zn Ratio insight box
+            // Get comprehensive trend insight
+            const criticalLevels = { ...window.Utils.DEFAULT_CRITICAL_LEVELS };
+            // Override with user settings if available
+            const userThresholds = JSON.parse(localStorage.getItem('thresholds') || '{}');
+            Object.keys(criticalLevels).forEach(key => {
+              if (userThresholds[`${key}_critical`] !== undefined) {
+                criticalLevels[key] = userThresholds[`${key}_critical`];
+              }
+            });
+
+            const trendInsight = yearData.length > 1 ? window.Utils.getTrendInsight(yearData, attr, slope, criticalLevels) : null;
+            const urgencyBadge = trendInsight ? window.Utils.getUrgencyBadge(trendInsight.urgency) : null;
+
+            // Get moisture warnings for P and K
+            let moistureWarning = '';
+            if ((attr === 'P' || attr === 'K') && fieldSamples.length > 0) {
+              const moistureConditions = fieldSamples
+                .filter(s => s.soilMoistureCondition)
+                .map(s => ({ year: s.year, moisture: s.soilMoistureCondition }));
+
+              const hasDry = moistureConditions.some(m => m.moisture === 'dry');
+              const moistureByYear = {};
+              moistureConditions.forEach(m => {
+                if (!moistureByYear[m.year]) moistureByYear[m.year] = new Set();
+                moistureByYear[m.year].add(m.moisture);
+              });
+
+              const yearsWithMoisture = Object.keys(moistureByYear);
+              const hasMixedMoisture = yearsWithMoisture.length > 1 &&
+                new Set(yearsWithMoisture.flatMap(y => [...moistureByYear[y]])).size > 1;
+
+              if (hasDry) {
+                const pctHigher = attr === 'P' ? '15-25%' : '20-40%';
+                moistureWarning = `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: #92400e;">🌵 Dry sampling: ${attr} may test ${pctHigher} higher than actual</div>`;
+              }
+              if (hasMixedMoisture && trendInsight && trendInsight.stability.label === 'Volatile') {
+                moistureWarning += `<div style="margin-top: 0.25rem; font-size: 0.75rem; color: #64748b;">ℹ️ Some variability may be due to different moisture conditions at sampling</div>`;
+              }
+            }
+
+            // Variability causes tooltip for volatile data
+            let volatilityTooltip = '';
+            if (trendInsight && trendInsight.stability.label === 'Volatile') {
+              volatilityTooltip = `
+                <div style="margin-top: 0.5rem; font-size: 0.7rem; color: #64748b; cursor: help;" title="Common causes of high variability:
+• Sampling path changed between years
+• Inconsistent sampling depth
+• Different soil moisture conditions
+• Lab or test method changes
+• Within-zone spatial variability
+• Variable rate applications or manure history">
+                  ℹ️ <span style="text-decoration: underline dotted;">Why high variability?</span>
+                </div>`;
+            }
+
+            // P:Zn Ratio insight box (special case)
             let pznInsight = '';
             if (attr === 'P_Zn_Ratio' && yearData.length > 0) {
               const mostRecentRatio = last.avg;
@@ -1419,25 +1476,31 @@
               }
             }
 
+            // Build the trend insight box (for non-P:Zn attributes)
+            let trendInsightBox = '';
+            if (trendInsight && attr !== 'P_Zn_Ratio') {
+              trendInsightBox = `
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: ${trendInsight.background}; border-radius: 0.375rem; border: 1px solid ${trendInsight.stability.color}40;">
+                  <div style="font-size: 0.85rem; color: #1e293b;">
+                    ${trendInsight.message}
+                  </div>
+                  ${trendInsight.yearsToCritical ? `
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #b91c1c; font-weight: 500;">
+                      ⏱️ ${trendInsight.yearsToCritical.message}
+                    </div>
+                  ` : ''}
+                  ${moistureWarning}
+                  ${volatilityTooltip}
+                </div>`;
+            }
+
             html += `
               <div class="trend-card ${cardClass}">
-                <div class="trend-header">
+                <div class="trend-header" style="position: relative;">
                   <h4 class="trend-title">${name}</h4>
+                  ${urgencyBadge ? `<span style="position: absolute; top: -0.25rem; right: -0.25rem; padding: 0.15rem 0.4rem; background: ${urgencyBadge.bg}; color: ${urgencyBadge.color}; font-size: 0.6rem; font-weight: 700; border-radius: 0.25rem; border: 1px solid ${urgencyBadge.color}40;">${urgencyBadge.emoji} ${urgencyBadge.label}</span>` : ''}
                   ${yearData.length > 1 ? `<div class="trend-pct" style="color:${color};">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%<div class="trend-sub">${first.year} → ${last.year}</div></div>` : ''}
                 </div>
-                ${stability ? `
-                <div style="margin: 0.5rem 0; padding: 0.5rem 0.75rem; background: ${stability.color}15; border-left: 3px solid ${stability.color}; border-radius: 0 0.375rem 0.375rem 0; font-size: 0.75rem;">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="font-weight: 600; color: ${stability.color};">${stability.emoji} Stability: ${stability.stabilityScore.toFixed(0)}%</span>
-                    <span style="color: #64748b;">(${stability.label} - CV: ${stability.avgCV.toFixed(1)}%)</span>
-                  </div>
-                  <div style="font-size: 0.7rem; color: #64748b; margin-top: 0.25rem; font-style: italic;">
-                    ${stability.stabilityScore >= 85 ? 'Sample points are consistent across years - reliable data' :
-                      stability.stabilityScore >= 70 ? 'Some variation between years at sample locations' :
-                      'Individual sample points vary significantly year-to-year within this field'}
-                  </div>
-                </div>
-                ` : ''}
                 <div class="trend-content">
                   <div class="trend-values">
                     <div style="font-size:0.7rem;color:#64748b;margin-bottom:0.25rem;display:flex;justify-content:space-between;padding:0 0.75rem;"><span></span><span style="width:70px;text-align:center;">Avg</span><span style="width:70px;text-align:center;">Median</span></div>
@@ -1452,6 +1515,16 @@
                     ${graph}
                   </div>
                 </div>
+                ${trendInsight ? `
+                <div style="margin: 0.5rem 0; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 0.375rem; font-size: 0.75rem;">
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                    <span><strong>Trend:</strong> ${slope !== null ? `${slope >= 0 ? '+' : ''}${slope.toFixed(2)} ${attr === 'pH' ? '' : unit || 'ppm'}/yr` : 'N/A'}</span>
+                    <span><strong>Stability:</strong> ${trendInsight.stability.metric} ${trendInsight.stability.value.toFixed(attr === 'pH' ? 2 : 1)}${attr === 'pH' ? '' : '%'} (${trendInsight.stability.label})</span>
+                    <span><strong>Confidence:</strong> ${trendInsight.confidence} (${yearData.length} yrs)</span>
+                  </div>
+                </div>
+                ` : ''}
+                ${trendInsightBox}
                 ${pznInsight}
               </div>
             `;
@@ -1566,7 +1639,55 @@
 
             const graph = createOperationTrendGraph(yearData, color);
 
-            // P:Zn Ratio insight box
+            // Calculate linear regression for trend slope
+            const regressionData = yearData.map(d => ({ x: parseInt(d.year), y: d.avg }));
+            const regression = window.Utils.calculateLinearRegression(regressionData);
+            const slope = regression ? regression.slope : null;
+
+            // Get comprehensive trend insight
+            const criticalLevels = { ...window.Utils.DEFAULT_CRITICAL_LEVELS };
+            const userThresholds = JSON.parse(localStorage.getItem('thresholds') || '{}');
+            Object.keys(criticalLevels).forEach(key => {
+              if (userThresholds[`${key}_critical`] !== undefined) {
+                criticalLevels[key] = userThresholds[`${key}_critical`];
+              }
+            });
+
+            const trendInsight = yearData.length > 1 ? window.Utils.getTrendInsight(yearData, attr, slope, criticalLevels) : null;
+            const urgencyBadge = trendInsight ? window.Utils.getUrgencyBadge(trendInsight.urgency) : null;
+            const unit = CONFIG.NUTRIENT_UNITS[attr] || '';
+
+            // Get moisture warnings for P and K (operation-wide)
+            let moistureWarning = '';
+            if ((attr === 'P' || attr === 'K') && filteredSamples.length > 0) {
+              const moistureConditions = filteredSamples
+                .filter(s => s.soilMoistureCondition)
+                .map(s => ({ year: s.year, moisture: s.soilMoistureCondition }));
+
+              const hasDry = moistureConditions.some(m => m.moisture === 'dry');
+
+              if (hasDry) {
+                const pctHigher = attr === 'P' ? '15-25%' : '20-40%';
+                moistureWarning = `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: #92400e;">🌵 Includes dry samples - ${attr} may test ${pctHigher} higher than actual</div>`;
+              }
+            }
+
+            // Variability causes tooltip for volatile data
+            let volatilityTooltip = '';
+            if (trendInsight && trendInsight.stability.label === 'Volatile') {
+              volatilityTooltip = `
+                <div style="margin-top: 0.5rem; font-size: 0.7rem; color: #64748b; cursor: help;" title="Common causes of high variability:
+• Sampling path changed between years
+• Inconsistent sampling depth
+• Different soil moisture conditions
+• Lab or test method changes
+• Within-zone spatial variability
+• Variable rate applications or manure history">
+                  ℹ️ <span style="text-decoration: underline dotted;">Why high variability?</span>
+                </div>`;
+            }
+
+            // P:Zn Ratio insight box (special case)
             let pznInsight = '';
             if (attr === 'P_Zn_Ratio' && yearData.length > 0) {
               const mostRecentRatio = last.avg;
@@ -1594,10 +1715,29 @@
               }
             }
 
+            // Build the trend insight box (for non-P:Zn attributes)
+            let trendInsightBox = '';
+            if (trendInsight && attr !== 'P_Zn_Ratio') {
+              trendInsightBox = `
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: ${trendInsight.background}; border-radius: 0.375rem; border: 1px solid ${trendInsight.stability.color}40;">
+                  <div style="font-size: 0.85rem; color: #1e293b;">
+                    ${trendInsight.message}
+                  </div>
+                  ${trendInsight.yearsToCritical ? `
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #b91c1c; font-weight: 500;">
+                      ⏱️ ${trendInsight.yearsToCritical.message}
+                    </div>
+                  ` : ''}
+                  ${moistureWarning}
+                  ${volatilityTooltip}
+                </div>`;
+            }
+
             html += `
               <div class="trend-card ${cardClass}">
-                <div class="trend-header">
+                <div class="trend-header" style="position: relative;">
                   <h4 class="trend-title">${name}</h4>
+                  ${urgencyBadge ? `<span style="position: absolute; top: -0.25rem; right: -0.25rem; padding: 0.15rem 0.4rem; background: ${urgencyBadge.bg}; color: ${urgencyBadge.color}; font-size: 0.6rem; font-weight: 700; border-radius: 0.25rem; border: 1px solid ${urgencyBadge.color}40;">${urgencyBadge.emoji} ${urgencyBadge.label}</span>` : ''}
                   ${yearData.length > 1 ? `<div class="trend-pct" style="color:${color};">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%<div class="trend-sub">${first.year} → ${last.year}</div></div>` : ''}
                 </div>
                 <div class="trend-content">
@@ -1634,6 +1774,16 @@
                     ${graph}
                   </div>
                 </div>
+                ${trendInsight ? `
+                <div style="margin: 0.5rem 0; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 0.375rem; font-size: 0.75rem;">
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                    <span><strong>Trend:</strong> ${slope !== null ? `${slope >= 0 ? '+' : ''}${slope.toFixed(2)} ${attr === 'pH' ? '' : unit || 'ppm'}/yr` : 'N/A'}</span>
+                    <span><strong>Stability:</strong> ${trendInsight.stability.metric} ${trendInsight.stability.value.toFixed(attr === 'pH' ? 2 : 1)}${attr === 'pH' ? '' : '%'} (${trendInsight.stability.label})</span>
+                    <span><strong>Confidence:</strong> ${trendInsight.confidence} (${yearData.length} yrs)</span>
+                  </div>
+                </div>
+                ` : ''}
+                ${trendInsightBox}
                 ${pznInsight}
               </div>
             `;
