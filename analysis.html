@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.142";
-    const BUILD_DATE = "2026-01-23T08:37:31";
+    const APP_VERSION = "v1.0.143";
+    const BUILD_DATE = "2026-01-23T09:04:49";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1459,31 +1459,110 @@
                 </details>`;
             }
 
-            // P:Zn Ratio insight box (special case)
+            // P:Zn Ratio insight box (comprehensive tiered system)
             let pznInsight = '';
+            let pznBadgeOverride = null;
             if (attr === 'P_Zn_Ratio' && yearData.length > 0) {
               const mostRecentRatio = last.avg;
-              if (mostRecentRatio < 8) {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
-                  <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target P:Zn ratio is 10:1 (optimal range 8-12).
-                  </div>
-                </div>`;
-              } else if (mostRecentRatio > 12) {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
-                  <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target P:Zn ratio is 10:1 (optimal range 8-12).
-                  </div>
-                </div>`;
+              const mostRecentYear = last.year;
+
+              // Get current P and Zn values from most recent year's samples
+              const recentSamples = fieldSamples.filter(s => String(s.year) === String(mostRecentYear));
+              const pValues = recentSamples.map(s => s.P).filter(v => v !== null && v !== undefined && !isNaN(v));
+              const znValues = recentSamples.map(s => s.Zn).filter(v => v !== null && v !== undefined && !isNaN(v));
+              const currentP = pValues.length > 0 ? pValues.reduce((a, b) => a + b, 0) / pValues.length : null;
+              const currentZn = znValues.length > 0 ? znValues.reduce((a, b) => a + b, 0) / znValues.length : null;
+
+              // Get Zn sufficiency threshold from settings (default 1.0 ppm)
+              const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+              const znOptimalMin = settings.Zn_min ?? 1.0;
+              const znIsLow = currentZn !== null && currentZn < znOptimalMin;
+              const znIsAdequate = currentZn !== null && currentZn >= znOptimalMin;
+
+              // Determine ratio status
+              const ratioIsNormal = mostRecentRatio <= 12;
+              const ratioIsElevated = mostRecentRatio > 12 && mostRecentRatio <= 20;
+              const ratioIsHighRisk = mostRecentRatio > 20;
+
+              // Determine trend direction
+              const trendUp = slope !== null && slope > 0.5;
+              const trendDown = slope !== null && slope < -0.5;
+
+              // Build trend message
+              let trendMsg = '';
+              if (trendUp) {
+                trendMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b;">📈 Ratio is trending upward, which may increase risk of zinc limitation in future seasons.</div>';
+              } else if (trendDown) {
+                trendMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b;">📉 Ratio is improving, suggesting nutrient balance is moving in a favorable direction.</div>';
+              }
+
+              // Stability warning
+              let stabilityMsg = '';
+              if (trendInsight && trendInsight.stability.label === 'Volatile') {
+                stabilityMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #92400e;">⚠️ Year-to-year variability is high. Confirm trends with consistent sampling methods before making major adjustments.</div>';
+              }
+
+              // Current values display
+              const valuesDisplay = `<div style="margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b;">
+                <strong>Current values:</strong> P: ${currentP !== null ? currentP.toFixed(0) : '?'} ppm | Zn: ${currentZn !== null ? currentZn.toFixed(1) : '?'} ppm | Ratio: ${mostRecentRatio.toFixed(0)}:1
+              </div>`;
+
+              // Generate insight based on case
+              let bgColor, borderColor, textColor, emoji, insight, recommendation;
+
+              if (ratioIsHighRisk && znIsLow) {
+                // CASE 1: High ratio + Low Zn (Highest Risk)
+                bgColor = '#fee2e2'; borderColor = '#fca5a5'; textColor = '#991b1b';
+                emoji = '🔴';
+                insight = 'High risk of zinc deficiency. The P:Zn ratio is elevated and soil zinc is below sufficiency. High phosphorus relative to zinc can reduce plant Zn uptake and limit crop performance.';
+                recommendation = 'Consider zinc fertilization to correct deficiency and reduce imbalance. Placement and product choice should match crop and soil conditions.';
+                pznBadgeOverride = { emoji: '🔴', label: 'Action Required', color: '#dc2626', bg: '#fee2e2' };
+              } else if (ratioIsHighRisk && znIsAdequate) {
+                // CASE 2: High ratio + Adequate Zn
+                bgColor = '#fed7aa'; borderColor = '#fdba74'; textColor = '#9a3412';
+                emoji = '🟠';
+                insight = 'Imbalance present, zinc currently sufficient. While zinc levels are currently adequate, high P relative to Zn can increase future deficiency risk, especially in high-yielding crops.';
+                recommendation = 'Monitor zinc levels and maintain balanced fertility. Correcting ratio may be beneficial if Zn begins trending downward.';
+                pznBadgeOverride = { emoji: '⚠️', label: 'Review', color: '#ca8a04', bg: '#fef9c3' };
+              } else if (ratioIsElevated && znIsLow) {
+                // CASE 3: Elevated ratio + Low Zn
+                bgColor = '#fef9c3'; borderColor = '#fde047'; textColor = '#854d0e';
+                emoji = '🟡';
+                insight = 'Zinc supply may limit phosphorus utilization. Moderate P:Zn imbalance combined with low zinc can reduce plant Zn uptake and limit crop response to phosphorus.';
+                recommendation = 'Consider zinc supplementation and monitor ratio trends in future samples.';
+                pznBadgeOverride = { emoji: '⚠️', label: 'Review', color: '#ca8a04', bg: '#fef9c3' };
+              } else if (ratioIsElevated && znIsAdequate) {
+                // CASE 4: Elevated ratio + Adequate Zn
+                bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; textColor = '#065f46';
+                emoji = '🟢';
+                insight = 'Slight imbalance, no current deficiency indicated. The P:Zn ratio is above typical balance ranges, but zinc supply appears sufficient.';
+                recommendation = 'Continue monitoring zinc and ratio trends. No immediate correction needed if Zn remains adequate.';
+                pznBadgeOverride = { emoji: '✓', label: 'Good', color: '#16a34a', bg: '#dcfce7' };
               } else {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #dcfce7; border-radius: 0.375rem; border: 1px solid #86efac;">
-                  <div style="font-size: 0.85rem; color: #166534;">
-                    ✓ P:Zn ratio is in optimal range (8-12). Target is 10:1.
+                // CASE 5: Normal ratio (≤12:1)
+                bgColor = '#dcfce7'; borderColor = '#86efac'; textColor = '#166534';
+                emoji = '✅';
+                insight = 'Balanced P and Zn relationship. The P:Zn ratio is within commonly accepted balance ranges, reducing risk of nutrient interaction issues.';
+                recommendation = 'Maintain current fertility strategy and monitor trends over time.';
+                pznBadgeOverride = { emoji: '✓', label: 'Good', color: '#16a34a', bg: '#dcfce7' };
+              }
+
+              pznInsight = `
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: ${bgColor}; border-radius: 0.375rem; border: 1px solid ${borderColor};">
+                  <div style="font-size: 0.85rem; color: ${textColor};">
+                    <strong>${emoji} ${insight}</strong>
                   </div>
+                  <div style="margin-top: 0.5rem; font-size: 0.8rem; color: ${textColor};">
+                    💡 <strong>Recommendation:</strong> ${recommendation}
+                  </div>
+                  ${trendMsg}
+                  ${stabilityMsg}
+                  ${valuesDisplay}
                 </div>`;
+
+              // Override the badge for P:Zn ratio
+              if (pznBadgeOverride) {
+                urgencyBadge = pznBadgeOverride;
               }
             }
 
@@ -1505,10 +1584,13 @@
                 </div>`;
             }
 
+            // Add "Why ratios matter" tooltip for P:Zn Ratio
+            const pznTooltip = attr === 'P_Zn_Ratio' ? `<span style="margin-left: 0.5rem; cursor: help; color: #64748b;" title="High phosphorus relative to zinc can reduce zinc uptake by plants even when soil Zn levels are moderate. This interaction is more likely in high-yield systems, sandy soils, and soils with low organic matter.">ℹ️</span>` : '';
+
             html += `
               <div class="trend-card ${cardClass}">
                 <div class="trend-header">
-                  <h4 class="trend-title">${name}</h4>
+                  <h4 class="trend-title">${name}${pznTooltip}</h4>
                   <div style="display: flex; align-items: center; gap: 0.75rem;">
                     ${urgencyBadge ? `<span style="padding: 0.15rem 0.5rem; background: ${urgencyBadge.bg}; color: ${urgencyBadge.color}; font-size: 0.65rem; font-weight: 600; border-radius: 0.25rem; white-space: nowrap;">${urgencyBadge.emoji} ${urgencyBadge.label}</span>` : ''}
                     ${yearData.length > 1 ? `<div class="trend-pct" style="color:${color}; text-align: right;">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%<div class="trend-sub">${first.year} → ${last.year}</div></div>` : ''}
@@ -1712,31 +1794,110 @@
                 </details>`;
             }
 
-            // P:Zn Ratio insight box (special case)
+            // P:Zn Ratio insight box (comprehensive tiered system)
             let pznInsight = '';
+            let pznBadgeOverride = null;
             if (attr === 'P_Zn_Ratio' && yearData.length > 0) {
               const mostRecentRatio = last.avg;
-              if (mostRecentRatio < 8) {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
-                  <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target P:Zn ratio is 10:1 (optimal range 8-12).
-                  </div>
-                </div>`;
-              } else if (mostRecentRatio > 12) {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
-                  <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target P:Zn ratio is 10:1 (optimal range 8-12).
-                  </div>
-                </div>`;
+              const mostRecentYear = last.year;
+
+              // Get current P and Zn values from most recent year's samples (operation-wide)
+              const recentSamples = filteredSamples.filter(s => String(s.year) === String(mostRecentYear));
+              const pValues = recentSamples.map(s => s.P).filter(v => v !== null && v !== undefined && !isNaN(v));
+              const znValues = recentSamples.map(s => s.Zn).filter(v => v !== null && v !== undefined && !isNaN(v));
+              const currentP = pValues.length > 0 ? pValues.reduce((a, b) => a + b, 0) / pValues.length : null;
+              const currentZn = znValues.length > 0 ? znValues.reduce((a, b) => a + b, 0) / znValues.length : null;
+
+              // Get Zn sufficiency threshold from settings (default 1.0 ppm)
+              const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+              const znOptimalMin = settings.Zn_min ?? 1.0;
+              const znIsLow = currentZn !== null && currentZn < znOptimalMin;
+              const znIsAdequate = currentZn !== null && currentZn >= znOptimalMin;
+
+              // Determine ratio status
+              const ratioIsNormal = mostRecentRatio <= 12;
+              const ratioIsElevated = mostRecentRatio > 12 && mostRecentRatio <= 20;
+              const ratioIsHighRisk = mostRecentRatio > 20;
+
+              // Determine trend direction
+              const trendUp = slope !== null && slope > 0.5;
+              const trendDown = slope !== null && slope < -0.5;
+
+              // Build trend message
+              let trendMsg = '';
+              if (trendUp) {
+                trendMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b;">📈 Ratio is trending upward, which may increase risk of zinc limitation in future seasons.</div>';
+              } else if (trendDown) {
+                trendMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b;">📉 Ratio is improving, suggesting nutrient balance is moving in a favorable direction.</div>';
+              }
+
+              // Stability warning
+              let stabilityMsg = '';
+              if (trendInsight && trendInsight.stability.label === 'Volatile') {
+                stabilityMsg = '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #92400e;">⚠️ Year-to-year variability is high. Confirm trends with consistent sampling methods before making major adjustments.</div>';
+              }
+
+              // Current values display
+              const valuesDisplay = `<div style="margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b;">
+                <strong>Operation averages:</strong> P: ${currentP !== null ? currentP.toFixed(0) : '?'} ppm | Zn: ${currentZn !== null ? currentZn.toFixed(1) : '?'} ppm | Ratio: ${mostRecentRatio.toFixed(0)}:1
+              </div>`;
+
+              // Generate insight based on case
+              let bgColor, borderColor, textColor, emoji, insight, recommendation;
+
+              if (ratioIsHighRisk && znIsLow) {
+                // CASE 1: High ratio + Low Zn (Highest Risk)
+                bgColor = '#fee2e2'; borderColor = '#fca5a5'; textColor = '#991b1b';
+                emoji = '🔴';
+                insight = 'High risk of zinc deficiency across operation. The P:Zn ratio is elevated and average zinc is below sufficiency.';
+                recommendation = 'Consider zinc fertilization to correct deficiency and reduce imbalance. Review individual field reports for specific recommendations.';
+                pznBadgeOverride = { emoji: '🔴', label: 'Action Required', color: '#dc2626', bg: '#fee2e2' };
+              } else if (ratioIsHighRisk && znIsAdequate) {
+                // CASE 2: High ratio + Adequate Zn
+                bgColor = '#fed7aa'; borderColor = '#fdba74'; textColor = '#9a3412';
+                emoji = '🟠';
+                insight = 'Imbalance present, zinc currently sufficient across operation. While zinc levels are currently adequate, high P relative to Zn can increase future deficiency risk.';
+                recommendation = 'Monitor zinc levels and maintain balanced fertility. Review individual field P:Zn ratios for targeted adjustments.';
+                pznBadgeOverride = { emoji: '⚠️', label: 'Review', color: '#ca8a04', bg: '#fef9c3' };
+              } else if (ratioIsElevated && znIsLow) {
+                // CASE 3: Elevated ratio + Low Zn
+                bgColor = '#fef9c3'; borderColor = '#fde047'; textColor = '#854d0e';
+                emoji = '🟡';
+                insight = 'Zinc supply may limit phosphorus utilization. Moderate P:Zn imbalance combined with low zinc can reduce plant Zn uptake.';
+                recommendation = 'Consider zinc supplementation and monitor ratio trends. Review individual field reports for priorities.';
+                pznBadgeOverride = { emoji: '⚠️', label: 'Review', color: '#ca8a04', bg: '#fef9c3' };
+              } else if (ratioIsElevated && znIsAdequate) {
+                // CASE 4: Elevated ratio + Adequate Zn
+                bgColor = '#ecfdf5'; borderColor = '#a7f3d0'; textColor = '#065f46';
+                emoji = '🟢';
+                insight = 'Slight imbalance, no current deficiency indicated across operation. The P:Zn ratio is above typical balance ranges, but zinc supply appears sufficient.';
+                recommendation = 'Continue monitoring zinc and ratio trends. No immediate correction needed if Zn remains adequate.';
+                pznBadgeOverride = { emoji: '✓', label: 'Good', color: '#16a34a', bg: '#dcfce7' };
               } else {
-                pznInsight = `
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: #dcfce7; border-radius: 0.375rem; border: 1px solid #86efac;">
-                  <div style="font-size: 0.85rem; color: #166534;">
-                    ✓ P:Zn ratio is in optimal range (8-12). Target is 10:1.
+                // CASE 5: Normal ratio (≤12:1)
+                bgColor = '#dcfce7'; borderColor = '#86efac'; textColor = '#166534';
+                emoji = '✅';
+                insight = 'Balanced P and Zn relationship across operation. The P:Zn ratio is within commonly accepted balance ranges.';
+                recommendation = 'Maintain current fertility strategy and monitor trends over time.';
+                pznBadgeOverride = { emoji: '✓', label: 'Good', color: '#16a34a', bg: '#dcfce7' };
+              }
+
+              pznInsight = `
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: ${bgColor}; border-radius: 0.375rem; border: 1px solid ${borderColor};">
+                  <div style="font-size: 0.85rem; color: ${textColor};">
+                    <strong>${emoji} ${insight}</strong>
                   </div>
+                  <div style="margin-top: 0.5rem; font-size: 0.8rem; color: ${textColor};">
+                    💡 <strong>Recommendation:</strong> ${recommendation}
+                  </div>
+                  ${trendMsg}
+                  ${stabilityMsg}
+                  ${valuesDisplay}
                 </div>`;
+
+              // Override the badge for P:Zn ratio
+              if (pznBadgeOverride) {
+                urgencyBadge = pznBadgeOverride;
               }
             }
 
@@ -1758,10 +1919,13 @@
                 </div>`;
             }
 
+            // Add "Why ratios matter" tooltip for P:Zn Ratio (operation-wide)
+            const pznTooltip = attr === 'P_Zn_Ratio' ? `<span style="margin-left: 0.5rem; cursor: help; color: #64748b;" title="High phosphorus relative to zinc can reduce zinc uptake by plants even when soil Zn levels are moderate. This interaction is more likely in high-yield systems, sandy soils, and soils with low organic matter.">ℹ️</span>` : '';
+
             html += `
               <div class="trend-card ${cardClass}">
                 <div class="trend-header">
-                  <h4 class="trend-title">${name}</h4>
+                  <h4 class="trend-title">${name}${pznTooltip}</h4>
                   <div style="display: flex; align-items: center; gap: 0.75rem;">
                     ${urgencyBadge ? `<span style="padding: 0.15rem 0.5rem; background: ${urgencyBadge.bg}; color: ${urgencyBadge.color}; font-size: 0.65rem; font-weight: 600; border-radius: 0.25rem; white-space: nowrap;">${urgencyBadge.emoji} ${urgencyBadge.label}</span>` : ''}
                     ${yearData.length > 1 ? `<div class="trend-pct" style="color:${color}; text-align: right;">${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%<div class="trend-sub">${first.year} → ${last.year}</div></div>` : ''}
