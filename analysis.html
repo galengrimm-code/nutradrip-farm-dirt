@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.139";
-    const BUILD_DATE = "2026-01-23T08:01:35";
+    const APP_VERSION = "v1.0.140";
+    const BUILD_DATE = "2026-01-23T08:25:49";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1456,21 +1456,21 @@
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
                   <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target ratio is 9:1.
+                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target P:Zn ratio is 10:1 (optimal range 8-12).
                   </div>
                 </div>`;
-              } else if (mostRecentRatio > 13) {
+              } else if (mostRecentRatio > 12) {
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
                   <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target ratio is 9:1.
+                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target P:Zn ratio is 10:1 (optimal range 8-12).
                   </div>
                 </div>`;
               } else {
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #dcfce7; border-radius: 0.375rem; border: 1px solid #86efac;">
                   <div style="font-size: 0.85rem; color: #166534;">
-                    ✓ P:Zn ratio is in optimal range (8-13). Target is 9:1.
+                    ✓ P:Zn ratio is in optimal range (8-12). Target is 10:1.
                   </div>
                 </div>`;
               }
@@ -1698,21 +1698,21 @@
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
                   <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target ratio is 9:1.
+                    💡 <strong>Recommendation:</strong> Consider adding phosphorus rather than zinc. A P:Zn ratio below 8 suggests P may be limiting relative to Zn. Target P:Zn ratio is 10:1 (optimal range 8-12).
                   </div>
                 </div>`;
-              } else if (mostRecentRatio > 13) {
+              } else if (mostRecentRatio > 12) {
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fef3c7; border-radius: 0.375rem; border: 1px solid #fcd34d;">
                   <div style="font-size: 0.85rem; color: #92400e;">
-                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target ratio is 9:1.
+                    💡 <strong>Recommendation:</strong> Consider raising zinc levels to improve phosphorus availability. High P:Zn ratios can inhibit Zn uptake, making P less usable. Target P:Zn ratio is 10:1 (optimal range 8-12).
                   </div>
                 </div>`;
               } else {
                 pznInsight = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: #dcfce7; border-radius: 0.375rem; border: 1px solid #86efac;">
                   <div style="font-size: 0.85rem; color: #166534;">
-                    ✓ P:Zn ratio is in optimal range (8-13). Target is 9:1.
+                    ✓ P:Zn ratio is in optimal range (8-12). Target is 10:1.
                   </div>
                 </div>`;
               }

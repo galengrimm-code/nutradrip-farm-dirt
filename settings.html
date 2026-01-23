@@ -293,22 +293,11 @@
     <div class="settings-card">
       <h3>🧪 pH</h3>
       <div class="threshold-grid">
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">pH</span>
           <div class="inputs">
-            <span style="color:#dc2626;">Critical:</span><input type="number" id="pH_critical" step="0.1" value="5.5">
-            <span style="color:#16a34a;">Optimal:</span><input type="number" id="pH_min" step="0.1" value="6.0"><span>to</span><input type="number" id="pH_max" step="0.1" value="7.0">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="pH_ideal" step="0.1" value="6.7">
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <span>Direction:</span>
-            <select id="pH_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem;">
-              <option value="up">Up (higher better)</option>
-              <option value="down">Down (lower better)</option>
-              <option value="target" selected>Target (stay at ideal)</option>
-              <option value="up_unless_excessive">Up unless excessive</option>
-              <option value="down_unless_deficient">Down unless deficient</option>
-            </select>
+            <span style="color:#dc2626;">Crit:</span><input type="number" id="pH_critical" step="0.1" value="5.5">
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="pH_min" step="0.1" value="6.0"><span>to</span><input type="number" id="pH_max" step="0.1" value="7.0">
           </div>
         </div>
       </div>
@@ -316,61 +305,32 @@
     <div class="settings-card">
       <h3>🌿 Macronutrients</h3>
       <div class="threshold-grid">
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Phosphorus (P)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="P_critical" value="15">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="P_min" value="25"><span>to</span><input type="number" id="P_max" value="50">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="P_ideal" value="40"><span class="unit">ppm</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="P_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up">Up</option>
-              <option value="target">Target</option>
-              <option value="up_unless_excessive" selected>Up unless excessive</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="P_min" value="25"><span>to</span><input type="number" id="P_max" value="50"><span class="unit">ppm</span>
           </div>
         </div>
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Potassium (K)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="K_critical" value="120">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="K_min" value="150"><span>to</span><input type="number" id="K_max" value="250">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="K_ideal" value="250"><span class="unit">ppm</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="K_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up" selected>Up (higher better)</option>
-              <option value="target">Target</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="K_min" value="150"><span>to</span><input type="number" id="K_max" value="250"><span class="unit">ppm</span>
           </div>
         </div>
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Organic Matter (OM)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="OM_critical" step="0.1" value="2.0">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="OM_min" step="0.1" value="3.0"><span>to</span><input type="number" id="OM_max" step="0.1" value="5.0">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="OM_ideal" step="0.1" value="4.0"><span class="unit">%</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="OM_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up" selected>Up (higher better)</option>
-              <option value="target">Target</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="OM_min" step="0.1" value="3.0"><span>to</span><input type="number" id="OM_max" step="0.1" value="5.0"><span class="unit">%</span>
           </div>
         </div>
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Sulfur (S)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="S_critical" value="8">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="S_min" value="12"><span>to</span><input type="number" id="S_max" value="30">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="S_ideal" value="20"><span class="unit">ppm</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="S_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up" selected>Up (higher better)</option>
-              <option value="target">Target</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="S_min" value="12"><span>to</span><input type="number" id="S_max" value="30"><span class="unit">ppm</span>
           </div>
         </div>
       </div>
@@ -378,48 +338,25 @@
     <div class="settings-card">
       <h3>⚖️ Base Saturation</h3>
       <div class="threshold-grid">
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Calcium (Ca)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="Ca_sat_critical" value="55">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="Ca_sat_min" value="65"><span>to</span><input type="number" id="Ca_sat_max" value="75">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="Ca_sat_ideal" value="68"><span class="unit">%</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="Ca_sat_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up">Up</option>
-              <option value="target" selected>Target (stay at ideal)</option>
-              <option value="down">Down</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="Ca_sat_min" value="65"><span>to</span><input type="number" id="Ca_sat_max" value="75"><span class="unit">%</span>
           </div>
         </div>
-        <div class="threshold-row" style="flex-wrap: wrap;">
-          <span class="name">Magnesium (Mg)<span class="lower-note">↓ toward 12%</span></span>
+        <div class="threshold-row">
+          <span class="name">Magnesium (Mg)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="Mg_sat_critical" step="0.1" value="8">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="Mg_sat_min" step="0.1" value="10"><span>to</span><input type="number" id="Mg_sat_max" step="0.1" value="15">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="Mg_sat_ideal" step="0.1" value="12"><span class="unit">%</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="Mg_sat_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="down">Down (lower better)</option>
-              <option value="target">Target</option>
-              <option value="down_unless_deficient" selected>Down unless deficient</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="Mg_sat_min" step="0.1" value="10"><span>to</span><input type="number" id="Mg_sat_max" step="0.1" value="15"><span class="unit">%</span>
           </div>
         </div>
-        <div class="threshold-row" style="flex-wrap: wrap;">
+        <div class="threshold-row">
           <span class="name">Potassium (K)</span>
           <div class="inputs">
             <span style="color:#dc2626;">Crit:</span><input type="number" id="K_sat_critical" step="0.1" value="2.0">
-            <span style="color:#16a34a;">Opt:</span><input type="number" id="K_sat_min" step="0.1" value="3.0"><span>to</span><input type="number" id="K_sat_max" step="0.1" value="5.0">
-            <span style="color:#3b82f6;">Ideal:</span><input type="number" id="K_sat_ideal" step="0.1" value="4.0"><span class="unit">%</span>
-          </div>
-          <div class="inputs" style="margin-top: 0.5rem;">
-            <select id="K_sat_direction" style="padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; font-size: 0.8rem;">
-              <option value="up">Up</option>
-              <option value="target" selected>Target (stay at ideal)</option>
-            </select>
+            <span style="color:#16a34a;">Opt:</span><input type="number" id="K_sat_min" step="0.1" value="3.0"><span>to</span><input type="number" id="K_sat_max" step="0.1" value="5.0"><span class="unit">%</span>
           </div>
         </div>
         <div class="threshold-row"><span class="name">Hydrogen (H)<span class="lower-note">↓ Lower is better</span></span><span class="note">* Lower is better (no critical)</span><div class="inputs"><span>Max:</span><input type="number" id="H_sat_max" step="0.1" value="5.0"><span class="unit">%</span></div></div>
@@ -469,8 +406,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.139";
-    const BUILD_DATE = "2026-01-23T08:01:35";
+    const APP_VERSION = "v1.0.140";
+    const BUILD_DATE = "2026-01-23T08:25:49";
 
     // Reference shared data config
     const CONFIG = {
@@ -482,15 +419,9 @@
       // Critical thresholds (action needed below these)
       pH_critical: 5.5, P_critical: 15, K_critical: 120, OM_critical: 2.0, S_critical: 8,
       Ca_sat_critical: 55, Mg_sat_critical: 8, K_sat_critical: 2.0,
-      // Optimal thresholds
+      // Optimal thresholds (ideal is calculated as midpoint)
       pH_min: 6.0, pH_max: 7.0, P_min: 25, P_max: 50, K_min: 150, K_max: 250, OM_min: 3.0, OM_max: 5.0, S_min: 12, S_max: 30,
       Ca_sat_min: 65, Ca_sat_max: 75, Mg_sat_min: 10, Mg_sat_max: 15, K_sat_min: 3.0, K_sat_max: 5.0, H_sat_max: 5.0,
-      // Ideal targets
-      pH_ideal: 6.7, P_ideal: 40, K_ideal: 250, OM_ideal: 4.0, S_ideal: 20,
-      Ca_sat_ideal: 68, Mg_sat_ideal: 12, K_sat_ideal: 4.0,
-      // Directions: up, down, target, up_unless_excessive, down_unless_deficient
-      pH_direction: 'target', P_direction: 'up_unless_excessive', K_direction: 'up', OM_direction: 'up', S_direction: 'up',
-      Ca_sat_direction: 'target', Mg_sat_direction: 'down_unless_deficient', K_sat_direction: 'target',
       bufferPercent: 25
     };
     
@@ -1728,14 +1659,7 @@
       const settings = {};
       Object.keys(defaults).forEach(k => {
         const i = document.getElementById(k);
-        if (i) {
-          // Direction fields are strings, not numbers
-          if (k.endsWith('_direction')) {
-            settings[k] = i.value || defaults[k];
-          } else {
-            settings[k] = parseFloat(i.value) || defaults[k];
-          }
-        }
+        if (i) settings[k] = parseFloat(i.value) || defaults[k];
       });
       localStorage.setItem('soilSettings', JSON.stringify(settings));
       showStatus('✓ Settings saved', true);
