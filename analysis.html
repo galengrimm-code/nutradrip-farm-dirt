@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.137";
-    const BUILD_DATE = "2026-01-23T07:44:49";
+    const APP_VERSION = "v1.0.138";
+    const BUILD_DATE = "2026-01-23T07:54:01";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1400,14 +1400,8 @@
             let trendInsight = null;
             let urgencyBadge = null;
             if (!skipTrendAnalysis && yearData.length > 1) {
-              const criticalLevels = { ...window.Utils.DEFAULT_CRITICAL_LEVELS };
-              // Override with user settings if available
-              const userThresholds = JSON.parse(localStorage.getItem('thresholds') || '{}');
-              Object.keys(criticalLevels).forEach(key => {
-                if (userThresholds[`${key}_critical`] !== undefined) {
-                  criticalLevels[key] = userThresholds[`${key}_critical`];
-                }
-              });
+              // Get critical levels from Settings (with defaults)
+              const criticalLevels = window.Utils.getCriticalLevels();
               trendInsight = window.Utils.getTrendInsight(yearData, attr, slope, criticalLevels);
               urgencyBadge = trendInsight ? window.Utils.getUrgencyBadge(trendInsight.urgency) : null;
             }
@@ -1660,13 +1654,8 @@
             let urgencyBadge = null;
             const unit = CONFIG.NUTRIENT_UNITS[attr] || '';
             if (!skipTrendAnalysis && yearData.length > 1) {
-              const criticalLevels = { ...window.Utils.DEFAULT_CRITICAL_LEVELS };
-              const userThresholds = JSON.parse(localStorage.getItem('thresholds') || '{}');
-              Object.keys(criticalLevels).forEach(key => {
-                if (userThresholds[`${key}_critical`] !== undefined) {
-                  criticalLevels[key] = userThresholds[`${key}_critical`];
-                }
-              });
+              // Get critical levels from Settings (with defaults)
+              const criticalLevels = window.Utils.getCriticalLevels();
               trendInsight = window.Utils.getTrendInsight(yearData, attr, slope, criticalLevels);
               urgencyBadge = trendInsight ? window.Utils.getUrgencyBadge(trendInsight.urgency) : null;
             }

@@ -293,24 +293,25 @@
     <div class="settings-card">
       <h3>🧪 pH</h3>
       <div class="threshold-grid">
-        <div class="threshold-row"><span class="name">Optimal Range</span><span class="note"></span><div class="inputs"><input type="number" id="pH_min" step="0.1" value="6.3"><span>to</span><input type="number" id="pH_max" step="0.1" value="6.9"></div></div>
+        <div class="threshold-row"><span class="name">pH</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="pH_critical" step="0.1" value="5.5"><span style="color:#16a34a;">Optimal:</span><input type="number" id="pH_min" step="0.1" value="6.3"><span>to</span><input type="number" id="pH_max" step="0.1" value="6.9"></div></div>
       </div>
     </div>
     <div class="settings-card">
       <h3>🌿 Macronutrients</h3>
       <div class="threshold-grid">
-        <div class="threshold-row"><span class="name">Phosphorus (P)</span><span class="note"></span><div class="inputs"><span>Min:</span><input type="number" id="P_min" value="20"><span class="unit">ppm</span></div></div>
-        <div class="threshold-row"><span class="name">Potassium (K)</span><span class="note"></span><div class="inputs"><span>Min:</span><input type="number" id="K_min" value="150"><span class="unit">ppm</span></div></div>
-        <div class="threshold-row"><span class="name">Organic Matter (OM)</span><span class="note"></span><div class="inputs"><span>Min:</span><input type="number" id="OM_min" step="0.1" value="3.0"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Phosphorus (P)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="P_critical" value="15"><span style="color:#16a34a;">Optimal:</span><input type="number" id="P_min" value="20"><span class="unit">ppm</span></div></div>
+        <div class="threshold-row"><span class="name">Potassium (K)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="K_critical" value="120"><span style="color:#16a34a;">Optimal:</span><input type="number" id="K_min" value="150"><span class="unit">ppm</span></div></div>
+        <div class="threshold-row"><span class="name">Organic Matter (OM)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="OM_critical" step="0.1" value="2.0"><span style="color:#16a34a;">Optimal:</span><input type="number" id="OM_min" step="0.1" value="3.0"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Sulfur (S)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="S_critical" value="8"><span style="color:#16a34a;">Optimal:</span><input type="number" id="S_min" value="12"><span class="unit">ppm</span></div></div>
       </div>
     </div>
     <div class="settings-card">
       <h3>⚖️ Base Saturation</h3>
       <div class="threshold-grid">
-        <div class="threshold-row"><span class="name">Calcium (Ca)</span><span class="note"></span><div class="inputs"><input type="number" id="Ca_sat_min" value="65"><span>to</span><input type="number" id="Ca_sat_max" value="75"><span class="unit">%</span></div></div>
-        <div class="threshold-row"><span class="name">Magnesium (Mg)<span class="lower-note">↓ Lower is better</span></span><span class="note">* Lower is better</span><div class="inputs"><input type="number" id="Mg_sat_min" step="0.1" value="12"><span>to</span><input type="number" id="Mg_sat_max" step="0.1" value="15"><span class="unit">%</span></div></div>
-        <div class="threshold-row"><span class="name">Potassium (K)</span><span class="note"></span><div class="inputs"><span>Min:</span><input type="number" id="K_sat_min" step="0.1" value="3.0"><span class="unit">%</span></div></div>
-        <div class="threshold-row"><span class="name">Hydrogen (H)<span class="lower-note">↓ Lower is better</span></span><span class="note">* Lower is better</span><div class="inputs"><span>Max:</span><input type="number" id="H_sat_max" step="0.1" value="5.0"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Calcium (Ca)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="Ca_sat_critical" value="55"><span style="color:#16a34a;">Optimal:</span><input type="number" id="Ca_sat_min" value="65"><span>to</span><input type="number" id="Ca_sat_max" value="75"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Magnesium (Mg)<span class="lower-note">↓ Lower is better</span></span><span class="note">* Lower is better</span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="Mg_sat_critical" step="0.1" value="8"><span style="color:#16a34a;">Optimal:</span><input type="number" id="Mg_sat_min" step="0.1" value="12"><span>to</span><input type="number" id="Mg_sat_max" step="0.1" value="15"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Potassium (K)</span><span class="note"></span><div class="inputs"><span style="color:#dc2626;">Critical:</span><input type="number" id="K_sat_critical" step="0.1" value="2.0"><span style="color:#16a34a;">Optimal:</span><input type="number" id="K_sat_min" step="0.1" value="3.0"><span class="unit">%</span></div></div>
+        <div class="threshold-row"><span class="name">Hydrogen (H)<span class="lower-note">↓ Lower is better</span></span><span class="note">* Lower is better (no critical)</span><div class="inputs"><span>Max:</span><input type="number" id="H_sat_max" step="0.1" value="5.0"><span class="unit">%</span></div></div>
       </div>
     </div>
     <div class="settings-card">
@@ -357,8 +358,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.137";
-    const BUILD_DATE = "2026-01-23T07:44:49";
+    const APP_VERSION = "v1.0.138";
+    const BUILD_DATE = "2026-01-23T07:54:01";
 
     // Reference shared data config
     const CONFIG = {
@@ -366,7 +367,15 @@
       get API_KEY() { return DataCore.config.API_KEY; },
       get SHEET_ID() { return DataCore.config.SHEET_ID; }
     };
-    const defaults = { pH_min: 6.3, pH_max: 6.9, P_min: 20, K_min: 150, OM_min: 3.0, Ca_sat_min: 65, Ca_sat_max: 75, Mg_sat_min: 12, Mg_sat_max: 15, K_sat_min: 3.0, H_sat_max: 5.0, bufferPercent: 25 };
+    const defaults = {
+      // Critical thresholds (action needed below these)
+      pH_critical: 5.5, P_critical: 15, K_critical: 120, OM_critical: 2.0, S_critical: 8,
+      Ca_sat_critical: 55, Mg_sat_critical: 8, K_sat_critical: 2.0,
+      // Optimal thresholds
+      pH_min: 6.3, pH_max: 6.9, P_min: 20, K_min: 150, OM_min: 3.0, S_min: 12,
+      Ca_sat_min: 65, Ca_sat_max: 75, Mg_sat_min: 12, Mg_sat_max: 15, K_sat_min: 3.0, H_sat_max: 5.0,
+      bufferPercent: 25
+    };
     
     // All nutrients with display names and default visibility
     const ALL_NUTRIENTS = {

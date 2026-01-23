@@ -699,10 +699,16 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     }
   }
 
-  // Determine urgency badge
-  const optimalRanges = JSON.parse(localStorage.getItem('thresholds') || '{}');
+  // Determine urgency badge using optimal levels from settings
+  const optimalLevels = getOptimalLevels();
   let urgency = 'low';
   const currentValue = lastYear.avg;
+
+  // Get optimal min for this attribute
+  let optimalMin = null;
+  if (optimalLevels[attr] !== undefined) {
+    optimalMin = typeof optimalLevels[attr] === 'object' ? optimalLevels[attr].min : optimalLevels[attr];
+  }
 
   // Check if below critical
   if (criticalLevel !== undefined && currentValue < criticalLevel) {
@@ -711,10 +717,17 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     } else {
       urgency = 'high-medium';
     }
-  } else if (criticalLevel !== undefined) {
-    // Check if below optimal (using critical as a proxy if no optimal defined)
-    const optimalMin = optimalRanges[`${attr}_min`] || criticalLevel * 1.5;
-    if (currentValue < optimalMin) {
+  } else if (optimalMin !== null && currentValue < optimalMin) {
+    // Below optimal but above critical
+    if (effectiveTrend === 'down' && stability.label === 'Stable') {
+      urgency = 'high-medium';
+    } else if (effectiveTrend === 'down' || stability.label !== 'Stable') {
+      urgency = 'medium';
+    }
+  } else if (criticalLevel !== undefined && optimalMin === null) {
+    // No optimal defined, use critical * 1.5 as proxy
+    const proxyOptimal = criticalLevel * 1.5;
+    if (currentValue < proxyOptimal) {
       if (effectiveTrend === 'down' && stability.label === 'Stable') {
         urgency = 'high-medium';
       } else if (effectiveTrend === 'down' || stability.label !== 'Stable') {
@@ -746,17 +759,67 @@ function getUrgencyBadge(urgency) {
   return badges[urgency] || badges['low'];
 }
 
-// Default critical levels for nutrients
+// Default critical levels for nutrients (fallbacks if not set in Settings)
 const DEFAULT_CRITICAL_LEVELS = {
   P: 15,
   K: 120,
   pH: 5.5,
   OM: 2.0,
-  Zn: 0.5,
   S: 8,
+  Ca_sat: 55,
+  Mg_sat: 8,
+  K_Sat: 2.0,
+  Zn: 0.5,
   Ca: 500,
   Mg: 50
 };
+
+// Default optimal levels for nutrients (fallbacks if not set in Settings)
+const DEFAULT_OPTIMAL_LEVELS = {
+  P: 20,
+  K: 150,
+  pH: { min: 6.3, max: 6.9 },
+  OM: 3.0,
+  S: 12,
+  Ca_sat: { min: 65, max: 75 },
+  Mg_sat: { min: 12, max: 15 },
+  K_Sat: 3.0,
+  H_Sat: { max: 5.0 }
+};
+
+// Get critical levels from Settings (localStorage) with defaults
+function getCriticalLevels() {
+  const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+  return {
+    P: settings.P_critical ?? DEFAULT_CRITICAL_LEVELS.P,
+    K: settings.K_critical ?? DEFAULT_CRITICAL_LEVELS.K,
+    pH: settings.pH_critical ?? DEFAULT_CRITICAL_LEVELS.pH,
+    OM: settings.OM_critical ?? DEFAULT_CRITICAL_LEVELS.OM,
+    S: settings.S_critical ?? DEFAULT_CRITICAL_LEVELS.S,
+    Ca_sat: settings.Ca_sat_critical ?? DEFAULT_CRITICAL_LEVELS.Ca_sat,
+    Mg_sat: settings.Mg_sat_critical ?? DEFAULT_CRITICAL_LEVELS.Mg_sat,
+    K_Sat: settings.K_sat_critical ?? DEFAULT_CRITICAL_LEVELS.K_Sat,
+    Zn: DEFAULT_CRITICAL_LEVELS.Zn,
+    Ca: DEFAULT_CRITICAL_LEVELS.Ca,
+    Mg: DEFAULT_CRITICAL_LEVELS.Mg
+  };
+}
+
+// Get optimal levels from Settings (localStorage) with defaults
+function getOptimalLevels() {
+  const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+  return {
+    P: settings.P_min ?? DEFAULT_OPTIMAL_LEVELS.P,
+    K: settings.K_min ?? DEFAULT_OPTIMAL_LEVELS.K,
+    pH: { min: settings.pH_min ?? DEFAULT_OPTIMAL_LEVELS.pH.min, max: settings.pH_max ?? DEFAULT_OPTIMAL_LEVELS.pH.max },
+    OM: settings.OM_min ?? DEFAULT_OPTIMAL_LEVELS.OM,
+    S: settings.S_min ?? DEFAULT_OPTIMAL_LEVELS.S,
+    Ca_sat: { min: settings.Ca_sat_min ?? DEFAULT_OPTIMAL_LEVELS.Ca_sat.min, max: settings.Ca_sat_max ?? DEFAULT_OPTIMAL_LEVELS.Ca_sat.max },
+    Mg_sat: { min: settings.Mg_sat_min ?? DEFAULT_OPTIMAL_LEVELS.Mg_sat.min, max: settings.Mg_sat_max ?? DEFAULT_OPTIMAL_LEVELS.Mg_sat.max },
+    K_Sat: settings.K_sat_min ?? DEFAULT_OPTIMAL_LEVELS.K_Sat,
+    H_Sat: { max: settings.H_sat_max ?? DEFAULT_OPTIMAL_LEVELS.H_Sat.max }
+  };
+}
 
 // ========== EXPORT AS GLOBAL ==========
 window.Utils = {
@@ -795,6 +858,9 @@ window.Utils = {
   getTrendInsight,
   getUrgencyBadge,
   DEFAULT_CRITICAL_LEVELS,
+  DEFAULT_OPTIMAL_LEVELS,
+  getCriticalLevels,
+  getOptimalLevels,
 
   // Data helpers
   getUniqueYears,
