@@ -746,11 +746,18 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     }
   }
 
-  // Add stability context to message
+  // Add stability context to message - be specific about what kind of variability
+  let hasVariabilityWarning = false;
   if (stability.label === 'Volatile') {
-    message += '. High variability - confirm with resampling';
+    hasVariabilityWarning = true;
+    const metricNote = attr === 'pH' ? `SD ${stability.value.toFixed(2)} > 0.35` : `CV ${stability.value.toFixed(0)}% > 30%`;
+    message += `. Field samples vary widely year-to-year (${metricNote}) - trend may not be reliable`;
+    // Change background to warning if it was green
+    if (background === '#dcfce7') {
+      background = '#fef9c3'; // Light yellow warning
+    }
   } else if (stability.label === 'Moderate' && trendDirection !== 'flat') {
-    message += '. Moderate variability';
+    message += '. Moderate sample variability';
   }
 
   // Add preliminary data warning
@@ -819,6 +826,20 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     }
   }
 
+  // IMPORTANT: If there's high variability, badge cannot be "Good" (low)
+  // The insight warns about unreliable data, so badge must match
+  if (hasVariabilityWarning && urgency === 'low') {
+    urgency = 'medium'; // Bump to "Review" at minimum
+  }
+
+  // Also bump urgency if message contains warning phrases but urgency is still low
+  if (urgency === 'low') {
+    const warningPhrases = ['Dropping', 'Declining away', 'action recommended', 'Rising away', 'moving away'];
+    if (warningPhrases.some(phrase => message.includes(phrase))) {
+      urgency = 'medium';
+    }
+  }
+
   return {
     trendDirection,
     stability,
@@ -834,13 +855,13 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
   };
 }
 
-// Get urgency badge HTML
+// Get urgency badge HTML with clearer labels
 function getUrgencyBadge(urgency) {
   const badges = {
-    'high': { emoji: '🔴', label: 'Action Needed', color: '#dc2626', bg: '#fee2e2' },
-    'high-medium': { emoji: '⚠️', label: 'Attention', color: '#ea580c', bg: '#fed7aa' },
-    'medium': { emoji: '⚠️', label: 'Watch', color: '#ca8a04', bg: '#fef9c3' },
-    'low': { emoji: '✓', label: 'On Track', color: '#16a34a', bg: '#dcfce7' }
+    'high': { emoji: '🔴', label: 'Action Required', color: '#dc2626', bg: '#fee2e2' },
+    'high-medium': { emoji: '⚠️', label: 'Needs Attention', color: '#ea580c', bg: '#fed7aa' },
+    'medium': { emoji: '⚠️', label: 'Review', color: '#ca8a04', bg: '#fef9c3' },
+    'low': { emoji: '✓', label: 'Good', color: '#16a34a', bg: '#dcfce7' }
   };
   return badges[urgency] || badges['low'];
 }
