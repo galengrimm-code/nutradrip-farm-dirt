@@ -602,7 +602,7 @@ function calculateTrendStability(yearData, attr) {
   };
 }
 
-// Get comprehensive trend insight based on stability and trend direction
+// Get comprehensive trend insight based on stability, trend direction, and direction preference
 // Returns the full insight object with message, confidence, etc.
 function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
   if (!yearData || yearData.length < 2) return null;
@@ -611,7 +611,21 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
   if (!stability) return null;
 
   const lastYear = yearData[yearData.length - 1];
-  const trendDirection = getTrendDirection(slope, lastYear.avg, attr);
+  const currentValue = lastYear.avg;
+  const trendDirection = getTrendDirection(slope, currentValue, attr);
+
+  // Get direction preference for this nutrient
+  const directions = getDirections();
+  const direction = directions[attr] || 'up';
+
+  // Get ideal and optimal levels
+  const idealLevels = getIdealLevels();
+  const optimalLevels = getOptimalLevels();
+  const ideal = idealLevels[attr];
+  const optimal = optimalLevels[attr];
+  const optimalMin = optimal ? (typeof optimal === 'object' ? optimal.min : optimal) : null;
+  const optimalMax = optimal ? (typeof optimal === 'object' ? optimal.max : null) : null;
+  const criticalLevel = criticalLevels[attr];
 
   // Determine confidence based on stability + years
   let confidence;
@@ -623,49 +637,172 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     confidence = 'Low';
   }
 
-  // For lower_is_better nutrients, invert the trend interpretation
-  const lowerIsBetter = ['H_Sat', 'Na_Sat', 'Soluble_Salts', 'EC'].includes(attr);
-  const effectiveTrend = lowerIsBetter ?
-    (trendDirection === 'up' ? 'down' : trendDirection === 'down' ? 'up' : 'flat') :
-    trendDirection;
-
-  // Generate insight message based on trend + stability matrix
+  // Determine if trend is "good" based on direction preference and current position
+  let trendIsGood = false;
   let message, background;
+  const nearIdeal = ideal !== undefined && Math.abs(currentValue - ideal) / ideal < 0.05; // Within 5% of ideal
+  const atOrAboveIdeal = ideal !== undefined && currentValue >= ideal;
+  const belowIdeal = ideal !== undefined && currentValue < ideal;
 
-  if (effectiveTrend === 'up') {
-    if (stability.label === 'Stable') {
-      message = '✓ Consistent improvement - management is working';
-      background = '#dcfce7'; // Light green
-    } else if (stability.label === 'Moderate') {
-      message = '↑ Improving with some variability';
-      background = '#fef9c3'; // Light yellow
-    } else {
-      message = '⚠️ Appears improving, but high variability - confirm with consistent resampling';
-      background = '#fef3c7'; // Yellow/amber
+  if (direction === 'up') {
+    // Higher is better
+    if (trendDirection === 'up' || trendDirection === 'flat' && atOrAboveIdeal) {
+      trendIsGood = true;
     }
-  } else if (effectiveTrend === 'down') {
-    if (stability.label === 'Stable') {
-      message = '🔴 Consistent decline - action recommended';
-      background = '#fee2e2'; // Light red/pink
-    } else if (stability.label === 'Moderate') {
-      message = '↓ Declining with moderate variability - consider action and confirm next sample';
-      background = '#fed7aa'; // Light orange
+    if (trendDirection === 'up') {
+      if (atOrAboveIdeal) {
+        message = `✓ At/above target (${ideal}), continuing to build`;
+        background = '#dcfce7';
+      } else {
+        message = `✓ Improving toward target (${ideal})`;
+        background = '#dcfce7';
+      }
+    } else if (trendDirection === 'down') {
+      if (belowIdeal) {
+        message = `🔴 Declining away from target (${ideal}) - action recommended`;
+        background = '#fee2e2';
+      } else {
+        message = `↓ Declining but still above target (${ideal})`;
+        background = '#fef9c3';
+      }
     } else {
-      message = '⚠️ May be declining, but unstable data - resample before major changes';
-      background = '#fef3c7'; // Yellow/amber
+      if (atOrAboveIdeal) {
+        message = `✓ Stable at/above target (${ideal})`;
+        background = '#dcfce7';
+      } else {
+        message = `→ Stable but below target (${ideal}) - consider building`;
+        background = '#f1f5f9';
+      }
     }
-  } else {
-    // Flat trend
-    if (stability.label === 'Stable') {
-      message = '✓ Holding steady with consistent readings';
-      background = '#dcfce7'; // Light green
-    } else if (stability.label === 'Moderate') {
-      message = '→ Mostly steady with some noise - continue monitoring';
-      background = '#f1f5f9'; // Light gray
+
+  } else if (direction === 'down' || direction === 'down_unless_deficient') {
+    // Lower is better (but not too low for down_unless_deficient)
+    const tooLow = direction === 'down_unless_deficient' && optimalMin && currentValue < optimalMin;
+
+    if (trendDirection === 'down') {
+      if (tooLow) {
+        trendIsGood = false;
+        message = `⚠️ Now below minimum (${optimalMin}) - trend moving further from target`;
+        background = '#fed7aa';
+      } else if (currentValue > ideal) {
+        trendIsGood = true;
+        message = `✓ Trending toward target (${ideal}) - continue current management`;
+        background = '#dcfce7';
+      } else {
+        trendIsGood = nearIdeal;
+        message = nearIdeal ? `✓ At target (${ideal})` : `↓ Below target (${ideal}) and declining`;
+        background = nearIdeal ? '#dcfce7' : '#fef9c3';
+      }
+    } else if (trendDirection === 'up') {
+      if (currentValue > ideal) {
+        trendIsGood = false;
+        message = `⚠️ Rising away from target (${ideal}) - high ${attr.replace('_sat', '%').replace('_Sat', '%')} can affect other nutrient uptake`;
+        background = '#fed7aa';
+      } else if (tooLow) {
+        trendIsGood = true;
+        message = `✓ Recovering toward target (${ideal})`;
+        background = '#dcfce7';
+      } else {
+        message = `↑ Rising toward target (${ideal})`;
+        background = '#fef9c3';
+      }
     } else {
-      message = '⚠️ Average stable but wide swings - investigate variability causes';
-      background = '#fef3c7'; // Yellow/amber
+      // Flat
+      if (nearIdeal) {
+        trendIsGood = true;
+        message = `✓ Stable at target (${ideal})`;
+        background = '#dcfce7';
+      } else if (currentValue > ideal) {
+        message = `→ Stable but above target (${ideal}) - consider reduction strategies`;
+        background = '#f1f5f9';
+      } else {
+        message = tooLow ? `⚠️ Stable but below minimum (${optimalMin})` : `→ Stable near target (${ideal})`;
+        background = tooLow ? '#fed7aa' : '#f1f5f9';
+      }
     }
+
+  } else if (direction === 'target') {
+    // Want to stay at ideal - deviation in either direction is concerning
+    const distFromIdeal = ideal !== undefined ? Math.abs(currentValue - ideal) : 0;
+    const movingTowardIdeal = ideal !== undefined &&
+      ((trendDirection === 'up' && currentValue < ideal) ||
+       (trendDirection === 'down' && currentValue > ideal));
+    const movingAwayFromIdeal = ideal !== undefined &&
+      ((trendDirection === 'up' && currentValue > ideal) ||
+       (trendDirection === 'down' && currentValue < ideal));
+
+    trendIsGood = nearIdeal || movingTowardIdeal;
+
+    if (nearIdeal && trendDirection === 'flat') {
+      message = `✓ Stable at ideal (${ideal})`;
+      background = '#dcfce7';
+    } else if (movingTowardIdeal) {
+      message = `✓ Moving toward ideal (${ideal})`;
+      background = '#dcfce7';
+    } else if (movingAwayFromIdeal) {
+      const dirText = currentValue > ideal ? 'High' : 'Low';
+      message = `⚠️ ${dirText} and moving away from ideal (${ideal})`;
+      background = '#fed7aa';
+    } else if (trendDirection === 'flat') {
+      if (currentValue > ideal) {
+        message = `→ Stable but above ideal (${ideal})`;
+      } else {
+        message = `→ Stable but below ideal (${ideal})`;
+      }
+      background = '#f1f5f9';
+    } else {
+      message = `→ Near ideal (${ideal})`;
+      background = '#f1f5f9';
+    }
+
+  } else if (direction === 'up_unless_excessive') {
+    // Up is good until excessive (e.g., P > 100 is excessive)
+    const excessiveThreshold = optimalMax ? optimalMax * 2 : (ideal ? ideal * 2.5 : 100);
+    const isExcessive = currentValue > excessiveThreshold;
+
+    if (isExcessive) {
+      trendIsGood = trendDirection !== 'up';
+      if (trendDirection === 'up') {
+        message = `ℹ️ Well above target (${ideal}) - excessive levels, no more needed`;
+        background = '#dbeafe'; // Light blue for info
+      } else {
+        message = `ℹ️ Above target (${ideal}) - sufficient, no application needed`;
+        background = '#dbeafe';
+      }
+    } else if (atOrAboveIdeal) {
+      trendIsGood = true;
+      if (trendDirection === 'up') {
+        message = `✓ Above target (${ideal}) and building - may not need more`;
+        background = '#dcfce7';
+      } else if (trendDirection === 'flat') {
+        message = `✓ Stable above target (${ideal})`;
+        background = '#dcfce7';
+      } else {
+        message = `↓ Declining but still above target (${ideal})`;
+        background = '#fef9c3';
+      }
+    } else {
+      // Below ideal
+      if (trendDirection === 'up') {
+        trendIsGood = true;
+        message = `✓ Improving toward target (${ideal})`;
+        background = '#dcfce7';
+      } else if (trendDirection === 'down') {
+        trendIsGood = false;
+        message = `🔴 Declining away from target (${ideal}) - action recommended`;
+        background = '#fee2e2';
+      } else {
+        message = `→ Stable but below target (${ideal}) - consider building`;
+        background = '#f1f5f9';
+      }
+    }
+  }
+
+  // Add stability context to message
+  if (stability.label === 'Volatile') {
+    message += '. High variability - confirm with resampling';
+  } else if (stability.label === 'Moderate' && trendDirection !== 'flat') {
+    message += '. Moderate variability';
   }
 
   // Add preliminary data warning
@@ -673,78 +810,74 @@ function getTrendInsight(yearData, attr, slope, criticalLevels = {}) {
     message += '. Trend is preliminary - more data needed';
   }
 
-  // Calculate years to critical if applicable
+  // Calculate years to critical if applicable (only for declining trends toward critical)
   let yearsToCritical = null;
-  const criticalLevel = criticalLevels[attr];
   if (criticalLevel !== undefined &&
-      effectiveTrend === 'down' &&
+      trendDirection === 'down' &&
+      (direction === 'up' || direction === 'up_unless_excessive') &&
       stability.label !== 'Volatile' &&
       yearData.length >= 4 &&
       Math.abs(slope) > 0.001) {
 
-    const currentLevel = lastYear.avg;
-    if (currentLevel <= criticalLevel) {
+    if (currentValue <= criticalLevel) {
       yearsToCritical = { status: 'below', message: '⚠️ Currently below critical level' };
     } else {
-      const years = (currentLevel - criticalLevel) / Math.abs(slope);
+      const years = (currentValue - criticalLevel) / Math.abs(slope);
       if (years > 15) {
         yearsToCritical = { status: 'long', message: 'Long-term decline - monitor' };
       } else if (years > 0) {
+        const unit = attr === 'pH' ? '' : (attr.includes('sat') || attr.includes('Sat') ? '%' : ' ppm');
         yearsToCritical = {
           status: 'projected',
           years: Math.round(years * 10) / 10,
-          message: `At current rate (${slope > 0 ? '+' : ''}${slope.toFixed(1)} ${attr === 'pH' ? '' : 'ppm'}/yr), will reach critical level (${criticalLevel}${attr === 'pH' ? '' : ' ppm'}) in ~${Math.round(years)} years`
+          message: `At current rate (${slope > 0 ? '+' : ''}${slope.toFixed(1)}${unit}/yr), will reach critical (${criticalLevel}${unit}) in ~${Math.round(years)} years`
         };
       }
     }
   }
 
-  // Determine urgency badge using optimal levels from settings
-  const optimalLevels = getOptimalLevels();
+  // Determine urgency badge based on direction and position
   let urgency = 'low';
-  const currentValue = lastYear.avg;
 
-  // Get optimal min for this attribute
-  let optimalMin = null;
-  if (optimalLevels[attr] !== undefined) {
-    optimalMin = typeof optimalLevels[attr] === 'object' ? optimalLevels[attr].min : optimalLevels[attr];
+  // Below critical is always high urgency (for up/up_unless_excessive directions)
+  if (criticalLevel !== undefined && currentValue < criticalLevel &&
+      (direction === 'up' || direction === 'up_unless_excessive')) {
+    urgency = trendIsGood ? 'high-medium' : 'high';
   }
-
-  // Check if below critical
-  if (criticalLevel !== undefined && currentValue < criticalLevel) {
-    if (effectiveTrend === 'down' && stability.label === 'Stable') {
-      urgency = 'high';
-    } else {
+  // For down/down_unless_deficient, too low is concerning
+  else if ((direction === 'down' || direction === 'down_unless_deficient') &&
+           optimalMin && currentValue < optimalMin) {
+    urgency = trendIsGood ? 'medium' : 'high-medium';
+  }
+  // Below optimal min for up directions
+  else if ((direction === 'up' || direction === 'up_unless_excessive') &&
+           optimalMin && currentValue < optimalMin) {
+    if (!trendIsGood && stability.label === 'Stable') {
       urgency = 'high-medium';
-    }
-  } else if (optimalMin !== null && currentValue < optimalMin) {
-    // Below optimal but above critical
-    if (effectiveTrend === 'down' && stability.label === 'Stable') {
-      urgency = 'high-medium';
-    } else if (effectiveTrend === 'down' || stability.label !== 'Stable') {
+    } else if (!trendIsGood) {
       urgency = 'medium';
     }
-  } else if (criticalLevel !== undefined && optimalMin === null) {
-    // No optimal defined, use critical * 1.5 as proxy
-    const proxyOptimal = criticalLevel * 1.5;
-    if (currentValue < proxyOptimal) {
-      if (effectiveTrend === 'down' && stability.label === 'Stable') {
-        urgency = 'high-medium';
-      } else if (effectiveTrend === 'down' || stability.label !== 'Stable') {
-        urgency = 'medium';
-      }
+  }
+  // For target nutrients, far from ideal in either direction
+  else if (direction === 'target' && ideal) {
+    const pctFromIdeal = Math.abs(currentValue - ideal) / ideal;
+    if (pctFromIdeal > 0.15 && !trendIsGood) {
+      urgency = 'medium';
     }
   }
 
   return {
-    trendDirection: effectiveTrend,
+    trendDirection,
     stability,
     confidence,
     message,
     background,
     yearsToCritical,
     urgency,
-    slope
+    slope,
+    direction,
+    ideal,
+    trendIsGood
   };
 }
 
@@ -776,15 +909,42 @@ const DEFAULT_CRITICAL_LEVELS = {
 
 // Default optimal levels for nutrients (fallbacks if not set in Settings)
 const DEFAULT_OPTIMAL_LEVELS = {
-  P: 20,
-  K: 150,
-  pH: { min: 6.3, max: 6.9 },
-  OM: 3.0,
-  S: 12,
+  P: { min: 25, max: 50 },
+  K: { min: 150, max: 250 },
+  pH: { min: 6.0, max: 7.0 },
+  OM: { min: 3.0, max: 5.0 },
+  S: { min: 12, max: 30 },
   Ca_sat: { min: 65, max: 75 },
-  Mg_sat: { min: 12, max: 15 },
-  K_Sat: 3.0,
+  Mg_sat: { min: 10, max: 15 },
+  K_Sat: { min: 3.0, max: 5.0 },
   H_Sat: { max: 5.0 }
+};
+
+// Default ideal target levels for nutrients
+const DEFAULT_IDEAL_LEVELS = {
+  P: 40,
+  K: 250,
+  pH: 6.7,
+  OM: 4.0,
+  S: 20,
+  Ca_sat: 68,
+  Mg_sat: 12,
+  K_Sat: 4.0
+};
+
+// Default direction preferences for trend interpretation
+// up = higher is better, down = lower is better, target = stay at ideal
+// up_unless_excessive = up good until ceiling, down_unless_deficient = down good until floor
+const DEFAULT_DIRECTIONS = {
+  P: 'up_unless_excessive',
+  K: 'up',
+  pH: 'target',
+  OM: 'up',
+  S: 'up',
+  Ca_sat: 'target',
+  Mg_sat: 'down_unless_deficient',
+  K_Sat: 'target',
+  H_Sat: 'down'
 };
 
 // Get critical levels from Settings (localStorage) with defaults
@@ -809,15 +969,46 @@ function getCriticalLevels() {
 function getOptimalLevels() {
   const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
   return {
-    P: settings.P_min ?? DEFAULT_OPTIMAL_LEVELS.P,
-    K: settings.K_min ?? DEFAULT_OPTIMAL_LEVELS.K,
+    P: { min: settings.P_min ?? DEFAULT_OPTIMAL_LEVELS.P.min, max: settings.P_max ?? DEFAULT_OPTIMAL_LEVELS.P.max },
+    K: { min: settings.K_min ?? DEFAULT_OPTIMAL_LEVELS.K.min, max: settings.K_max ?? DEFAULT_OPTIMAL_LEVELS.K.max },
     pH: { min: settings.pH_min ?? DEFAULT_OPTIMAL_LEVELS.pH.min, max: settings.pH_max ?? DEFAULT_OPTIMAL_LEVELS.pH.max },
-    OM: settings.OM_min ?? DEFAULT_OPTIMAL_LEVELS.OM,
-    S: settings.S_min ?? DEFAULT_OPTIMAL_LEVELS.S,
+    OM: { min: settings.OM_min ?? DEFAULT_OPTIMAL_LEVELS.OM.min, max: settings.OM_max ?? DEFAULT_OPTIMAL_LEVELS.OM.max },
+    S: { min: settings.S_min ?? DEFAULT_OPTIMAL_LEVELS.S.min, max: settings.S_max ?? DEFAULT_OPTIMAL_LEVELS.S.max },
     Ca_sat: { min: settings.Ca_sat_min ?? DEFAULT_OPTIMAL_LEVELS.Ca_sat.min, max: settings.Ca_sat_max ?? DEFAULT_OPTIMAL_LEVELS.Ca_sat.max },
     Mg_sat: { min: settings.Mg_sat_min ?? DEFAULT_OPTIMAL_LEVELS.Mg_sat.min, max: settings.Mg_sat_max ?? DEFAULT_OPTIMAL_LEVELS.Mg_sat.max },
-    K_Sat: settings.K_sat_min ?? DEFAULT_OPTIMAL_LEVELS.K_Sat,
+    K_Sat: { min: settings.K_sat_min ?? DEFAULT_OPTIMAL_LEVELS.K_Sat.min, max: settings.K_sat_max ?? DEFAULT_OPTIMAL_LEVELS.K_Sat.max },
     H_Sat: { max: settings.H_sat_max ?? DEFAULT_OPTIMAL_LEVELS.H_Sat.max }
+  };
+}
+
+// Get ideal target levels from Settings (localStorage) with defaults
+function getIdealLevels() {
+  const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+  return {
+    P: settings.P_ideal ?? DEFAULT_IDEAL_LEVELS.P,
+    K: settings.K_ideal ?? DEFAULT_IDEAL_LEVELS.K,
+    pH: settings.pH_ideal ?? DEFAULT_IDEAL_LEVELS.pH,
+    OM: settings.OM_ideal ?? DEFAULT_IDEAL_LEVELS.OM,
+    S: settings.S_ideal ?? DEFAULT_IDEAL_LEVELS.S,
+    Ca_sat: settings.Ca_sat_ideal ?? DEFAULT_IDEAL_LEVELS.Ca_sat,
+    Mg_sat: settings.Mg_sat_ideal ?? DEFAULT_IDEAL_LEVELS.Mg_sat,
+    K_Sat: settings.K_sat_ideal ?? DEFAULT_IDEAL_LEVELS.K_Sat
+  };
+}
+
+// Get direction preferences from Settings (localStorage) with defaults
+function getDirections() {
+  const settings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
+  return {
+    P: settings.P_direction ?? DEFAULT_DIRECTIONS.P,
+    K: settings.K_direction ?? DEFAULT_DIRECTIONS.K,
+    pH: settings.pH_direction ?? DEFAULT_DIRECTIONS.pH,
+    OM: settings.OM_direction ?? DEFAULT_DIRECTIONS.OM,
+    S: settings.S_direction ?? DEFAULT_DIRECTIONS.S,
+    Ca_sat: settings.Ca_sat_direction ?? DEFAULT_DIRECTIONS.Ca_sat,
+    Mg_sat: settings.Mg_sat_direction ?? DEFAULT_DIRECTIONS.Mg_sat,
+    K_Sat: settings.K_sat_direction ?? DEFAULT_DIRECTIONS.K_Sat,
+    H_Sat: DEFAULT_DIRECTIONS.H_Sat
   };
 }
 
@@ -859,8 +1050,12 @@ window.Utils = {
   getUrgencyBadge,
   DEFAULT_CRITICAL_LEVELS,
   DEFAULT_OPTIMAL_LEVELS,
+  DEFAULT_IDEAL_LEVELS,
+  DEFAULT_DIRECTIONS,
   getCriticalLevels,
   getOptimalLevels,
+  getIdealLevels,
+  getDirections,
 
   // Data helpers
   getUniqueYears,
