@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.147";
-    const BUILD_DATE = "2026-01-23T10:10:04";
+    const APP_VERSION = "v1.0.148";
+    const BUILD_DATE = "2026-01-23T10:19:28";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -5758,7 +5758,7 @@
       const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
                        buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
-      const legalLinks = `<span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <a href="privacy-policy.html" style="color: #94a3b8; text-decoration: none;">Privacy</a> <span style="color: #cbd5e1;">·</span> <a href="terms-of-service.html" style="color: #94a3b8; text-decoration: none;">Terms</a>`;
+      const legalLinks = `<span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <a href="methodology.html" style="color: #94a3b8; text-decoration: none;">How We Calculate</a> <span style="color: #cbd5e1;">·</span> <a href="privacy-policy.html" style="color: #94a3b8; text-decoration: none;">Privacy</a> <span style="color: #cbd5e1;">·</span> <a href="terms-of-service.html" style="color: #94a3b8; text-decoration: none;">Terms</a>`;
 
       const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
 

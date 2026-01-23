@@ -390,7 +390,13 @@
       <p style="color: #64748b; margin-bottom: 1rem; font-size: 0.875rem;">Choose which nutrients to show in dropdowns and analysis.</p>
       <div id="nutrientVisibility" class="nutrient-grid-vis"></div>
     </div>
-    
+
+    <div class="settings-card" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #bfdbfe;">
+      <h3>📊 How We Calculate</h3>
+      <p style="color: #1e40af; margin-bottom: 1rem; font-size: 0.875rem;">Learn about the statistical methods and agronomic logic behind insights, trends, and recommendations.</p>
+      <a href="methodology.html" style="display: inline-block; padding: 0.5rem 1rem; background: #3b82f6; color: white; border-radius: 0.375rem; text-decoration: none; font-weight: 500; font-size: 0.875rem;">View Methodology</a>
+    </div>
+
     <div class="btn-row full-width">
       <button class="button primary" id="saveBtn">💾 Save Settings</button>
       <button class="button secondary" id="resetBtn">🔄 Reset to Defaults</button>
@@ -406,8 +412,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.147";
-    const BUILD_DATE = "2026-01-23T10:10:04";
+    const APP_VERSION = "v1.0.148";
+    const BUILD_DATE = "2026-01-23T10:19:28";
 
     // Reference shared data config
     const CONFIG = {
@@ -1675,7 +1681,7 @@
       const buildStr = buildDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
                        buildDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const versionInfo = `App ${APP_VERSION} • Built: ${buildStr}`;
-      const legalLinks = `<span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <a href="privacy-policy.html" style="color: #94a3b8; text-decoration: none;">Privacy</a> <span style="color: #cbd5e1;">·</span> <a href="terms-of-service.html" style="color: #94a3b8; text-decoration: none;">Terms</a>`;
+      const legalLinks = `<span style="margin: 0 0.5rem; color: #cbd5e1;">|</span> <a href="methodology.html" style="color: #94a3b8; text-decoration: none;">How We Calculate</a> <span style="color: #cbd5e1;">·</span> <a href="privacy-policy.html" style="color: #94a3b8; text-decoration: none;">Privacy</a> <span style="color: #cbd5e1;">·</span> <a href="terms-of-service.html" style="color: #94a3b8; text-decoration: none;">Terms</a>`;
 
       const sampleData = JSON.parse(localStorage.getItem('soilSamples') || '[]');
 
