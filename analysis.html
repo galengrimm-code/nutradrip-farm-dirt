@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.140";
-    const BUILD_DATE = "2026-01-23T08:25:49";
+    const APP_VERSION = "v1.0.141";
+    const BUILD_DATE = "2026-01-23T08:31:58";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -602,7 +602,7 @@
       get API_KEY() { return DataCore.config.API_KEY; },
       get SHEET_ID() { return DataCore.config.SHEET_ID; },
 
-      NUTRIENTS: ['pH', 'P_Zn_Ratio', 'P', 'P2', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'K_Sat', 'H_Sat', 'Na_Sat', 'Zn', 'Cu', 'Mn', 'Fe', 'Boron', 'S', 'Buffer_pH', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'],
+      NUTRIENTS: ['pH', 'CEC', 'OM', 'P', 'K', 'P_Zn_Ratio', 'Zn', 'K_Sat', 'Ca_sat', 'Mg_sat', 'H_Sat', 'S', 'Mn', 'Cu', 'Boron', 'Fe', 'Buffer_pH', 'P2', 'Na_Sat', 'Na', 'Ca', 'Mg', 'NO3', 'NH4', 'Soluble_Salts', 'EC'],
 
       NUTRIENT_NAMES: {
         pH: 'pH', P_Zn_Ratio: 'P:Zn Ratio', P: 'Phosphorus (P)', P2: 'Phosphorus P2', K: 'Potassium (K)', OM: 'Organic Matter',
@@ -1388,8 +1388,8 @@
 
             const graph = createDualLineGraph(yearData, color, attr);
 
-            // Skip trend analysis for Buffer_pH (diagnostic measurement, not a nutrient to track)
-            const skipTrendAnalysis = attr === 'Buffer_pH';
+            // Skip trend analysis for Buffer_pH and CEC (diagnostic measurements, not nutrients to manage)
+            const skipTrendAnalysis = attr === 'Buffer_pH' || attr === 'CEC';
 
             // Calculate linear regression for trend slope
             const regressionData = yearData.map(d => ({ x: parseInt(d.year), y: d.avg }));
@@ -1641,8 +1641,8 @@
 
             const graph = createOperationTrendGraph(yearData, color);
 
-            // Skip trend analysis for Buffer_pH (diagnostic measurement, not a nutrient to track)
-            const skipTrendAnalysis = attr === 'Buffer_pH';
+            // Skip trend analysis for Buffer_pH and CEC (diagnostic measurements, not nutrients to manage)
+            const skipTrendAnalysis = attr === 'Buffer_pH' || attr === 'CEC';
 
             // Calculate linear regression for trend slope
             const regressionData = yearData.map(d => ({ x: parseInt(d.year), y: d.avg }));
