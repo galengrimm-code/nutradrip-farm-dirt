@@ -38,6 +38,11 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 - **pH default change**: Updated optimal range from 6.0-7.0 to 6.3-7.0
 
+### Bug Fixes
+
+- **Fixed**: Year dropdown now hidden when stability attributes selected (stability uses all years)
+- **Improved**: Stability legend shows "CV% across all years" for clarity
+
 ---
 
 ## [v1.0.73] - January 21, 2026
