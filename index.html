@@ -348,8 +348,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.150";
-    const BUILD_DATE = "2026-01-23T10:28:59";
+    const APP_VERSION = "v1.0.151";
+    const BUILD_DATE = "2026-01-23T10:37:19";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -986,7 +986,20 @@
         zoomToField(selectedField);
         updateMobileFieldViewUI(); // Update mobile UI when field changes
       });
-      document.getElementById('attributeSelect').addEventListener('change', (e) => { selectedAttribute = e.target.value; updateYearSelector(); updateCompareYearOptions(); updateMap(); updateLegend(); });
+      document.getElementById('attributeSelect').addEventListener('change', (e) => {
+        selectedAttribute = e.target.value;
+        updateYearSelector();
+        updateCompareYearOptions();
+        updateMap();
+        updateLegend();
+        // Hide year dropdown for stability attributes (stability uses all years)
+        const viewYearGroup = document.getElementById('viewYearGroup');
+        if (isStabilityAttribute(selectedAttribute)) {
+          viewYearGroup.style.display = 'none';
+        } else if (!compareMode) {
+          viewYearGroup.style.display = 'block';
+        }
+      });
       document.getElementById('yearSelect').addEventListener('change', (e) => {
         selectedYear = e.target.value;
         console.log('Year changed to:', selectedYear);
@@ -1000,7 +1013,8 @@
         document.getElementById('singleYearBtn').classList.add('active');
         document.getElementById('compareYearsBtn').classList.remove('active');
         document.getElementById('compareYearStack').style.display = 'none';
-        document.getElementById('viewYearGroup').style.display = 'block';
+        // Show year dropdown only if not in stability mode
+        document.getElementById('viewYearGroup').style.display = isStabilityAttribute(selectedAttribute) ? 'none' : 'block';
         document.getElementById('compareInfoBar').style.display = 'none';
         // Sync selectedYear with the View mode dropdown
         selectedYear = document.getElementById('yearSelect').value;
@@ -1057,7 +1071,8 @@
       document.getElementById('singleYearBtn').classList.add('active');
       document.getElementById('compareYearsBtn').classList.remove('active');
       document.getElementById('compareYearStack').style.display = 'none';
-      document.getElementById('viewYearGroup').style.display = 'block';
+      // Show year dropdown only if not in stability mode
+      document.getElementById('viewYearGroup').style.display = isStabilityAttribute(selectedAttribute) ? 'none' : 'block';
       document.getElementById('compareInfoBar').style.display = 'none';
       compareYear = '';
       const mobileBtn = document.getElementById('mobileCompareBtn');
@@ -1096,7 +1111,8 @@
         document.getElementById('singleYearBtn').classList.add('active');
         document.getElementById('compareYearsBtn').classList.remove('active');
         document.getElementById('compareYearStack').style.display = 'none';
-        document.getElementById('viewYearGroup').style.display = 'block';
+        // Show year dropdown only if not in stability mode
+        document.getElementById('viewYearGroup').style.display = isStabilityAttribute(selectedAttribute) ? 'none' : 'block';
         document.getElementById('compareInfoBar').style.display = 'none';
         compareYear = '';
       }
@@ -2276,7 +2292,8 @@
     function updateStabilityLegend() {
       const legendText = document.getElementById('legendText');
       const legendRange = document.getElementById('legendRange');
-      const attrName = CONFIG.NUTRIENT_NAMES[selectedAttribute] || selectedAttribute;
+      const baseNutrient = getBaseNutrient(selectedAttribute);
+      const attrName = CONFIG.NUTRIENT_NAMES[baseNutrient] || baseNutrient;
 
       if (legendText) {
         legendText.innerHTML = `
@@ -2286,7 +2303,7 @@
         `;
       }
       if (legendRange) {
-        legendRange.textContent = `${attrName} CV% (lower = more stable)`;
+        legendRange.innerHTML = `<strong>${attrName} Stability</strong> &nbsp;|&nbsp; CV% across all years`;
       }
     }
 
