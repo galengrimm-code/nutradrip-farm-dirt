@@ -1601,6 +1601,98 @@
       return { key: 'P_Zn_Ratio', badge, background, insight, tips, warnings, show: { P_ppm, Zn_ppm, ratio: PZn_ratio, stability: stab, trend: tdir, confidence: conf } };
     }
 
+    // --- PART 11b: Build OM (Organic Matter) Card ---
+    function buildOMCard(inputs) {
+      const { value, cv, slope, years } = inputs;
+
+      const thresh = getNutrientThresholds('OM');
+      const stab = getStabilityFromOMCV(cv || 10);  // OM uses stricter thresholds
+      const tdir = getTrendDirection(slope || 0, 'OM');
+      const conf = getConfidence(years || 1, stab);
+
+      const OM_critical = value < thresh.critical;
+      const OM_low = value >= thresh.critical && value < thresh.optimalMin;
+      const OM_optimal = value >= thresh.optimalMin && value <= thresh.optimalMax;
+      const OM_high = value > thresh.optimalMax;
+
+      const level = (OM_critical || OM_low) ? 'Low' : 'Optimal';
+      const trig = level === 'Optimal' ? 'OPTIMAL' : pickTrigger(level, stab, tdir);
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = '✅ Organic matter is in a healthy range.';
+      let tips = [];
+      let warnings = [];
+
+      // Multi-year expectation note (always shown for OM)
+      const omNote = 'OM changes slowly in most corn/soy systems. Treat OM trends as multi-year signals, not year-to-year decisions.';
+
+      if (OM_critical) {
+        badge = '🔴 Action Needed'; background = 'red';
+        insight = '🔴 Organic matter is critically low. Building OM requires increasing carbon inputs.';
+        tips = [
+          'Add high-biomass cover crops (cereal rye, triticale) to increase carbon inputs.',
+          'Reduce tillage intensity (strip-till → no-till) to slow oxidation.',
+          'Apply manure or compost to lowest OM zones; credit nutrients properly (especially P).'
+        ];
+        warnings.push(omNote);
+      } else if (OM_low) {
+        if (trig === 'LOW_STABLE' || (tdir === 'Down' && stab !== 'Volatile')) {
+          badge = '🔴 Action Needed'; background = 'pink';
+          insight = '🔴 OM is consistently below optimal. Building organic matter requires increasing carbon inputs.';
+          tips = [
+            'Add high-biomass cover crops (cereal rye, triticale) to increase carbon inputs.',
+            'Reduce tillage intensity to slow oxidation—each pass accelerates OM loss.',
+            'Apply manure or compost to lowest OM zones; credit nutrients properly (especially P).',
+            'Extend living roots earlier in spring or later in fall.',
+            'Maintain full residue return (avoid aggressive residue removal).'
+          ];
+          if (tdir === 'Down' && stab !== 'Volatile' && slope) {
+            warnings.push(`⏱️ OM is declining at ${Math.abs(slope).toFixed(2)}%/yr. Without intervention, levels will continue to drop.`);
+          }
+          warnings.push(omNote);
+        } else if (trig === 'LOW_VOLATILE') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ OM is below optimal but variable. Confirm sampling consistency before making major changes.';
+          tips = [
+            'Zone-sample to identify true low-OM areas within the field.',
+            'Ensure consistent sampling depth and lab method across years.',
+            'Target carbon imports (manure/compost) to confirmed low zones.',
+            'Once confirmed, add cover crops to build OM in problem areas.'
+          ];
+          warnings.push('High variability may reflect sampling inconsistency rather than true field differences.');
+          warnings.push(omNote);
+        } else if (tdir === 'Up') {
+          badge = '✓ On Track'; background = 'green';
+          insight = '✓ OM is below optimal but improving. Continue current management practices.';
+          tips = [
+            'Continue cover crop and residue management practices.',
+            'Monitor trend over multiple years to confirm sustained improvement.'
+          ];
+          warnings.push(omNote);
+        } else if (trig === 'FLAT') {
+          badge = '⚠️ Watch'; background = 'neutral';
+          insight = '⚠️ OM is below optimal and holding steady. Current practices are maintaining but not building.';
+          tips = [
+            'To build OM, increase carbon inputs: add or diversify cover crops.',
+            'Reduce tillage intensity if feasible to slow oxidation.',
+            'Consider manure or compost applications to accelerate gains.'
+          ];
+          warnings.push(omNote);
+        }
+      } else if (OM_optimal || OM_high) {
+        badge = '✓ On Track'; background = 'green';
+        insight = '✅ Organic matter is in a healthy range. Continue practices that maintain carbon inputs.';
+        tips = ['Maintain cover crop and residue management practices.'];
+        if (tdir === 'Down' && value < thresh.optimalMin + 0.3) {
+          warnings.push('OM is trending down toward the bottom of optimal. Monitor and consider increasing carbon inputs.');
+        }
+        warnings.push(omNote);
+      }
+
+      return { key: 'OM', badge, background, insight, tips, warnings, show: { value, stability: stab, trend: tdir, confidence: conf } };
+    }
+
     // --- PART 12: Generic Nutrient Card Builder ---
     function buildGenericNutrientCard(nutrient, inputs) {
       const { value, cv, slope, years } = inputs;
@@ -2013,8 +2105,16 @@
                   pH: currentPH,
                   years: yearData.length
                 });
+              } else if (attr === 'OM') {
+                // Dedicated OM card with agronomic recommendations
+                triggerCard = buildOMCard({
+                  value: last.avg,
+                  cv: stabilityValue,
+                  slope: slope,
+                  years: yearData.length
+                });
               } else if (attr !== 'Buffer_pH' && attr !== 'CEC') {
-                // Generic nutrient card for OM, K, S, etc.
+                // Generic nutrient card for K, S, etc.
                 triggerCard = buildGenericNutrientCard(attr, {
                   value: last.avg,
                   cv: stabilityValue,
