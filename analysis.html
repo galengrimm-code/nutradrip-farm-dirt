@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.155";
-    const BUILD_DATE = "2026-01-23T11:42:44";
+    const APP_VERSION = "v1.0.156";
+    const BUILD_DATE = "2026-01-24T07:54:33";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1157,6 +1157,545 @@
       updateComparison();
     };
 
+    // ========== 5-TRIGGER FRAMEWORK ==========
+    // Unified insight system: LOW_STABLE, LOW_VOLATILE, HIGH_STABLE, HIGH_VOLATILE, FLAT
+
+    // --- PART 1: Stability Definitions ---
+    function getStabilityFromCV(cv) {
+      if (cv < 20) return 'Stable';
+      if (cv <= 30) return 'Moderate';
+      return 'Volatile';
+    }
+
+    function getStabilityFromSD(sd) {  // For pH only (logarithmic scale)
+      if (sd < 0.20) return 'Stable';
+      if (sd <= 0.35) return 'Moderate';
+      return 'Volatile';
+    }
+
+    // --- PART 2: Flat Thresholds (slope thresholds for "no real change") ---
+    const FLAT_THRESHOLDS = {
+      pH: 0.05,     // units/yr
+      P: 1.0,       // ppm/yr
+      K: 5.0,       // ppm/yr
+      OM: 0.1,      // %/yr
+      Zn: 0.1,      // ppm/yr
+      S: 1.0,       // ppm/yr
+      B: 0.05,      // ppm/yr
+      Cu: 0.1,      // ppm/yr
+      Fe: 2.0,      // ppm/yr
+      Mn: 2.0,      // ppm/yr
+      Ca_sat: 1.0,  // %/yr
+      Mg_sat: 0.5,  // %/yr
+      K_sat: 0.2,   // %/yr
+      H_sat: 1.0,   // %/yr
+      CEC: 0.5,     // meq/100g/yr
+      P_Zn_Ratio: 1.0,   // ratio units/yr
+    };
+
+    function getTrendDirection(slope, nutrient) {
+      const flat = FLAT_THRESHOLDS[nutrient] || 1.0;
+      if (slope > flat) return 'Up';
+      if (slope < -flat) return 'Down';
+      return 'Flat';
+    }
+
+    // --- PART 3: 5-Trigger Picker ---
+    function pickTrigger(level, stability, trendDir) {
+      // Flat overrides everything
+      if (trendDir === 'Flat') return 'FLAT';
+
+      const isVolatile = stability === 'Volatile';
+
+      if (level === 'Low' && !isVolatile) return 'LOW_STABLE';
+      if (level === 'Low' && isVolatile) return 'LOW_VOLATILE';
+      if (level === 'High' && !isVolatile) return 'HIGH_STABLE';
+      return 'HIGH_VOLATILE';
+    }
+
+    // --- PART 4: Settings-Based Thresholds ---
+    function getNutrientThresholds(nutrient) {
+      // Load from Settings (localStorage)
+      const savedSettings = localStorage.getItem('nutrientSettings');
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
+      const s = settings[nutrient] || {};
+
+      // Defaults if not set in Settings
+      const defaults = {
+        pH:     { critical: 5.5, optimalMin: 6.3, optimalMax: 7.0 },
+        P:      { critical: 15, optimalMin: 25, optimalMax: 50 },
+        K:      { critical: 120, optimalMin: 150, optimalMax: 250 },
+        OM:     { critical: 2.0, optimalMin: 3.0, optimalMax: 5.0 },
+        Zn:     { critical: 0.5, optimalMin: 1.0, optimalMax: 3.0 },
+        S:      { critical: 8, optimalMin: 12, optimalMax: 30 },
+        B:      { critical: 0.3, optimalMin: 0.5, optimalMax: 2.0 },
+        Cu:     { critical: 0.3, optimalMin: 0.5, optimalMax: 2.0 },
+        Fe:     { critical: 5, optimalMin: 10, optimalMax: 50 },
+        Mn:     { critical: 5, optimalMin: 10, optimalMax: 50 },
+        Ca_sat: { critical: 55, optimalMin: 65, optimalMax: 75 },
+        Mg_sat: { critical: 8, optimalMin: 10, optimalMax: 15 },
+        K_sat:  { critical: 2.0, optimalMin: 3.0, optimalMax: 5.0 },
+        H_sat:  { critical: 15, optimalMin: 0, optimalMax: 10 },
+        CEC:    { critical: 5, optimalMin: 10, optimalMax: 30 },
+      };
+
+      const def = defaults[nutrient] || { critical: 0, optimalMin: 0, optimalMax: 100 };
+
+      return {
+        critical: s.critical ?? s.min ?? def.critical,
+        optimalMin: s.optimalMin ?? s.min ?? def.optimalMin,
+        optimalMax: s.optimalMax ?? s.max ?? def.optimalMax,
+      };
+    }
+
+    function getPHThresholds() {
+      const base = getNutrientThresholds('pH');
+      return {
+        veryLow: base.critical,
+        low: base.optimalMin,
+        optimalMin: base.optimalMin,
+        optimalMax: base.optimalMax,
+        high: base.optimalMax,
+        veryHigh: base.optimalMax + 0.8,
+      };
+    }
+
+    function getZnThresholds() {
+      const base = getNutrientThresholds('Zn');
+      return {
+        low: base.critical,
+        marginal: base.optimalMin,
+        adequate: base.optimalMin,
+      };
+    }
+
+    function getPThresholds() {
+      const base = getNutrientThresholds('P');
+      return {
+        critical: base.critical,
+        belowOpt: base.optimalMin,
+        optHigh: base.optimalMax,
+      };
+    }
+
+    function getRatioThresholds() {
+      return { normal: 12, highRisk: 20 };
+    }
+
+    // --- PART 5: pH Flags ---
+    function getPHFlags(pH, calcareous = false) {
+      const thresh = getPHThresholds();
+
+      const flags = {
+        veryLow: pH < thresh.veryLow,
+        low: pH < thresh.low,
+        inOptimal: pH >= thresh.optimalMin && pH <= thresh.optimalMax,
+        high: pH > thresh.high,
+        veryHigh: pH >= thresh.veryHigh || calcareous,
+        thresholds: thresh,
+        warnings: [],
+      };
+
+      if (flags.veryLow) {
+        flags.warnings.push(`Very low pH (below ${thresh.veryLow}) can restrict roots (Al toxicity risk) and reduce P efficiency.`);
+      }
+      if (flags.veryHigh) {
+        flags.warnings.push(`Very high pH (above ${thresh.veryHigh.toFixed(1)}) reduces Zn availability even when soil Zn is moderate.`);
+      }
+
+      return flags;
+    }
+
+    // --- PART 6: Confidence Scoring ---
+    function getConfidence(years, stability) {
+      if (years >= 4 && stability === 'Stable') return 'High';
+      if (years >= 4 && stability === 'Moderate') return 'Medium';
+      if (years === 3) return 'Medium';
+      return 'Low';
+    }
+
+    // --- PART 7: Dynamic Zn Target ---
+    function getDynamicZnTarget(P_ppm) {
+      const baseMin = getNutrientThresholds('Zn').optimalMin;
+      const ratioTarget = P_ppm / 10;
+      return Math.max(baseMin, ratioTarget);
+    }
+
+    function getZnStatus(Zn_ppm, P_ppm) {
+      const target = getDynamicZnTarget(P_ppm);
+      const thresh = getZnThresholds();
+
+      if (Zn_ppm < thresh.low) return 'Low';
+      if (Zn_ppm < target) return 'Marginal';
+      return 'Adequate';
+    }
+
+    // --- PART 8: Build pH Card ---
+    function buildPHCard(inputs) {
+      const { pH, pH_sd, pH_slope, calcareous, years } = inputs;
+
+      const thresh = getPHThresholds();
+      const stab = getStabilityFromSD(pH_sd || 0.25);
+      const tdir = getTrendDirection(pH_slope || 0, 'pH');
+      const flags = getPHFlags(pH, calcareous);
+      const conf = getConfidence(years || 1, stab);
+
+      let level;
+      if (pH < thresh.optimalMin) level = 'Low';
+      else if (pH > thresh.optimalMax) level = 'High';
+      else level = 'Optimal';
+
+      const trig = level === 'Optimal' ? 'OPTIMAL' : pickTrigger(level, stab, tdir);
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = '✓ Soil pH is in a favorable range.';
+      let tips = [];
+      let warnings = [...flags.warnings];
+
+      if (level === 'Optimal') {
+        if (stab === 'Volatile') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ pH is in range but variable across the field. Consider zone management.';
+          tips = ['Zone-sample and consider variable-rate lime if correcting.', 'Confirm consistent sampling depth and timing.'];
+        } else if (tdir === 'Down' && pH < thresh.optimalMin + 0.3) {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ pH is in range but trending down toward the lower limit.';
+          tips = ['Plan lime application before pH drops below optimal.'];
+        } else {
+          badge = '✓ On Track'; background = 'green';
+          insight = '✓ pH is in the target range. Maintain current management.';
+        }
+      } else if (level === 'Low') {
+        if (trig === 'LOW_STABLE') {
+          badge = '🔴 Action Needed'; background = 'red';
+          insight = '🔴 Soil pH is consistently low. Nutrient efficiency and root performance are limited.';
+          tips = ['Apply lime to move pH toward target range.', 'If P is low, band P and correct acidity for best response.', 'Prioritize the lowest pH zones first if variability exists.'];
+        } else if (trig === 'LOW_VOLATILE') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ pH is low but highly variable. Uniform correction may be inefficient.';
+          tips = ['Zone/grid sample before liming.', 'Consider variable-rate lime to avoid over-liming higher pH zones.'];
+        } else if (trig === 'FLAT') {
+          badge = '⚠️ Watch'; background = 'orange';
+          insight = '⚠️ pH is low and holding steady. Plan gradual correction.';
+          tips = ['Plan lime application.', 'Recheck pH after correction window.'];
+        }
+      } else if (level === 'High') {
+        if (trig === 'HIGH_STABLE') {
+          badge = '⚠️ Watch'; background = 'orange';
+          insight = '🟠 Soil pH is consistently high. Micronutrient availability (Zn, Fe, Mn) can be limited.';
+          tips = ['Use starter/banded micronutrients (especially Zn) when risk is confirmed.', 'Use tissue tests to confirm availability issues.', 'Maintain/build organic matter to support micronutrient cycling.'];
+        } else if (trig === 'HIGH_VOLATILE') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ pH is high and variable. Manage risk by zones.';
+          tips = ['Zone manage micronutrient risk; avoid blanket applications.', 'Target the highest pH areas first.'];
+        } else if (trig === 'FLAT') {
+          badge = '⚠️ Watch'; background = 'neutral';
+          insight = '⚠️ pH is high and holding steady. Focus on micronutrient management.';
+          tips = ['Monitor Zn/Fe/Mn with tissue tests.', 'Use placement strategies for Zn in high-risk crops (corn).'];
+        }
+      }
+
+      if (tdir === 'Up' && level !== 'Low') warnings.push('pH is trending upward.');
+      if (tdir === 'Down' && level !== 'High') warnings.push('pH is trending downward.');
+
+      return { key: 'pH', badge, background, insight, tips, warnings, show: { pH, stability: stab, trend: tdir, confidence: conf, optimalRange: `${thresh.optimalMin} - ${thresh.optimalMax}` } };
+    }
+
+    // --- PART 9: Build P Card ---
+    function buildPCard(inputs) {
+      const { P_ppm, P_cv, P_slope, pH, Zn_ppm, PZn_ratio, years } = inputs;
+
+      const thresh = getPThresholds();
+      const stab = getStabilityFromCV(P_cv || 20);
+      const tdir = getTrendDirection(P_slope || 0, 'P');
+      const flags = getPHFlags(pH || 6.5);
+      const conf = getConfidence(years || 1, stab);
+
+      const P_critical = P_ppm < thresh.critical;
+      const P_below = P_ppm >= thresh.critical && P_ppm < thresh.belowOpt;
+      const P_opt = P_ppm >= thresh.belowOpt && P_ppm <= thresh.optHigh;
+      const P_above = P_ppm > thresh.optHigh;
+
+      const level = (P_critical || P_below) ? 'Low' : (P_above ? 'High' : 'Optimal');
+      const trig = level === 'Optimal' ? 'OPTIMAL' : pickTrigger(level, stab, tdir);
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = '✅ Phosphorus is sufficient.';
+      let tips = [];
+      let warnings = [];
+
+      if (P_critical) {
+        badge = '🔴 Action Needed'; background = 'red';
+        insight = '🔴 Phosphorus is critically low. Yield potential is likely limited.';
+        tips = ['Apply P (banding is most efficient on low-P soils).', 'If pH is low, correct acidity to improve P efficiency.', 'If Zn is low/marginal or P:Zn ratio is elevated, include Zn in starter/band.'];
+        warnings.push(...flags.warnings);
+      } else if (P_below) {
+        if (trig === 'LOW_STABLE' || (tdir === 'Down' && stab !== 'Volatile')) {
+          badge = '🔴 Action Needed'; background = 'pink';
+          insight = '🔴 P is below optimal and declining reliably. Action recommended.';
+          tips = ['Apply P at build rates (above removal) until target range is reached.', 'Band P for efficiency, especially if pH is low or high.', 'If Zn is low/marginal or P:Zn ratio > 12, include Zn in starter/band.'];
+          if (tdir === 'Down' && stab !== 'Volatile' && P_slope) {
+            const yearsToCritical = Math.abs((P_ppm - thresh.critical) / P_slope);
+            if (yearsToCritical <= 15) {
+              warnings.push(`⏱️ At current rate (${P_slope.toFixed(1)} ppm/yr), will reach critical level (${thresh.critical} ppm) in ~${Math.round(yearsToCritical)} years.`);
+            }
+          }
+        } else if (trig === 'LOW_VOLATILE') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = '⚠️ P is below optimal, but variability is high. Confirm zones before major changes.';
+          tips = ['Zone/grid sample to confirm where P is truly low.', 'Consider VR P rather than blanket rates.'];
+        } else if (tdir === 'Up') {
+          badge = '✓ On Track'; background = 'green';
+          insight = '✓ P is below optimal but improving. Continue current management.';
+        } else if (trig === 'FLAT') {
+          badge = '⚠️ Watch'; background = 'neutral';
+          insight = '⚠️ P is below optimal and holding steady. Consider a build adjustment.';
+          tips = ['Consider modest build rates if yield goals justify.', 'Recheck next sampling cycle.'];
+        }
+        warnings.push(...flags.warnings);
+      } else if (P_opt) {
+        badge = '✓ On Track'; background = 'green';
+        insight = '✅ Phosphorus is in the optimal range.';
+        if (tdir === 'Down' && P_ppm < thresh.belowOpt + 3) {
+          warnings.push('P is trending down toward the bottom of optimal. Monitor next sample.');
+        }
+      } else if (P_above) {
+        badge = '✓ On Track'; background = 'green';
+        insight = '✓ Phosphorus is above optimal. Additional P is not needed.';
+        if (tdir === 'Up') warnings.push('P is increasing further above optimal—avoid additional P inputs.');
+      }
+
+      const ratioThresh = getRatioThresholds();
+      const znThresh = getZnThresholds();
+      if (PZn_ratio && PZn_ratio > ratioThresh.normal && (Zn_ppm <= znThresh.marginal || flags.high || flags.veryHigh)) {
+        warnings.push('P:Zn balance suggests increased Zn limitation risk—protect early Zn uptake (starter/band).');
+      }
+
+      return { key: 'P', badge, background, insight, tips, warnings, show: { P_ppm, stability: stab, trend: tdir, confidence: conf } };
+    }
+
+    // --- PART 10: Build Zn Card ---
+    function buildZnCard(inputs) {
+      const { Zn_ppm, Zn_cv, Zn_slope, P_ppm, PZn_ratio, pH, years } = inputs;
+
+      const thresh = getZnThresholds();
+      const stab = getStabilityFromCV(Zn_cv || 25);
+      const tdir = getTrendDirection(Zn_slope || 0, 'Zn');
+      const flags = getPHFlags(pH || 6.5);
+      const ratioThresh = getRatioThresholds();
+      const conf = getConfidence(years || 1, stab);
+
+      const dynamicTarget = getDynamicZnTarget(P_ppm || 30);
+      const Zn_low = Zn_ppm < thresh.low;
+      const Zn_marginal = Zn_ppm >= thresh.low && Zn_ppm < dynamicTarget;
+      const Zn_adequate = Zn_ppm >= dynamicTarget;
+
+      const level = Zn_adequate ? 'High' : 'Low';
+      const trig = pickTrigger(level, stab, tdir);
+
+      const ratioElev = PZn_ratio && PZn_ratio > ratioThresh.normal;
+      const ratioHigh = PZn_ratio && PZn_ratio > ratioThresh.highRisk;
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = '✅ Zinc is sufficient.';
+      let tips = [];
+      let warnings = [];
+
+      if (Zn_low) {
+        badge = '🔴 Action Needed'; background = 'red';
+        insight = '🔴 Zinc is deficient. Yield risk is likely, especially in corn.';
+        tips = ['Apply Zn with placement (starter/band) for best early uptake.', 'Use foliar Zn for in-season rescue if tissue/symptoms confirm deficiency.', 'Build long-term with small annual soil Zn additions.'];
+      } else if (Zn_marginal) {
+        badge = '⚠️ Watch'; background = 'yellow';
+        insight = `🟡 Zinc is marginal (target: ${dynamicTarget.toFixed(1)} ppm based on P level). Monitor and consider maintenance strategy.`;
+        tips = ['Consider starter/banded Zn in corn or where history suggests response.', 'Use tissue tests to confirm in-season Zn status.'];
+      } else if (Zn_adequate) {
+        badge = '✓ On Track'; background = 'green';
+        insight = '✅ Zinc is adequate.';
+      }
+
+      if (trig === 'LOW_VOLATILE') {
+        badge = Zn_low ? '🔴 Action Needed' : '⚠️ Watch';
+        background = Zn_low ? 'pink' : 'yellow';
+        warnings.push('Zn is spatially variable—consider zone/VR application rather than a uniform rate.');
+      }
+      if (trig === 'HIGH_VOLATILE') {
+        badge = '⚠️ Watch'; background = 'neutral';
+        warnings.push('Zn is generally adequate but variable—avoid blanket Zn; target low zones if present.');
+      }
+      if (trig === 'FLAT' && (Zn_low || Zn_marginal)) {
+        warnings.push('Zn is holding steady at a low level—without change, deficiency risk will persist.');
+      }
+
+      if (tdir === 'Down') warnings.push('Zn is declining, increasing deficiency risk.');
+      if (tdir === 'Up' && !Zn_adequate) warnings.push('Zn is improving toward sufficiency.');
+
+      if (flags.high || flags.veryHigh) {
+        warnings.push('High pH can limit Zn availability even when soil Zn is moderate—placement and tissue confirmation are important.');
+      }
+
+      if (ratioElev) warnings.push(`P:Zn ratio is elevated (${PZn_ratio.toFixed(0)}:1) which increases Zn limitation risk.`);
+      if (ratioHigh && (Zn_low || Zn_marginal || flags.high || flags.veryHigh)) {
+        tips = ['Prioritize starter/banded Zn (protect early growth under high ratio/high pH).', 'Use tissue tests; add foliar Zn only when deficiency is confirmed.', 'Avoid additional P if P is already above optimal; focus on Zn access.'];
+      }
+
+      return { key: 'Zn', badge, background, insight, tips, warnings, show: { Zn_ppm, P_ppm, ratio: PZn_ratio, dynamicTarget, stability: stab, trend: tdir, confidence: conf } };
+    }
+
+    // --- PART 11: Build P:Zn Ratio Card ---
+    function buildRatioCard(inputs) {
+      const { P_ppm, Zn_ppm, PZn_ratio, ratio_cv, ratio_slope, pH, years } = inputs;
+
+      const thresh = getRatioThresholds();
+      const stab = getStabilityFromCV(ratio_cv || 25);
+      const tdir = getTrendDirection(ratio_slope || 0, 'P_Zn_Ratio');
+      const flags = getPHFlags(pH || 6.5);
+      const conf = getConfidence(years || 1, stab);
+
+      const normal = PZn_ratio <= thresh.normal;
+      const elevated = PZn_ratio > thresh.normal && PZn_ratio <= thresh.highRisk;
+      const high = PZn_ratio > thresh.highRisk;
+
+      const level = normal ? 'Low' : 'High';
+      const trig = pickTrigger(level, stab, tdir);
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = '✅ P:Zn ratio is balanced.';
+      let tips = [];
+      let warnings = [];
+
+      if (normal) {
+        badge = '✓ On Track'; background = 'green';
+        insight = '✅ Balanced P and Zn relationship (lower risk of interaction).';
+      } else if (elevated) {
+        badge = '⚠️ Watch'; background = 'yellow';
+        insight = '🟡 P:Zn ratio is elevated. Zn limitation risk increases, especially in corn.';
+        tips = ['If Zn is marginal/low, prioritize starter/banded Zn.', 'Monitor with tissue tests where practical.'];
+      } else if (high) {
+        badge = '🔴 Action Needed'; background = 'red';
+        insight = '🔴 High P:Zn ratio indicates high risk of Zn limitation.';
+        tips = ['If Zn is low/marginal, treat with starter/banded Zn.', 'If P is above optimal, avoid additional P inputs; focus on Zn access.', 'If pH is high, expect stronger micronutrient availability limits.'];
+      }
+
+      if (trig === 'HIGH_VOLATILE') {
+        badge = '⚠️ Watch'; background = 'orange';
+        warnings.push('Ratio is spatially variable—confirm zones before major changes.');
+      }
+      if (trig === 'FLAT' && !normal) warnings.push('Ratio has remained consistently elevated.');
+      if (tdir === 'Up' && !normal) warnings.push('Ratio is increasing, which may raise Zn limitation risk over time.');
+      if (tdir === 'Down' && !normal) warnings.push('Ratio is improving but remains above the balanced range.');
+
+      if (flags.veryHigh) warnings.push('Very high pH amplifies Zn/Fe/Mn availability limitations.');
+      if (flags.veryLow) warnings.push('Very low pH may reduce P efficiency; interpret ratio in context of overall plant health.');
+
+      return { key: 'P_Zn_Ratio', badge, background, insight, tips, warnings, show: { P_ppm, Zn_ppm, ratio: PZn_ratio, stability: stab, trend: tdir, confidence: conf } };
+    }
+
+    // --- PART 12: Generic Nutrient Card Builder ---
+    function buildGenericNutrientCard(nutrient, inputs) {
+      const { value, cv, slope, years } = inputs;
+
+      const thresh = getNutrientThresholds(nutrient);
+      const stab = getStabilityFromCV(cv || 20);
+      const tdir = getTrendDirection(slope || 0, nutrient);
+      const conf = getConfidence(years || 1, stab);
+
+      // Determine behavior type
+      const lowerIsBetter = ['H_sat'].includes(nutrient);
+      const moreIsOk = ['K', 'OM', 'S', 'Ca', 'Mg', 'Fe', 'Mn', 'Cu', 'B'].includes(nutrient);
+
+      let level;
+      if (lowerIsBetter) {
+        if (value > thresh.critical) level = 'High';
+        else if (value > thresh.optimalMax) level = 'Elevated';
+        else level = 'Optimal';
+      } else {
+        if (value < thresh.critical) level = 'Critical';
+        else if (value < thresh.optimalMin) level = 'Low';
+        else if (value > thresh.optimalMax) level = 'High';
+        else level = 'Optimal';
+      }
+
+      const trig = (level === 'Optimal' || level === 'Elevated') ? 'OPTIMAL' : pickTrigger(level === 'Critical' ? 'Low' : level, stab, tdir);
+
+      let badge = '✓ On Track';
+      let background = 'green';
+      let insight = `✅ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is in a good range.`;
+      let tips = [];
+      let warnings = [];
+
+      if (level === 'Critical') {
+        badge = '🔴 Action Needed'; background = 'red';
+        insight = `🔴 ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is critically low.`;
+        tips = [`Apply ${nutrient} to build levels.`];
+      } else if (level === 'Low') {
+        if (trig === 'LOW_STABLE') {
+          badge = '🔴 Action Needed'; background = 'pink';
+          insight = `🔴 ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is below optimal and declining.`;
+          tips = [`Consider building ${nutrient} levels.`];
+        } else if (trig === 'LOW_VOLATILE') {
+          badge = '⚠️ Watch'; background = 'yellow';
+          insight = `⚠️ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is below optimal but variable.`;
+          tips = ['Zone-sample to confirm where levels are truly low.'];
+        } else if (tdir === 'Up') {
+          badge = '✓ On Track'; background = 'green';
+          insight = `✓ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is below optimal but improving.`;
+        } else {
+          badge = '⚠️ Watch'; background = 'neutral';
+          insight = `⚠️ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is below optimal and holding steady.`;
+        }
+      } else if (level === 'High' && lowerIsBetter) {
+        badge = '⚠️ Watch'; background = 'orange';
+        insight = `⚠️ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is elevated.`;
+        if (nutrient === 'H_sat') tips = ['High H saturation indicates acidity—consider lime.'];
+      } else if (level === 'High' && !moreIsOk) {
+        badge = '⚠️ Watch'; background = 'neutral';
+        insight = `⚠️ ${CONFIG.NUTRIENT_NAMES[nutrient] || nutrient} is above optimal.`;
+        if (tdir === 'Up') warnings.push(`${nutrient} is increasing further above optimal.`);
+      }
+
+      return { key: nutrient, badge, background, insight, tips, warnings, show: { value, stability: stab, trend: tdir, confidence: conf } };
+    }
+
+    // --- PART 13: Render Insight Card HTML ---
+    function renderInsightCard(card) {
+      if (!card || (!card.insight && card.tips.length === 0 && card.warnings.length === 0)) return '';
+
+      const bgColors = {
+        green: '#dcfce7', red: '#fee2e2', pink: '#fce7f3', yellow: '#fef3c7',
+        orange: '#ffedd5', neutral: '#f1f5f9'
+      };
+      const borderColors = {
+        green: '#22c55e', red: '#ef4444', pink: '#ec4899', yellow: '#f59e0b',
+        orange: '#f97316', neutral: '#94a3b8'
+      };
+
+      const bg = bgColors[card.background] || bgColors.neutral;
+      const border = borderColors[card.background] || borderColors.neutral;
+
+      let html = `<div style="margin-top: 0.75rem; padding: 0.75rem; background: ${bg}; border-left: 4px solid ${border}; border-radius: 0.375rem; font-size: 0.8rem;">`;
+      html += `<div style="font-weight: 600; margin-bottom: 0.5rem;">${card.insight}</div>`;
+
+      if (card.tips && card.tips.length > 0) {
+        html += `<ul style="margin: 0.5rem 0; padding-left: 1.25rem; color: #374151;">`;
+        card.tips.forEach(tip => { html += `<li style="margin-bottom: 0.25rem;">${tip}</li>`; });
+        html += `</ul>`;
+      }
+
+      if (card.warnings && card.warnings.length > 0) {
+        html += `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.75rem; color: #6b7280;">`;
+        card.warnings.forEach(w => { html += `<div style="margin-bottom: 0.25rem;">⚠️ ${w}</div>`; });
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
     // ========== TAB 1: Year Comparison ==========
     // year1 = FROM (earlier year), year2 = TO (later year)
     // Stats shown are for year2, change = year2 - year1
@@ -1406,6 +1945,96 @@
               urgencyBadge = trendInsight ? window.Utils.getUrgencyBadge(trendInsight.urgency) : null;
             }
 
+            // --- 5-Trigger Framework Integration ---
+            // Collect cross-nutrient data from most recent year
+            const mostRecentYear = last.year;
+            const recentSamples = fieldSamples.filter(s => String(s.year) === String(mostRecentYear));
+
+            const getAvgValue = (samples, nutrient) => {
+              const vals = samples.map(s => s[nutrient]).filter(v => v !== null && v !== undefined && !isNaN(v));
+              return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+            };
+
+            const currentPH = getAvgValue(recentSamples, 'pH');
+            const currentP = getAvgValue(recentSamples, 'P');
+            const currentZn = getAvgValue(recentSamples, 'Zn');
+            const currentPZnRatio = (currentP !== null && currentZn !== null && currentZn > 0) ? currentP / currentZn : null;
+
+            // Get CV/SD from trendInsight if available
+            const stabilityValue = trendInsight ? trendInsight.stability.value : null;
+
+            // Build the 5-Trigger card based on nutrient type
+            let triggerCard = null;
+            let triggerCardHtml = '';
+
+            if (!skipTrendAnalysis && yearData.length > 1) {
+              if (attr === 'pH') {
+                triggerCard = buildPHCard({
+                  pH: last.avg,
+                  pH_sd: stabilityValue,
+                  pH_slope: slope,
+                  calcareous: false,
+                  years: yearData.length
+                });
+              } else if (attr === 'P') {
+                triggerCard = buildPCard({
+                  P_ppm: last.avg,
+                  P_cv: stabilityValue,
+                  P_slope: slope,
+                  pH: currentPH,
+                  Zn_ppm: currentZn,
+                  PZn_ratio: currentPZnRatio,
+                  years: yearData.length
+                });
+              } else if (attr === 'Zn') {
+                triggerCard = buildZnCard({
+                  Zn_ppm: last.avg,
+                  Zn_cv: stabilityValue,
+                  Zn_slope: slope,
+                  P_ppm: currentP,
+                  PZn_ratio: currentPZnRatio,
+                  pH: currentPH,
+                  years: yearData.length
+                });
+              } else if (attr === 'P_Zn_Ratio') {
+                triggerCard = buildRatioCard({
+                  P_ppm: currentP,
+                  Zn_ppm: currentZn,
+                  PZn_ratio: last.avg,
+                  ratio_cv: stabilityValue,
+                  ratio_slope: slope,
+                  pH: currentPH,
+                  years: yearData.length
+                });
+              } else if (attr !== 'Buffer_pH' && attr !== 'CEC') {
+                // Generic nutrient card for OM, K, S, etc.
+                triggerCard = buildGenericNutrientCard(attr, {
+                  value: last.avg,
+                  cv: stabilityValue,
+                  slope: slope,
+                  years: yearData.length
+                });
+              }
+
+              if (triggerCard) {
+                triggerCardHtml = renderInsightCard(triggerCard);
+                // Override the urgency badge with the trigger card badge
+                if (triggerCard.badge) {
+                  const badgeColors = {
+                    green: { color: '#16a34a', bg: '#dcfce7' },
+                    red: { color: '#dc2626', bg: '#fee2e2' },
+                    pink: { color: '#db2777', bg: '#fce7f3' },
+                    yellow: { color: '#ca8a04', bg: '#fef9c3' },
+                    orange: { color: '#ea580c', bg: '#ffedd5' },
+                    neutral: { color: '#64748b', bg: '#f1f5f9' }
+                  };
+                  const bc = badgeColors[triggerCard.background] || badgeColors.neutral;
+                  urgencyBadge = { emoji: triggerCard.badge.split(' ')[0], label: triggerCard.badge.replace(/^[^\s]+\s*/, ''), color: bc.color, bg: bc.bg };
+                }
+              }
+            }
+            // --- End 5-Trigger Framework Integration ---
+
             // Get moisture warnings for P and K
             let moistureWarning = '';
             if ((attr === 'P' || attr === 'K') && fieldSamples.length > 0) {
@@ -1459,15 +2088,16 @@
                 </details>`;
             }
 
-            // P:Zn Ratio insight box (comprehensive tiered system)
-            let pznInsight = '';
-            let pznBadgeOverride = null;
-            if (attr === 'P_Zn_Ratio' && yearData.length > 0) {
+            // P:Zn Ratio insight box - NOW HANDLED BY 5-TRIGGER FRAMEWORK (buildRatioCard)
+            // Legacy code disabled - see triggerCardHtml above
+            let pznInsight = '';  // No longer used - replaced by triggerCardHtml
+            let pznBadgeOverride = null;  // No longer used
+            if (false && attr === 'P_Zn_Ratio' && yearData.length > 0) {  // DISABLED
               const mostRecentRatio = last.avg;
               const mostRecentYear = last.year;
 
               // Get current P and Zn values from most recent year's samples
-              const recentSamples = fieldSamples.filter(s => String(s.year) === String(mostRecentYear));
+              const recentSamples__disabled = fieldSamples.filter(s => String(s.year) === String(mostRecentYear));
               const pValues = recentSamples.map(s => s.P).filter(v => v !== null && v !== undefined && !isNaN(v));
               const znValues = recentSamples.map(s => s.Zn).filter(v => v !== null && v !== undefined && !isNaN(v));
               const currentP = pValues.length > 0 ? pValues.reduce((a, b) => a + b, 0) / pValues.length : null;
@@ -1566,9 +2196,10 @@
               }
             }
 
-            // Build the trend insight box (for non-P:Zn attributes)
-            let trendInsightBox = '';
-            if (trendInsight && attr !== 'P_Zn_Ratio') {
+            // Build the trend insight box - NOW HANDLED BY 5-TRIGGER FRAMEWORK
+            // Legacy code disabled - see triggerCardHtml above
+            let trendInsightBox = '';  // No longer used - replaced by triggerCardHtml
+            if (false && trendInsight && attr !== 'P_Zn_Ratio') {  // DISABLED
               trendInsightBox = `
                 <div style="margin-top: 0.75rem; padding: 0.75rem; background: ${trendInsight.background}; border-radius: 0.375rem; border: 1px solid ${trendInsight.stability.color}40;">
                   <div style="font-size: 0.85rem; color: #1e293b;">
@@ -1584,12 +2215,12 @@
                 </div>`;
             }
 
-            // Add "Why ratios matter" tooltip for P:Zn Ratio
-            const pznTooltip = attr === 'P_Zn_Ratio' ? `<span style="margin-left: 0.5rem; cursor: help; color: #64748b;" title="High phosphorus relative to zinc can reduce zinc uptake by plants even when soil Zn levels are moderate. This interaction is more likely in high-yield systems, sandy soils, and soils with low organic matter.">ℹ️</span>` : '';
+            // pznTooltip moved to 5-Trigger Framework integration section above
 
-            // OM improvement tips (collapsible section)
-            let omTips = '';
-            if (attr === 'OM' && yearData.length > 0) {
+            // OM improvement tips - NOW HANDLED BY 5-TRIGGER FRAMEWORK (buildGenericNutrientCard)
+            // Legacy code disabled - see triggerCardHtml above
+            let omTips = '';  // No longer used - replaced by triggerCardHtml
+            if (false && attr === 'OM' && yearData.length > 0) {  // DISABLED
               const currentOM = last.avg;
               const omSettings = JSON.parse(localStorage.getItem('soilSettings') || '{}');
               const omCritical = omSettings.OM_critical ?? 2.0;
@@ -1625,15 +2256,16 @@
               }
             }
 
-            // Zn improvement insights
-            let znInsight = '';
-            let znBadgeOverride = null;
-            if (attr === 'Zn' && yearData.length > 0) {
-              const currentZn = last.avg;
-              const mostRecentYear = last.year;
+            // Zn improvement insights - NOW HANDLED BY 5-TRIGGER FRAMEWORK (buildZnCard)
+            // Legacy code disabled - see triggerCardHtml above
+            let znInsight = '';  // No longer used - replaced by triggerCardHtml
+            let znBadgeOverride = null;  // No longer used
+            if (false && attr === 'Zn' && yearData.length > 0) {  // DISABLED
+              const currentZn__disabled = last.avg;
+              const mostRecentYear__disabled = last.year;
 
               // Get current P value to calculate P:Zn ratio and dynamic target
-              const recentSamples = fieldSamples.filter(s => String(s.year) === String(mostRecentYear));
+              const recentSamples__disabled = fieldSamples.filter(s => String(s.year) === String(mostRecentYear__disabled));
               const pValues = recentSamples.map(s => s.P).filter(v => v !== null && v !== undefined && !isNaN(v));
               const currentP = pValues.length > 0 ? pValues.reduce((a, b) => a + b, 0) / pValues.length : null;
               const pznRatio = (currentP !== null && currentZn > 0) ? currentP / currentZn : null;
@@ -1771,11 +2403,14 @@
                 </div>
                 ${tips}`;
 
-              // Override the badge for Zn
-              if (znBadgeOverride) {
-                urgencyBadge = znBadgeOverride;
-              }
+              // Override the badge for Zn (legacy - now handled by 5-Trigger Framework)
+              // if (znBadgeOverride) {
+              //   urgencyBadge = znBadgeOverride;
+              // }
             }
+
+            // Add "Why ratios matter" tooltip for P:Zn Ratio
+            const pznTooltip = attr === 'P_Zn_Ratio' ? `<span style="margin-left: 0.5rem; cursor: help; color: #64748b;" title="High phosphorus relative to zinc can reduce zinc uptake by plants even when soil Zn levels are moderate. This interaction is more likely in high-yield systems, sandy soils, and soils with low organic matter.">ℹ️</span>` : '';
 
             html += `
               <div class="trend-card ${cardClass}">
@@ -1809,10 +2444,9 @@
                   </div>
                 </div>
                 ` : ''}
-                ${trendInsightBox}
-                ${pznInsight}
-                ${omTips}
-                ${znInsight}
+                ${triggerCardHtml}
+                ${moistureWarning}
+                ${volatilityTooltip}
               </div>
             `;
           } catch (attrError) {
