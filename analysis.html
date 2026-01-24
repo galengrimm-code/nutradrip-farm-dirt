@@ -1173,6 +1173,12 @@
       return 'Volatile';
     }
 
+    function getStabilityFromOMCV(cv) {  // For OM - stricter thresholds due to sensitivity
+      if (cv < 10) return 'Stable';
+      if (cv <= 20) return 'Moderate';
+      return 'Volatile';
+    }
+
     // --- PART 2: Flat Thresholds (slope thresholds for "no real change") ---
     const FLAT_THRESHOLDS = {
       pH: 0.05,     // units/yr
@@ -1600,7 +1606,8 @@
       const { value, cv, slope, years } = inputs;
 
       const thresh = getNutrientThresholds(nutrient);
-      const stab = getStabilityFromCV(cv || 20);
+      // OM uses stricter stability thresholds due to sensitivity to sampling depth and lab method
+      const stab = nutrient === 'OM' ? getStabilityFromOMCV(cv || 10) : getStabilityFromCV(cv || 20);
       const tdir = getTrendDirection(slope || 0, nutrient);
       const conf = getConfidence(years || 1, stab);
 
@@ -2065,15 +2072,26 @@
             // Variability causes expandable section for volatile data
             let volatilityTooltip = '';
             if (trendInsight && trendInsight.stability.label === 'Volatile') {
-              const stabilityMetric = attr === 'pH'
-                ? `pH uses Standard Deviation (SD = ${trendInsight.stability.value.toFixed(2)}) instead of CV because pH is a logarithmic scale. SD > 0.35 indicates high variability.`
-                : `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 30% indicates high variability.`;
+              let stabilityMetric;
+              if (attr === 'pH') {
+                stabilityMetric = `pH uses Standard Deviation (SD = ${trendInsight.stability.value.toFixed(2)}) instead of CV because pH is a logarithmic scale. SD > 0.35 indicates high variability.`;
+              } else if (attr === 'OM') {
+                stabilityMetric = `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 20% indicates high variability for OM (stricter threshold due to sensitivity).`;
+              } else {
+                stabilityMetric = `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 30% indicates high variability.`;
+              }
+
+              // OM-specific volatility warning
+              const omWarning = attr === 'OM'
+                ? `<p style="margin-top: 0.5rem; padding: 0.5rem; background: #fef3c7; border-radius: 0.25rem; color: #92400e; font-weight: 500;">⚠️ OM is sensitive to sampling depth and lab method; keep depth consistent and use the same lab/method across years.</p>`
+                : '';
 
               volatilityTooltip = `
                 <details style="margin-top: 0.5rem; font-size: 0.75rem; color: #64748b;">
                   <summary style="cursor: pointer; color: #3b82f6;">ℹ️ Why high variability?</summary>
                   <div style="margin-top: 0.5rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
                     <p style="margin-bottom: 0.5rem; color: #475569;">${stabilityMetric}</p>
+                    ${omWarning}
                     <p style="margin-bottom: 0.5rem; color: #475569;">This measures how much the field's yearly averages vary over time. High variability can be caused by:</p>
                     <ul style="margin: 0; padding-left: 1.25rem; color: #475569;">
                       <li>Sampling path changed between years</li>
@@ -2597,15 +2615,26 @@
             // Variability causes expandable section for volatile data
             let volatilityTooltip = '';
             if (trendInsight && trendInsight.stability.label === 'Volatile') {
-              const stabilityMetric = attr === 'pH'
-                ? `pH uses Standard Deviation (SD = ${trendInsight.stability.value.toFixed(2)}) instead of CV because pH is a logarithmic scale. SD > 0.35 indicates high variability.`
-                : `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 30% indicates high variability.`;
+              let stabilityMetric;
+              if (attr === 'pH') {
+                stabilityMetric = `pH uses Standard Deviation (SD = ${trendInsight.stability.value.toFixed(2)}) instead of CV because pH is a logarithmic scale. SD > 0.35 indicates high variability.`;
+              } else if (attr === 'OM') {
+                stabilityMetric = `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 20% indicates high variability for OM (stricter threshold due to sensitivity).`;
+              } else {
+                stabilityMetric = `Coefficient of Variation (CV = ${trendInsight.stability.value.toFixed(0)}%) measures how much values vary relative to the average. CV > 30% indicates high variability.`;
+              }
+
+              // OM-specific volatility warning
+              const omWarning = attr === 'OM'
+                ? `<p style="margin-top: 0.5rem; padding: 0.5rem; background: #fef3c7; border-radius: 0.25rem; color: #92400e; font-weight: 500;">⚠️ OM is sensitive to sampling depth and lab method; keep depth consistent and use the same lab/method across years.</p>`
+                : '';
 
               volatilityTooltip = `
                 <details style="margin-top: 0.5rem; font-size: 0.75rem; color: #64748b;">
                   <summary style="cursor: pointer; color: #3b82f6;">ℹ️ Why high variability?</summary>
                   <div style="margin-top: 0.5rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
                     <p style="margin-bottom: 0.5rem; color: #475569;">${stabilityMetric}</p>
+                    ${omWarning}
                     <p style="margin-bottom: 0.5rem; color: #475569;">This measures how much the field's yearly averages vary over time. High variability can be caused by:</p>
                     <ul style="margin: 0; padding-left: 1.25rem; color: #475569;">
                       <li>Sampling path changed between years</li>
