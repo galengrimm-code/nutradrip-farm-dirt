@@ -4591,7 +4591,7 @@
         if (validPoints.length < 10) return; // Need enough data
 
         // Get threshold settings for this nutrient
-        const thresholds = getNutrientThresholds(nutrient, settings);
+        const thresholds = getSpatialNutrientThresholds(nutrient, settings);
         if (!thresholds) return;
 
         // Bucket the samples
@@ -4697,8 +4697,8 @@
       container.innerHTML = html;
     }
 
-    // Get threshold values for a nutrient
-    function getNutrientThresholds(nutrient, settings) {
+    // Get threshold values for a nutrient (Spatial Analysis version)
+    function getSpatialNutrientThresholds(nutrient, settings) {
       const defaults = {
         pH: { low: 6.0, high: 7.0 },
         P: { low: 15, high: 30 },
