@@ -528,8 +528,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.180";
-    const BUILD_DATE = "2026-01-26T14:02:09";
+    const APP_VERSION = "v1.0.181";
+    const BUILD_DATE = "2026-01-26T14:21:13";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1486,7 +1486,7 @@
           );
 
           for (const site of sitesToRemove) {
-            await deleteSampleSiteById(site.SiteID, true); // silent delete
+            await deleteSampleSiteById(site.SiteID, site.Type, true); // silent delete with type
           }
 
           const removedNames = typesToRemove.map(t => typeNames[t] || t).join(', ');
@@ -1535,16 +1535,18 @@
 
     // Delete a sample site by SiteID
     async function deleteSampleSite(siteId) {
-      const site = sampleSitesData.find(s => s.SiteID === siteId);
-      if (!site) {
+      // Find ALL sites with this SiteID (multiple types may share same ID)
+      const matchingSites = sampleSitesData.filter(s => s.SiteID === siteId && s.Active !== 'FALSE');
+      if (matchingSites.length === 0) {
         Utils.showStatus('Site not found', false);
         return;
       }
 
       const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
-      const typeName = typeNames[site.Type] || site.Type;
+      const types = matchingSites.map(s => typeNames[s.Type] || s.Type).join(', ');
+      const field = matchingSites[0].Field || 'N/A';
 
-      if (!confirm(`Delete sample site "${siteId}"?\n\nType: ${typeName}\nField: ${site.Field || 'N/A'}\n\nThis will remove the site from the map.`)) {
+      if (!confirm(`Delete sample site "${siteId}"?\n\nTypes: ${types}\nField: ${field}\n\nThis will remove ${matchingSites.length > 1 ? 'all ' + matchingSites.length + ' entries' : 'the site'} from the map.`)) {
         return;
       }
 
@@ -1552,7 +1554,7 @@
       map.closePopup();
 
       try {
-        // Update Google Sheet - set Active to FALSE (soft delete)
+        // Update Google Sheet - set Active to FALSE for ALL matching rows
         if (SheetsAPI.isSignedIn) {
           const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: CONFIG.SHEET_ID,
@@ -1565,30 +1567,36 @@
           const activeCol = headerRow.indexOf('Active');
 
           if (siteIdCol >= 0 && activeCol >= 0) {
-            // Find the row with this SiteID
+            // Find ALL rows with this SiteID and batch update them
+            const updates = [];
             for (let i = 1; i < rows.length; i++) {
               if (rows[i][siteIdCol] === siteId) {
-                // Update Active to FALSE
-                const range = `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`;
-                await gapi.client.sheets.spreadsheets.values.update({
-                  spreadsheetId: CONFIG.SHEET_ID,
-                  range: range,
-                  valueInputOption: 'RAW',
-                  resource: { values: [['FALSE']] }
+                updates.push({
+                  range: `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`,
+                  values: [['FALSE']]
                 });
-                break;
               }
+            }
+
+            if (updates.length > 0) {
+              await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: CONFIG.SHEET_ID,
+                resource: {
+                  valueInputOption: 'RAW',
+                  data: updates
+                }
+              });
             }
           }
         }
 
-        // Mark as inactive in local data
-        site.Active = 'FALSE';
+        // Mark ALL matching sites as inactive in local data
+        matchingSites.forEach(site => site.Active = 'FALSE');
 
         // Refresh markers (will filter out inactive sites)
         displaySampleSiteMarkers();
 
-        Utils.showStatus(`✓ Deleted site "${siteId}"`, true);
+        Utils.showStatus(`✓ Deleted ${matchingSites.length > 1 ? matchingSites.length + ' entries for' : 'site'} "${siteId}"`, true);
       } catch (error) {
         console.error('Error deleting sample site:', error);
         Utils.showStatus('Error deleting site: ' + error.message, false);
@@ -1596,8 +1604,14 @@
     }
 
     // Silent delete for edit mode (no confirmation, no status message)
-    async function deleteSampleSiteById(siteId, silent = false) {
-      const site = sampleSitesData.find(s => s.SiteID === siteId);
+    // siteType parameter allows matching specific type when multiple types share same SiteID
+    async function deleteSampleSiteById(siteId, siteType, silent = false) {
+      // Find site matching both SiteID and Type (or just SiteID if type not provided)
+      const site = sampleSitesData.find(s =>
+        s.SiteID === siteId &&
+        s.Active !== 'FALSE' &&
+        (!siteType || s.Type === siteType)
+      );
       if (!site) return;
 
       try {
@@ -1610,11 +1624,15 @@
           const rows = response.result.values || [];
           const headerRow = rows[0] || [];
           const siteIdCol = headerRow.indexOf('SiteID');
+          const typeCol = headerRow.indexOf('Type');
           const activeCol = headerRow.indexOf('Active');
 
           if (siteIdCol >= 0 && activeCol >= 0) {
             for (let i = 1; i < rows.length; i++) {
-              if (rows[i][siteIdCol] === siteId) {
+              const rowSiteId = rows[i][siteIdCol];
+              const rowType = typeCol >= 0 ? rows[i][typeCol] : null;
+              // Match SiteID and Type (if type provided)
+              if (rowSiteId === siteId && (!siteType || rowType === siteType)) {
                 const range = `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`;
                 await gapi.client.sheets.spreadsheets.values.update({
                   spreadsheetId: CONFIG.SHEET_ID,
