@@ -528,8 +528,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.179";
-    const BUILD_DATE = "2026-01-26T13:52:39";
+    const APP_VERSION = "v1.0.180";
+    const BUILD_DATE = "2026-01-26T14:02:09";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1222,9 +1222,14 @@
         fieldDisplay.style.background = '#f1f5f9';
       }
 
-      // Clear Site ID (will auto-generate for new types)
-      document.getElementById('siteIdInput').value = '';
-      document.getElementById('siteNotesInput').value = baseSite.Notes || '';
+      // Pre-fill Site ID and Notes from existing sites (all share the same values)
+      if (existingSites.length > 0) {
+        document.getElementById('siteIdInput').value = baseSite.SiteID;
+        document.getElementById('siteNotesInput').value = baseSite.Notes || '';
+      } else {
+        document.getElementById('siteIdInput').value = '';
+        document.getElementById('siteNotesInput').value = '';
+      }
 
       // Set checkboxes - existing types checked (can uncheck to delete), others unchecked
       document.querySelectorAll('input[name="siteType"]').forEach(cb => {
@@ -1244,6 +1249,7 @@
       // Store edit mode info
       pendingSiteCoords = { lat, lng };
       window.editModeExistingTypes = existingTypes;
+      window.editModeExistingSites = existingSites; // Store full site data for rename/update
 
       modal.style.display = 'flex';
     }
@@ -1388,10 +1394,23 @@
       // Get selected types from checkboxes
       const selectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
       const existingTypes = window.editModeExistingTypes || [];
+      const existingSites = window.editModeExistingSites || [];
 
       // Determine what to add and remove
       const typesToAdd = selectedTypes.filter(t => !existingTypes.includes(t));
       const typesToRemove = existingTypes.filter(t => !selectedTypes.includes(t));
+
+      // Check for rename/update (all existing sites at this location share the same SiteID)
+      const newSiteId = document.getElementById('siteIdInput').value.trim();
+      const newNotes = document.getElementById('siteNotesInput').value.trim();
+      let hasRename = false;
+      let hasNotesChange = false;
+
+      if (existingSites.length > 0) {
+        const oldSite = existingSites[0]; // All sites at this location have same SiteID
+        hasRename = newSiteId && newSiteId !== oldSite.SiteID;
+        hasNotesChange = newNotes !== (oldSite.Notes || '');
+      }
 
       // Validate - must have at least one type selected OR be removing types
       if (selectedTypes.length === 0 && typesToRemove.length === 0) {
@@ -1400,7 +1419,7 @@
       }
 
       // In edit mode with no changes
-      if (existingTypes.length > 0 && typesToAdd.length === 0 && typesToRemove.length === 0) {
+      if (existingTypes.length > 0 && typesToAdd.length === 0 && typesToRemove.length === 0 && !hasRename && !hasNotesChange) {
         Utils.showStatus('No changes made', false);
         return;
       }
@@ -1437,6 +1456,24 @@
 
         const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
         const messages = [];
+
+        // Handle rename or notes update for all existing sites at this location
+        if ((hasRename || hasNotesChange) && existingSites.length > 0) {
+          const oldSiteId = existingSites[0].SiteID; // All sites at this location share the same SiteID
+          await updateSampleSiteInSheet(oldSiteId, newSiteId || oldSiteId, newNotes);
+
+          // Update local data for all sites with this SiteID
+          sampleSitesData.filter(s => s.SiteID === oldSiteId).forEach(localSite => {
+            if (hasRename) localSite.SiteID = newSiteId;
+            localSite.Notes = newNotes;
+          });
+
+          if (hasRename) messages.push(`Renamed to: ${newSiteId}`);
+          if (hasNotesChange && !hasRename) messages.push('Notes updated');
+
+          // Refresh markers to show new name
+          displaySampleSiteMarkers();
+        }
 
         // Remove unchecked types (soft delete)
         if (typesToRemove.length > 0) {
@@ -1647,6 +1684,58 @@
         valueInputOption: 'RAW',
         resource: { values: [row] }
       });
+    }
+
+    // Update sample site(s) in sheet - updates SiteID and Notes for all matching sites
+    async function updateSampleSiteInSheet(oldSiteId, newSiteId, newNotes) {
+      try {
+        // Read all data from sheet
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: CONFIG.SHEET_ID,
+          range: 'SampleSites!A2:J1000'
+        });
+
+        const rows = response.result.values || [];
+        const updates = [];
+
+        // Find all rows with matching SiteID and prepare updates
+        rows.forEach((row, index) => {
+          if (row[0] === oldSiteId) {
+            const rowNumber = index + 2; // +2 for header and 0-based index
+            // Update SiteID (column A) if changed
+            if (newSiteId !== oldSiteId) {
+              updates.push({
+                range: `SampleSites!A${rowNumber}`,
+                values: [[newSiteId]]
+              });
+            }
+            // Always update Notes (column H)
+            updates.push({
+              range: `SampleSites!H${rowNumber}`,
+              values: [[newNotes || '']]
+            });
+          }
+        });
+
+        if (updates.length === 0) {
+          console.log('No matching sites found for update');
+          return;
+        }
+
+        // Batch update all matching rows
+        await gapi.client.sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: CONFIG.SHEET_ID,
+          resource: {
+            valueInputOption: 'RAW',
+            data: updates
+          }
+        });
+
+        console.log(`Updated ${updates.length} cells for site rename/notes`);
+      } catch (e) {
+        console.error('Error updating sample site:', e);
+        throw e;
+      }
     }
 
     // Load sample sites from sheet
