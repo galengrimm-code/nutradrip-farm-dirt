@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.171";
-    const BUILD_DATE = "2026-01-26T09:51:24";
+    const APP_VERSION = "v1.0.172";
+    const BUILD_DATE = "2026-01-26T10:08:49";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1277,6 +1277,68 @@
       }
     }
 
+    // Delete a sample site by SiteID
+    async function deleteSampleSite(siteId) {
+      const site = sampleSitesData.find(s => s.SiteID === siteId);
+      if (!site) {
+        Utils.showStatus('Site not found', false);
+        return;
+      }
+
+      const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
+      const typeName = typeNames[site.Type] || site.Type;
+
+      if (!confirm(`Delete sample site "${siteId}"?\n\nType: ${typeName}\nField: ${site.Field || 'N/A'}\n\nThis will remove the site from the map.`)) {
+        return;
+      }
+
+      // Close any open popups
+      map.closePopup();
+
+      try {
+        // Update Google Sheet - set Active to FALSE (soft delete)
+        if (SheetsAPI.isSignedIn) {
+          const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: CONFIG.SHEET_ID,
+            range: 'SampleSites!A:J'
+          });
+
+          const rows = response.result.values || [];
+          const headerRow = rows[0] || [];
+          const siteIdCol = headerRow.indexOf('SiteID');
+          const activeCol = headerRow.indexOf('Active');
+
+          if (siteIdCol >= 0 && activeCol >= 0) {
+            // Find the row with this SiteID
+            for (let i = 1; i < rows.length; i++) {
+              if (rows[i][siteIdCol] === siteId) {
+                // Update Active to FALSE
+                const range = `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`;
+                await gapi.client.sheets.spreadsheets.values.update({
+                  spreadsheetId: CONFIG.SHEET_ID,
+                  range: range,
+                  valueInputOption: 'RAW',
+                  resource: { values: [['FALSE']] }
+                });
+                break;
+              }
+            }
+          }
+        }
+
+        // Mark as inactive in local data
+        site.Active = 'FALSE';
+
+        // Refresh markers (will filter out inactive sites)
+        displaySampleSiteMarkers();
+
+        Utils.showStatus(`✓ Deleted site "${siteId}"`, true);
+      } catch (error) {
+        console.error('Error deleting sample site:', error);
+        Utils.showStatus('Error deleting site: ' + error.message, false);
+      }
+    }
+
     // Ensure SampleSites tab exists with headers
     async function ensureSampleSitesTab() {
       const tabName = 'SampleSites';
@@ -1387,9 +1449,21 @@
             ${site.Notes ? `<div style="margin-top:0.375rem;font-style:italic;color:#64748b;">${site.Notes}</div>` : ''}
             <div style="margin-top:0.375rem;font-size:0.6875rem;color:#94a3b8;">Added: ${new Date(site.CreatedDate).toLocaleDateString()}</div>
           </div>
+          <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; text-align: center;">
+            <button onclick="deleteSampleSite('${site.SiteID}')"
+              style="padding: 4px 12px; font-size: 11px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">
+              🗑️ Delete Site
+            </button>
+          </div>
         </div>
       `;
       marker.bindPopup(popupContent);
+
+      // Double-click to delete
+      marker.on('dblclick', (e) => {
+        L.DomEvent.stopPropagation(e);
+        deleteSampleSite(site.SiteID);
+      });
 
       sampleSiteMarkers.push(marker);
     }
