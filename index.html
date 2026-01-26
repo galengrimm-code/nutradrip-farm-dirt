@@ -464,8 +464,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.175";
-    const BUILD_DATE = "2026-01-26T10:38:16";
+    const APP_VERSION = "v1.0.176";
+    const BUILD_DATE = "2026-01-26T10:42:42";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1084,6 +1084,14 @@
       }
       pendingSiteCoords = null;
 
+      // Clear edit mode state and reset checkboxes
+      window.editModeExistingTypes = null;
+      document.querySelectorAll('input[name="siteType"]').forEach(cb => {
+        cb.disabled = false;
+        cb.parentElement.style.opacity = '1';
+        cb.parentElement.title = '';
+      });
+
       // Stop GPS tracking if active
       stopLocationTracking();
 
@@ -1091,6 +1099,88 @@
       if (pinDropMode) {
         togglePinDropMode();
       }
+    }
+
+    // Edit sample site - add more types to existing location
+    function editSampleSite(lat, lng) {
+      // Close popup first
+      map.closePopup();
+
+      // Find all existing sites at this location (within ~10ft tolerance)
+      const tolerance = 0.0001; // ~30ft
+      const existingSites = sampleSitesData.filter(s =>
+        s.Active !== 'FALSE' &&
+        Math.abs(s.Lat - lat) < tolerance &&
+        Math.abs(s.Lng - lng) < tolerance
+      );
+
+      if (existingSites.length === 0) {
+        Utils.showStatus('No sites found at this location', false);
+        return;
+      }
+
+      // Use the first site for field/client/farm info
+      const baseSite = existingSites[0];
+      const existingTypes = existingSites.map(s => s.Type);
+
+      // Open modal
+      const modal = document.getElementById('sampleSiteModal');
+      document.getElementById('siteModalLat').textContent = lat.toFixed(6);
+      document.getElementById('siteModalLng').textContent = lng.toFixed(6);
+
+      // Populate client dropdown and pre-select
+      const clientSelect = document.getElementById('siteClientSelect');
+      let clientHtml = '<option value="">-- Select Client --</option>';
+      clientsData.forEach(c => {
+        const selected = c.name === baseSite.Client ? 'selected' : '';
+        clientHtml += `<option value="${c.id}" ${selected}>${c.name}</option>`;
+      });
+      clientSelect.innerHTML = clientHtml;
+      clientSelect.onchange = updateSiteFarmDropdown;
+
+      // Populate farm dropdown and pre-select
+      updateSiteFarmDropdown();
+      const matchingFarm = farmsData.find(f => f.name === baseSite.Farm);
+      if (matchingFarm) {
+        document.getElementById('siteFarmSelect').value = matchingFarm.id;
+      }
+
+      // Show detected field
+      const fieldDisplay = document.getElementById('siteFieldDisplay');
+      if (baseSite.Field) {
+        fieldDisplay.textContent = baseSite.Field;
+        fieldDisplay.style.color = '#16a34a';
+        fieldDisplay.style.background = '#dcfce7';
+      } else {
+        fieldDisplay.textContent = 'No field';
+        fieldDisplay.style.color = '#64748b';
+        fieldDisplay.style.background = '#f1f5f9';
+      }
+
+      // Clear Site ID (will auto-generate for new types)
+      document.getElementById('siteIdInput').value = '';
+      document.getElementById('siteNotesInput').value = baseSite.Notes || '';
+
+      // Set checkboxes - existing types checked and disabled, others available
+      document.querySelectorAll('input[name="siteType"]').forEach(cb => {
+        if (existingTypes.includes(cb.value)) {
+          cb.checked = true;
+          cb.disabled = true;
+          cb.parentElement.style.opacity = '0.6';
+          cb.parentElement.title = 'Already exists at this location';
+        } else {
+          cb.checked = false;
+          cb.disabled = false;
+          cb.parentElement.style.opacity = '1';
+          cb.parentElement.title = '';
+        }
+      });
+
+      // Store edit mode info
+      pendingSiteCoords = { lat, lng };
+      window.editModeExistingTypes = existingTypes;
+
+      modal.style.display = 'flex';
     }
 
     // Toggle GPS location tracking
@@ -1230,10 +1320,17 @@
         return;
       }
 
-      // Get selected types from checkboxes
-      const selectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
+      // Get selected types from checkboxes (only enabled ones - disabled are existing)
+      const allSelectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
+      const existingTypes = window.editModeExistingTypes || [];
+      const selectedTypes = allSelectedTypes.filter(t => !existingTypes.includes(t));
+
       if (selectedTypes.length === 0) {
-        Utils.showStatus('Please select at least one sample type', false);
+        if (existingTypes.length > 0) {
+          Utils.showStatus('No new types selected. Check additional types to add.', false);
+        } else {
+          Utils.showStatus('Please select at least one sample type', false);
+        }
         return;
       }
 
@@ -1294,7 +1391,8 @@
         closeSampleSiteModal();
         const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
         const savedTypeNames = selectedTypes.map(t => typeNames[t] || t).join(', ');
-        Utils.showStatus(`✓ Saved ${selectedTypes.length} site(s): ${savedTypeNames}`, true);
+        const action = existingTypes.length > 0 ? 'Added' : 'Saved';
+        Utils.showStatus(`✓ ${action} ${selectedTypes.length} type(s): ${savedTypeNames}`, true);
       } catch (error) {
         console.error('Error saving sample site:', error);
         Utils.showStatus('Error saving: ' + error.message, false);
@@ -1476,10 +1574,14 @@
             ${site.Notes ? `<div style="margin-top:0.375rem;font-style:italic;color:#64748b;">${site.Notes}</div>` : ''}
             <div style="margin-top:0.375rem;font-size:0.6875rem;color:#94a3b8;">Added: ${new Date(site.CreatedDate).toLocaleDateString()}</div>
           </div>
-          <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; text-align: center;">
+          <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem; justify-content: center;">
+            <button onclick="editSampleSite(${site.Lat}, ${site.Lng})"
+              style="padding: 4px 12px; font-size: 11px; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; border-radius: 4px; cursor: pointer;">
+              ✏️ Add Types
+            </button>
             <button onclick="deleteSampleSite('${site.SiteID}')"
               style="padding: 4px 12px; font-size: 11px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">
-              🗑️ Delete Site
+              🗑️ Delete
             </button>
           </div>
         </div>
