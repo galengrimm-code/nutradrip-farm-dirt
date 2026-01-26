@@ -4,6 +4,37 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.182] - January 26, 2026
+
+### Sample Site Management
+
+- **Hard delete**: Deleting sample sites now permanently removes rows from Google Sheets (was soft delete with Active=FALSE)
+- **Location-scoped rename**: Renaming a site only affects that specific GPS location, not all sites with the same name
+- **Multi-type delete fix**: Deleting a site with multiple sample types (Tissue + Sap) now removes all types correctly
+- **Sheet column fix**: Sample sites now write to correct columns A-J (fixed offset issue)
+
+### Print Samples & Lab Forms
+
+- **Lab Form selector**: Choose between Generic Labels, Waypoint Tissue, or Sap Sample Form
+- **Waypoint Tissue template**: Matches Waypoint Analytical's soil sample submission form with S1M/S2M/S3M test packages
+- **Sap Sample Form template**: Matches New Age Laboratories/Calibrated Agronomy COC form with sample type checkboxes and vigor ratings
+- **Selection fix**: Print samples now only includes checked items (was including all with same SiteID)
+- **Auto-fill**: Lab forms auto-fill Sample ID, Field, and client info from selected sites
+
+### Google Auth
+
+- **Longer sessions**: Token refresh now checks every 2 minutes (was 5) and refreshes 30 minutes before expiry (was 10)
+- **Tab return refresh**: Auto-refreshes token when returning to browser tab
+- **12-hour sessions**: Should stay signed in as long as browser stays open
+
+### Bug Fixes
+
+- **Print filter**: Type filter only shows sample types that actually exist
+- **Edit sample sites**: Can now rename sites and update notes
+- **Multi-select types**: Creating a site with multiple types works correctly
+
+---
+
 ## [v1.0.75] - January 24, 2026
 
 ### Organic Matter (OM) Improvements
@@ -451,6 +482,7 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.0.182 | Jan 26, 2026 | Lab form templates, hard delete, location-scoped rename, longer auth sessions |
 | v1.0.75 | Jan 24, 2026 | OM agronomic recommendations, Sheets sync fix, Sample Site modal |
 | v1.0.74 | Jan 23, 2026 | Field Trends insights (P:Zn, OM, Zn), Methodology page, pH default |
 | v1.0.73 | Jan 21, 2026 | Dynamic zoom-based color scaling, Google Sheet URL support |
