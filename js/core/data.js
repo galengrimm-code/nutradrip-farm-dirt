@@ -160,7 +160,15 @@ const SheetsAPI = {
             console.log('[Sheets] Restored saved auth token from localStorage');
           }
 
-          setInterval(() => this.checkTokenRefresh(), 300000);
+          // Check token every 2 minutes and refresh if needed
+          setInterval(() => this.checkTokenRefresh(), 120000);
+
+          // Also refresh on page visibility change (when user returns to tab)
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.isSignedIn) {
+              this.checkTokenRefresh();
+            }
+          });
           resolve(true);
         } catch (error) {
           console.error('Error initializing Google API:', error);
@@ -180,8 +188,9 @@ const SheetsAPI = {
   },
 
   checkTokenRefresh() {
-    if (this.isSignedIn && tokenExpiry && Date.now() > tokenExpiry - 600000) {
-      console.log('Token expiring soon, refreshing...');
+    // Refresh if within 30 minutes of expiry (1800000ms)
+    if (this.isSignedIn && tokenExpiry && Date.now() > tokenExpiry - 1800000) {
+      console.log('Token expiring soon, refreshing silently...');
       tokenClient.requestAccessToken({ prompt: '' });
     }
   },
