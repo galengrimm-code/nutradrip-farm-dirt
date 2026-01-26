@@ -250,13 +250,14 @@ const SheetsAPI = {
       console.log('Loading fields from sheet:', sheetId);
       const response = await gapi.client.sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
-        range: `${DataConfig.SHEETS.FIELDS}!A2:E1000`
+        range: `${DataConfig.SHEETS.FIELDS}!A2:F1000`
       });
       const rows = response.result.values || [];
       return rows.map(row => ({
         id: row[0], name: row[1],
         boundary: row[2] ? JSON.parse(row[2]) : null,
-        acres: parseFloat(row[3]) || 0
+        acres: parseFloat(row[3]) || 0,
+        farmId: row[4] || ''  // Column E: farmId for auto-fill in sample site modal
       }));
     } catch (e) {
       console.error('getFields error:', e);

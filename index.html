@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.160";
-    const BUILD_DATE = "2026-01-26T07:23:35";
+    const APP_VERSION = "v1.0.161";
+    const BUILD_DATE = "2026-01-26T07:28:44";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1896,8 +1896,17 @@
         console.log('Attempting public load from sheet ID:', CONFIG.SHEET_ID);
         const fields = await SheetsAPI.getFields();
         // Build new boundaries object before replacing (avoid race condition)
+        // Store full field data including farmId for auto-fill in sample site modal
         const newBoundaries = {};
-        fields.forEach(f => { if (f.boundary) newBoundaries[f.name] = f.boundary; });
+        fields.forEach(f => {
+          if (f.boundary) {
+            newBoundaries[f.name] = {
+              boundary: f.boundary,
+              farmId: f.farmId || '',
+              acres: f.acres || 0
+            };
+          }
+        });
         fieldBoundaries = newBoundaries;
         sampleData = await SheetsAPI.getSamples();
         settings = await SheetsAPI.getSettings();
@@ -1960,8 +1969,17 @@
         console.log('Attempting to load from sheet ID:', CONFIG.SHEET_ID);
         const fields = await SheetsAPI.getFields();
         // Build new boundaries object before replacing (avoid race condition)
+        // Store full field data including farmId for auto-fill in sample site modal
         const newBoundaries = {};
-        fields.forEach(f => { if (f.boundary) newBoundaries[f.name] = f.boundary; });
+        fields.forEach(f => {
+          if (f.boundary) {
+            newBoundaries[f.name] = {
+              boundary: f.boundary,
+              farmId: f.farmId || '',
+              acres: f.acres || 0
+            };
+          }
+        });
         fieldBoundaries = newBoundaries;
         sampleData = await SheetsAPI.getSamples();
         settings = await SheetsAPI.getSettings();
