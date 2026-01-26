@@ -464,8 +464,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.176";
-    const BUILD_DATE = "2026-01-26T10:42:42";
+    const APP_VERSION = "v1.0.177";
+    const BUILD_DATE = "2026-01-26T10:49:06";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1089,6 +1089,7 @@
       document.querySelectorAll('input[name="siteType"]').forEach(cb => {
         cb.disabled = false;
         cb.parentElement.style.opacity = '1';
+        cb.parentElement.style.background = '#f8fafc';
         cb.parentElement.title = '';
       });
 
@@ -1161,17 +1162,17 @@
       document.getElementById('siteIdInput').value = '';
       document.getElementById('siteNotesInput').value = baseSite.Notes || '';
 
-      // Set checkboxes - existing types checked and disabled, others available
+      // Set checkboxes - existing types checked (can uncheck to delete), others unchecked
       document.querySelectorAll('input[name="siteType"]').forEach(cb => {
         if (existingTypes.includes(cb.value)) {
           cb.checked = true;
-          cb.disabled = true;
-          cb.parentElement.style.opacity = '0.6';
-          cb.parentElement.title = 'Already exists at this location';
+          cb.disabled = false;
+          cb.parentElement.style.background = '#dcfce7'; // Green tint for existing
+          cb.parentElement.title = 'Uncheck to remove this type';
         } else {
           cb.checked = false;
           cb.disabled = false;
-          cb.parentElement.style.opacity = '1';
+          cb.parentElement.style.background = '#f8fafc';
           cb.parentElement.title = '';
         }
       });
@@ -1308,7 +1309,7 @@
       return `${prefix}-${seqNum}`;
     }
 
-    // Save sample site(s) - supports multiple types at same location
+    // Save sample site(s) - supports add/remove types at same location
     async function saveSampleSite() {
       if (!pendingSiteCoords) {
         Utils.showStatus('No location selected', false);
@@ -1320,17 +1321,23 @@
         return;
       }
 
-      // Get selected types from checkboxes (only enabled ones - disabled are existing)
-      const allSelectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
+      // Get selected types from checkboxes
+      const selectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
       const existingTypes = window.editModeExistingTypes || [];
-      const selectedTypes = allSelectedTypes.filter(t => !existingTypes.includes(t));
 
-      if (selectedTypes.length === 0) {
-        if (existingTypes.length > 0) {
-          Utils.showStatus('No new types selected. Check additional types to add.', false);
-        } else {
-          Utils.showStatus('Please select at least one sample type', false);
-        }
+      // Determine what to add and remove
+      const typesToAdd = selectedTypes.filter(t => !existingTypes.includes(t));
+      const typesToRemove = existingTypes.filter(t => !selectedTypes.includes(t));
+
+      // Validate - must have at least one type selected OR be removing types
+      if (selectedTypes.length === 0 && typesToRemove.length === 0) {
+        Utils.showStatus('Please select at least one sample type', false);
+        return;
+      }
+
+      // In edit mode with no changes
+      if (existingTypes.length > 0 && typesToAdd.length === 0 && typesToRemove.length === 0) {
+        Utils.showStatus('No changes made', false);
         return;
       }
 
@@ -1339,14 +1346,16 @@
       const fieldName = document.getElementById('siteFieldDisplay').textContent;
       const notes = document.getElementById('siteNotesInput').value.trim();
 
-      // Validate required fields
-      if (!clientId) {
-        Utils.showStatus('Please select a Client', false);
-        return;
-      }
-      if (!farmId) {
-        Utils.showStatus('Please select a Farm', false);
-        return;
+      // Validate required fields (only if adding new types)
+      if (typesToAdd.length > 0) {
+        if (!clientId) {
+          Utils.showStatus('Please select a Client', false);
+          return;
+        }
+        if (!farmId) {
+          Utils.showStatus('Please select a Farm', false);
+          return;
+        }
       }
 
       const client = clientsData.find(c => c.id === clientId);
@@ -1362,37 +1371,58 @@
         document.getElementById('saveSiteBtn').textContent = 'Saving...';
         document.getElementById('saveSiteBtn').disabled = true;
 
-        await ensureSampleSitesTab();
+        const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
+        const messages = [];
 
-        const savedSites = [];
-        for (const typeCode of selectedTypes) {
-          // Generate unique Site ID for each type
-          const siteId = baseSiteId || generateSiteId(typeCode, fieldName);
+        // Remove unchecked types (soft delete)
+        if (typesToRemove.length > 0) {
+          const tolerance = 0.0001;
+          const sitesToRemove = sampleSitesData.filter(s =>
+            s.Active !== 'FALSE' &&
+            Math.abs(s.Lat - pendingSiteCoords.lat) < tolerance &&
+            Math.abs(s.Lng - pendingSiteCoords.lng) < tolerance &&
+            typesToRemove.includes(s.Type)
+          );
 
-          const siteData = {
-            SiteID: siteId,
-            Type: typeCode,
-            Client: client?.name || '',
-            Farm: farm?.name || '',
-            Field: fieldName.includes('No field') ? '' : fieldName,
-            Lat: pendingSiteCoords.lat,
-            Lng: pendingSiteCoords.lng,
-            Notes: notes,
-            Active: 'TRUE',
-            CreatedDate: new Date().toISOString()
-          };
+          for (const site of sitesToRemove) {
+            await deleteSampleSiteById(site.SiteID, true); // silent delete
+          }
 
-          await appendSampleSiteToSheet(siteData);
-          sampleSitesData.push(siteData);
-          addSampleSiteMarker(siteData);
-          savedSites.push(siteId);
+          const removedNames = typesToRemove.map(t => typeNames[t] || t).join(', ');
+          messages.push(`Removed: ${removedNames}`);
+        }
+
+        // Add new types
+        if (typesToAdd.length > 0) {
+          await ensureSampleSitesTab();
+
+          for (const typeCode of typesToAdd) {
+            const siteId = baseSiteId || generateSiteId(typeCode, fieldName);
+
+            const siteData = {
+              SiteID: siteId,
+              Type: typeCode,
+              Client: client?.name || '',
+              Farm: farm?.name || '',
+              Field: fieldName.includes('No field') ? '' : fieldName,
+              Lat: pendingSiteCoords.lat,
+              Lng: pendingSiteCoords.lng,
+              Notes: notes,
+              Active: 'TRUE',
+              CreatedDate: new Date().toISOString()
+            };
+
+            await appendSampleSiteToSheet(siteData);
+            sampleSitesData.push(siteData);
+            addSampleSiteMarker(siteData);
+          }
+
+          const addedNames = typesToAdd.map(t => typeNames[t] || t).join(', ');
+          messages.push(`Added: ${addedNames}`);
         }
 
         closeSampleSiteModal();
-        const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
-        const savedTypeNames = selectedTypes.map(t => typeNames[t] || t).join(', ');
-        const action = existingTypes.length > 0 ? 'Added' : 'Saved';
-        Utils.showStatus(`✓ ${action} ${selectedTypes.length} type(s): ${savedTypeNames}`, true);
+        Utils.showStatus(`✓ ${messages.join(' | ')}`, true);
       } catch (error) {
         console.error('Error saving sample site:', error);
         Utils.showStatus('Error saving: ' + error.message, false);
@@ -1461,6 +1491,47 @@
       } catch (error) {
         console.error('Error deleting sample site:', error);
         Utils.showStatus('Error deleting site: ' + error.message, false);
+      }
+    }
+
+    // Silent delete for edit mode (no confirmation, no status message)
+    async function deleteSampleSiteById(siteId, silent = false) {
+      const site = sampleSitesData.find(s => s.SiteID === siteId);
+      if (!site) return;
+
+      try {
+        if (SheetsAPI.isSignedIn) {
+          const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: CONFIG.SHEET_ID,
+            range: 'SampleSites!A:J'
+          });
+
+          const rows = response.result.values || [];
+          const headerRow = rows[0] || [];
+          const siteIdCol = headerRow.indexOf('SiteID');
+          const activeCol = headerRow.indexOf('Active');
+
+          if (siteIdCol >= 0 && activeCol >= 0) {
+            for (let i = 1; i < rows.length; i++) {
+              if (rows[i][siteIdCol] === siteId) {
+                const range = `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`;
+                await gapi.client.sheets.spreadsheets.values.update({
+                  spreadsheetId: CONFIG.SHEET_ID,
+                  range: range,
+                  valueInputOption: 'RAW',
+                  resource: { values: [['FALSE']] }
+                });
+                break;
+              }
+            }
+          }
+        }
+
+        site.Active = 'FALSE';
+        displaySampleSiteMarkers();
+      } catch (error) {
+        console.error('Error deleting sample site:', error);
+        if (!silent) throw error;
       }
     }
 
@@ -1577,7 +1648,7 @@
           <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem; justify-content: center;">
             <button onclick="editSampleSite(${site.Lat}, ${site.Lng})"
               style="padding: 4px 12px; font-size: 11px; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; border-radius: 4px; cursor: pointer;">
-              ✏️ Add Types
+              ✏️ Edit
             </button>
             <button onclick="deleteSampleSite('${site.SiteID}')"
               style="padding: 4px 12px; font-size: 11px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">
