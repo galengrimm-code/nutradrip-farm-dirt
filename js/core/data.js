@@ -253,12 +253,29 @@ const SheetsAPI = {
         range: `${DataConfig.SHEETS.FIELDS}!A2:F1000`
       });
       const rows = response.result.values || [];
-      return rows.map(row => ({
-        id: row[0], name: row[1],
-        boundary: row[2] ? JSON.parse(row[2]) : null,
-        acres: parseFloat(row[3]) || 0,
-        farmId: row[4] || ''  // Column E: farmId for auto-fill in sample site modal
-      }));
+      console.log('[Sheets] Fields tab returned', rows.length, 'rows');
+
+      const fields = rows.map((row, idx) => {
+        let boundary = null;
+        if (row[2]) {
+          try {
+            boundary = JSON.parse(row[2]);
+          } catch (parseErr) {
+            console.warn(`[Sheets] Failed to parse boundary for field "${row[1]}" (row ${idx + 2}):`, parseErr.message);
+          }
+        }
+        return {
+          id: row[0],
+          name: row[1],
+          boundary: boundary,
+          acres: parseFloat(row[3]) || 0,
+          farmId: row[4] || ''
+        };
+      });
+
+      const withBoundary = fields.filter(f => f.boundary).length;
+      console.log('[Sheets] Parsed', fields.length, 'fields,', withBoundary, 'with valid boundaries');
+      return fields;
     } catch (e) {
       console.error('getFields error:', e);
       throw e;
