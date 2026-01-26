@@ -358,15 +358,25 @@
           <h2 style="margin: 0; font-size: 1.125rem; font-weight: 700;">Add Sample Site</h2>
         </div>
         <div style="padding: 1.25rem;">
-          <!-- GPS Display -->
-          <div style="background: #f8fafc; border-radius: 0.5rem; padding: 0.625rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.8125rem;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-              <span style="color: #64748b;">Lat:</span>
-              <span id="siteModalLat" style="font-weight: 600;">-</span>
+          <!-- GPS Display with Track Location button -->
+          <div style="background: #f8fafc; border-radius: 0.5rem; padding: 0.625rem; margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <div style="font-family: monospace; font-size: 0.8125rem;">
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.25rem;">
+                  <span style="color: #64748b;">Lat:</span>
+                  <span id="siteModalLat" style="font-weight: 600;">-</span>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <span style="color: #64748b;">Lng:</span>
+                  <span id="siteModalLng" style="font-weight: 600;">-</span>
+                </div>
+              </div>
+              <button id="trackLocationBtn" onclick="toggleLocationTracking()" style="padding: 0.5rem 0.75rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                📍 Use My Location
+              </button>
             </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #64748b;">Lng:</span>
-              <span id="siteModalLng" style="font-weight: 600;">-</span>
+            <div id="gpsAccuracyDisplay" style="display: none; font-size: 0.6875rem; color: #64748b; text-align: center;">
+              GPS Accuracy: <span id="gpsAccuracyValue">--</span>m
             </div>
           </div>
 
@@ -403,11 +413,14 @@
             </div>
           </div>
 
-          <!-- Generated Site ID -->
+          <!-- Site ID Input -->
           <div style="margin-bottom: 0.875rem;">
             <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">SITE ID</label>
-            <div id="siteIdDisplay" style="padding: 0.5rem 0.75rem; background: #f3f4f6; border-radius: 0.375rem; font-size: 0.875rem; color: #6b7280; font-family: monospace;">
-              (Generated on save)
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="siteIdInput" placeholder="Enter or generate ID" style="flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; font-family: monospace;">
+              <button type="button" onclick="autoGenerateSiteId()" style="padding: 0.5rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                Auto
+              </button>
             </div>
           </div>
 
@@ -439,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.157";
-    const BUILD_DATE = "2026-01-26T06:51:58";
+    const APP_VERSION = "v1.0.158";
+    const BUILD_DATE = "2026-01-26T06:57:34";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -663,6 +676,7 @@
     // ========== SAMPLE SITE STATE ==========
     let pinDropMode = false;
     let tempPinMarker = null;
+    let gpsWatchId = null; // For GPS tracking
     let pendingSiteCoords = null;
     let sampleSitesData = [];
     let sampleSiteMarkers = [];
@@ -955,25 +969,12 @@
       placeTempMarkerAndOpenModal(lat, lng);
     }
 
-    // Mobile: get current GPS location and open modal
+    // Mobile: toggle pin drop mode (same as desktop now)
     function mobileSiteFromCurrentLocation() {
-      Utils.showStatus('Getting your location...', true);
-      if (!navigator.geolocation) {
-        Utils.showStatus('Geolocation not supported', false);
-        return;
+      togglePinDropMode();
+      if (pinDropMode) {
+        Utils.showStatus('Tap on map to place sample site', true);
       }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          placeTempMarkerAndOpenModal(lat, lng);
-          map.setView([lat, lng], 17);
-        },
-        (err) => {
-          Utils.showStatus('Could not get location: ' + err.message, false);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
     }
 
     // Place temp marker and open modal
@@ -1034,12 +1035,12 @@
         fieldDisplay.style.background = '#fee2e2';
       }
 
-      // Site ID is generated on save, show placeholder
-      document.getElementById('siteIdDisplay').textContent = '(Generated on save)';
-      document.getElementById('siteIdDisplay').style.background = '#f3f4f6';
-      document.getElementById('siteIdDisplay').style.color = '#6b7280';
-
+      // Clear Site ID input and notes
+      document.getElementById('siteIdInput').value = '';
       document.getElementById('siteNotesInput').value = '';
+
+      // Reset GPS tracking button state
+      stopLocationTracking();
 
       modal.style.display = 'flex';
     }
@@ -1065,10 +1066,115 @@
       }
       pendingSiteCoords = null;
 
+      // Stop GPS tracking if active
+      stopLocationTracking();
+
       // Exit pin drop mode on desktop
       if (pinDropMode) {
         togglePinDropMode();
       }
+    }
+
+    // Toggle GPS location tracking
+    function toggleLocationTracking() {
+      const btn = document.getElementById('trackLocationBtn');
+      const accuracyDisplay = document.getElementById('gpsAccuracyDisplay');
+
+      if (gpsWatchId !== null) {
+        // Stop tracking
+        stopLocationTracking();
+      } else {
+        // Start tracking
+        if (!navigator.geolocation) {
+          Utils.showStatus('Geolocation not supported', false);
+          return;
+        }
+
+        btn.textContent = '⏳ Getting GPS...';
+        btn.style.background = '#f59e0b';
+
+        gpsWatchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const accuracy = pos.coords.accuracy;
+
+            // Update coordinates display
+            document.getElementById('siteModalLat').textContent = lat.toFixed(6);
+            document.getElementById('siteModalLng').textContent = lng.toFixed(6);
+
+            // Update accuracy display
+            accuracyDisplay.style.display = 'block';
+            document.getElementById('gpsAccuracyValue').textContent = accuracy.toFixed(1);
+
+            // Update pending coords
+            pendingSiteCoords = { lat, lng };
+
+            // Update or create temp marker
+            if (tempPinMarker) {
+              tempPinMarker.setLatLng([lat, lng]);
+            } else {
+              const tempIcon = L.divIcon({
+                html: '<div class="temp-pin-marker"></div>',
+                className: '',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+              });
+              tempPinMarker = L.marker([lat, lng], { icon: tempIcon }).addTo(map);
+            }
+
+            // Re-detect field at new location
+            const fieldInfo = detectFieldFromPoint(lat, lng);
+            const fieldDisplay = document.getElementById('siteFieldDisplay');
+            if (fieldInfo) {
+              fieldDisplay.textContent = fieldInfo.fieldName;
+              fieldDisplay.style.color = '#16a34a';
+              fieldDisplay.style.background = '#dcfce7';
+            } else {
+              fieldDisplay.textContent = 'No field detected at this location';
+              fieldDisplay.style.color = '#ef4444';
+              fieldDisplay.style.background = '#fee2e2';
+            }
+
+            // Center map on location
+            map.setView([lat, lng], Math.max(map.getZoom(), 16));
+
+            // Update button state
+            btn.textContent = '🔴 Tracking...';
+            btn.style.background = '#16a34a';
+          },
+          (err) => {
+            Utils.showStatus('GPS error: ' + err.message, false);
+            stopLocationTracking();
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      }
+    }
+
+    // Stop GPS tracking
+    function stopLocationTracking() {
+      if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+      }
+      const btn = document.getElementById('trackLocationBtn');
+      if (btn) {
+        btn.textContent = '📍 Use My Location';
+        btn.style.background = '#3b82f6';
+      }
+      const accuracyDisplay = document.getElementById('gpsAccuracyDisplay');
+      if (accuracyDisplay) {
+        accuracyDisplay.style.display = 'none';
+      }
+    }
+
+    // Auto-generate Site ID based on current selections
+    function autoGenerateSiteId() {
+      const typeCode = document.getElementById('siteTypeSelect').value;
+      const fieldName = document.getElementById('siteFieldDisplay').textContent;
+      const siteId = generateSiteId(typeCode, fieldName);
+      document.getElementById('siteIdInput').value = siteId;
     }
 
     // Generate Site ID at save time
@@ -1123,14 +1229,16 @@
       const client = clientsData.find(c => c.id === clientId);
       const farm = farmsData.find(f => f.id === farmId);
 
-      // Generate Site ID at save time
-      const siteId = generateSiteId(typeCode, fieldName);
+      // Get Site ID from input (user-entered or auto-generated)
+      let siteId = document.getElementById('siteIdInput').value.trim();
+      if (!siteId) {
+        // Auto-generate if not provided
+        siteId = generateSiteId(typeCode, fieldName);
+        document.getElementById('siteIdInput').value = siteId;
+      }
 
-      // Update display to show generated ID
-      const siteIdDisplay = document.getElementById('siteIdDisplay');
-      siteIdDisplay.textContent = siteId;
-      siteIdDisplay.style.background = '#dbeafe';
-      siteIdDisplay.style.color = '#1e40af';
+      // Stop GPS tracking before saving
+      stopLocationTracking();
 
       const siteData = {
         SiteID: siteId,
