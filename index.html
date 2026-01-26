@@ -218,6 +218,7 @@
       </div>
       <div class="controls-right">
         <button class="button" id="addSampleSiteBtn">📍 Add Sample Site</button>
+        <button class="button" id="printSamplesBtn" style="background: #7c3aed; color: white;">🏷️ Print Samples</button>
         <button class="button" id="fieldModeBtn">📱 Field Mode</button>
         <button class="button" id="refreshBtn">🔄 Refresh</button>
       </div>
@@ -456,6 +457,73 @@
     </div>
   </div>
 
+  <!-- Print Samples Modal -->
+  <div id="printSamplesModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: white; border-radius: 0.75rem; max-width: 700px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;">
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="margin: 0; font-size: 1.125rem; font-weight: 700;">🏷️ Print Sample Labels</h2>
+        <button onclick="closePrintSamplesModal()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+
+      <!-- Content -->
+      <div style="padding: 1.5rem; overflow-y: auto; flex: 1;">
+        <!-- Filter Controls -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">FILTER BY TYPE</label>
+            <select id="printFilterType" onchange="filterPrintSites()" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem;">
+              <option value="all">All Types</option>
+              <option value="TIS">🌿 Tissue</option>
+              <option value="SAP">🧪 Sap</option>
+              <option value="ISS">🌱 In-Season Soil</option>
+              <option value="WAT">💧 Water</option>
+            </select>
+          </div>
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">FILTER BY FIELD</label>
+            <select id="printFilterField" onchange="filterPrintSites()" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem;">
+              <option value="all">All Fields</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: flex-end;">
+            <button onclick="selectAllPrintSites()" style="padding: 0.5rem 1rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.75rem; cursor: pointer; margin-right: 0.5rem;">Select All</button>
+            <button onclick="deselectAllPrintSites()" style="padding: 0.5rem 1rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.75rem; cursor: pointer;">Deselect All</button>
+          </div>
+        </div>
+
+        <!-- Sample Sites List -->
+        <div style="border: 1px solid #e2e8f0; border-radius: 0.5rem; max-height: 350px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+            <thead style="background: #f8fafc; position: sticky; top: 0;">
+              <tr>
+                <th style="padding: 0.75rem 0.5rem; text-align: left; border-bottom: 2px solid #e2e8f0; width: 40px;">
+                  <input type="checkbox" id="printSelectAll" onchange="toggleAllPrintSites(this.checked)">
+                </th>
+                <th style="padding: 0.75rem 0.5rem; text-align: left; border-bottom: 2px solid #e2e8f0;">Site ID</th>
+                <th style="padding: 0.75rem 0.5rem; text-align: left; border-bottom: 2px solid #e2e8f0;">Type</th>
+                <th style="padding: 0.75rem 0.5rem; text-align: left; border-bottom: 2px solid #e2e8f0;">Field</th>
+                <th style="padding: 0.75rem 0.5rem; text-align: left; border-bottom: 2px solid #e2e8f0;">Client/Farm</th>
+              </tr>
+            </thead>
+            <tbody id="printSitesList">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Selection Summary -->
+        <div style="margin-top: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+          <span id="printSelectionCount" style="font-weight: 600; color: #475569;">0 sites selected</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button onclick="generateLabels('sheet')" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer;">📄 Print Sheet</button>
+            <button onclick="generateLabels('labels')" style="padding: 0.5rem 1rem; background: #7c3aed; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer;">🏷️ Print Labels</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -464,8 +532,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.177";
-    const BUILD_DATE = "2026-01-26T10:49:06";
+    const APP_VERSION = "v1.0.178";
+    const BUILD_DATE = "2026-01-26T12:10:11";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1675,6 +1743,218 @@
       sampleSitesData.filter(s => s.Active !== 'FALSE').forEach(addSampleSiteMarker);
     }
 
+    // ========== PRINT SAMPLES ==========
+
+    function openPrintSamplesModal() {
+      const modal = document.getElementById('printSamplesModal');
+      populatePrintFieldFilter();
+      populatePrintSitesList();
+      updatePrintSelectionCount();
+      modal.style.display = 'flex';
+    }
+
+    function closePrintSamplesModal() {
+      document.getElementById('printSamplesModal').style.display = 'none';
+    }
+
+    function populatePrintFieldFilter() {
+      const fieldSelect = document.getElementById('printFilterField');
+      const activeSites = sampleSitesData.filter(s => s.Active !== 'FALSE');
+      const fields = [...new Set(activeSites.map(s => s.Field).filter(f => f))].sort();
+
+      let html = '<option value="all">All Fields</option>';
+      fields.forEach(f => {
+        html += `<option value="${f}">${f}</option>`;
+      });
+      fieldSelect.innerHTML = html;
+    }
+
+    function populatePrintSitesList() {
+      const tbody = document.getElementById('printSitesList');
+      const typeFilter = document.getElementById('printFilterType').value;
+      const fieldFilter = document.getElementById('printFilterField').value;
+
+      const typeNames = { 'TIS': '🌿 Tissue', 'WAT': '💧 Water', 'SAP': '🧪 Sap', 'ISS': '🌱 In-Season Soil' };
+      const typeColors = { 'TIS': '#dcfce7', 'WAT': '#dbeafe', 'SAP': '#fef3c7', 'ISS': '#ede9fe' };
+
+      let activeSites = sampleSitesData.filter(s => s.Active !== 'FALSE');
+
+      // Apply filters
+      if (typeFilter !== 'all') {
+        activeSites = activeSites.filter(s => s.Type === typeFilter);
+      }
+      if (fieldFilter !== 'all') {
+        activeSites = activeSites.filter(s => s.Field === fieldFilter);
+      }
+
+      // Sort by field, then type, then site ID
+      activeSites.sort((a, b) => {
+        if (a.Field !== b.Field) return (a.Field || '').localeCompare(b.Field || '');
+        if (a.Type !== b.Type) return (a.Type || '').localeCompare(b.Type || '');
+        return (a.SiteID || '').localeCompare(b.SiteID || '');
+      });
+
+      if (activeSites.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: #64748b;">No sample sites found. Add sites using "Add Sample Site" button.</td></tr>';
+        return;
+      }
+
+      let html = '';
+      activeSites.forEach(site => {
+        const bgColor = typeColors[site.Type] || '#f8fafc';
+        html += `
+          <tr style="background: ${bgColor};" class="print-site-row" data-site-id="${site.SiteID}">
+            <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">
+              <input type="checkbox" class="print-site-checkbox" data-site-id="${site.SiteID}" onchange="updatePrintSelectionCount()">
+            </td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: 600;">${site.SiteID}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">${typeNames[site.Type] || site.Type}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">${site.Field || '-'}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b;">${site.Client || ''}${site.Farm ? ' / ' + site.Farm : ''}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function filterPrintSites() {
+      populatePrintSitesList();
+      updatePrintSelectionCount();
+    }
+
+    function selectAllPrintSites() {
+      document.querySelectorAll('.print-site-checkbox').forEach(cb => cb.checked = true);
+      updatePrintSelectionCount();
+    }
+
+    function deselectAllPrintSites() {
+      document.querySelectorAll('.print-site-checkbox').forEach(cb => cb.checked = false);
+      updatePrintSelectionCount();
+    }
+
+    function toggleAllPrintSites(checked) {
+      document.querySelectorAll('.print-site-checkbox').forEach(cb => cb.checked = checked);
+      updatePrintSelectionCount();
+    }
+
+    function updatePrintSelectionCount() {
+      const selected = document.querySelectorAll('.print-site-checkbox:checked').length;
+      const total = document.querySelectorAll('.print-site-checkbox').length;
+      document.getElementById('printSelectionCount').textContent = `${selected} of ${total} sites selected`;
+      document.getElementById('printSelectAll').checked = selected === total && total > 0;
+    }
+
+    function getSelectedPrintSites() {
+      const selectedIds = Array.from(document.querySelectorAll('.print-site-checkbox:checked')).map(cb => cb.dataset.siteId);
+      return sampleSitesData.filter(s => selectedIds.includes(s.SiteID));
+    }
+
+    function generateLabels(format) {
+      const selectedSites = getSelectedPrintSites();
+      if (selectedSites.length === 0) {
+        Utils.showStatus('Please select at least one site', false);
+        return;
+      }
+
+      const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
+      const today = new Date().toLocaleDateString();
+
+      let printContent = '';
+
+      if (format === 'sheet') {
+        // Generate a printable sheet with all samples listed
+        printContent = `
+          <html>
+          <head>
+            <title>Sample Collection Sheet</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { font-size: 18px; margin-bottom: 5px; }
+              .date { font-size: 12px; color: #666; margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+              th, td { border: 1px solid #333; padding: 8px; text-align: left; font-size: 12px; }
+              th { background: #f0f0f0; font-weight: bold; }
+              .notes { width: 150px; }
+              @media print { body { padding: 10px; } }
+            </style>
+          </head>
+          <body>
+            <h1>Sample Collection Sheet</h1>
+            <div class="date">Generated: ${today} | Total Samples: ${selectedSites.length}</div>
+            <table>
+              <tr>
+                <th>Sample ID</th>
+                <th>Type</th>
+                <th>Field</th>
+                <th>Client/Farm</th>
+                <th>Collected</th>
+                <th class="notes">Notes</th>
+              </tr>
+              ${selectedSites.map(s => `
+                <tr>
+                  <td><strong>${s.SiteID}</strong></td>
+                  <td>${typeNames[s.Type] || s.Type}</td>
+                  <td>${s.Field || '-'}</td>
+                  <td>${s.Client || ''}${s.Farm ? ' / ' + s.Farm : ''}</td>
+                  <td style="width: 30px;">☐</td>
+                  <td class="notes">${s.Notes || ''}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </body>
+          </html>
+        `;
+      } else {
+        // Generate printable labels (2 columns)
+        printContent = `
+          <html>
+          <head>
+            <title>Sample Labels</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 10px; }
+              .labels-container { display: flex; flex-wrap: wrap; gap: 10px; }
+              .label {
+                border: 2px solid #333;
+                border-radius: 8px;
+                padding: 12px;
+                width: calc(50% - 15px);
+                box-sizing: border-box;
+                page-break-inside: avoid;
+              }
+              .label-id { font-size: 18px; font-weight: bold; font-family: monospace; margin-bottom: 5px; }
+              .label-type { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 3px; }
+              .label-field { font-size: 12px; color: #666; }
+              .label-date { font-size: 10px; color: #999; margin-top: 5px; }
+              @media print {
+                .label { border-width: 1px; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="labels-container">
+              ${selectedSites.map(s => `
+                <div class="label">
+                  <div class="label-id">${s.SiteID}</div>
+                  <div class="label-type">${typeNames[s.Type] || s.Type}</div>
+                  <div class="label-field">${s.Field || 'No Field'}</div>
+                  <div class="label-field">${s.Client || ''}${s.Farm ? ' / ' + s.Farm : ''}</div>
+                  <div class="label-date">Date: ____________</div>
+                </div>
+              `).join('')}
+            </div>
+          </body>
+          </html>
+        `;
+      }
+
+      // Open print window
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 250);
+    }
+
     // ========== INIT ==========
     document.addEventListener('DOMContentLoaded', async () => {
       // Run migration first to ensure data structures are up to date
@@ -1944,6 +2224,7 @@
 
       // Sample site buttons
       document.getElementById('addSampleSiteBtn').addEventListener('click', togglePinDropMode);
+      document.getElementById('printSamplesBtn').addEventListener('click', openPrintSamplesModal);
       document.getElementById('mobileSampleSiteBtn').addEventListener('click', mobileSiteFromCurrentLocation);
 
       // Mobile toolbar buttons
