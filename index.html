@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.161";
-    const BUILD_DATE = "2026-01-26T07:28:44";
+    const APP_VERSION = "v1.0.162";
+    const BUILD_DATE = "2026-01-26T07:35:58";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1455,13 +1455,15 @@
         return;
       }
 
-      // Check if cache is fresh (less than 5 minutes old)
+      // Check if cache is fresh (less than 5 minutes old) AND has field boundaries
       const cacheTime = localStorage.getItem('soilDataCacheTime');
       const cacheFresh = cacheTime && (Date.now() - parseInt(cacheTime)) < 300000; // 5 minutes
+      const hasFieldData = Object.keys(fieldBoundaries).length > 0;
 
       try {
-        // Try to load from Google Sheets (public access first)
-        if (!cacheFresh) {
+        // Try to load from Google Sheets if cache is stale OR missing field boundaries
+        if (!cacheFresh || !hasFieldData) {
+          if (!hasFieldData) console.log('No field boundaries in cache, loading from sheets...');
           const loaded = await loadFromSheetsPublic();
           // If Sheets failed and we have no data, try backup
           if (!loaded && sampleData.length === 0) {
