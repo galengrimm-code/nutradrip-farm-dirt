@@ -535,8 +535,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.182";
-    const BUILD_DATE = "2026-01-26T14:28:42";
+    const APP_VERSION = "v1.0.183";
+    const BUILD_DATE = "2026-01-26T14:33:50";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1928,7 +1928,7 @@
         html += `
           <tr style="background: ${bgColor};" class="print-site-row" data-site-id="${site.SiteID}">
             <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">
-              <input type="checkbox" class="print-site-checkbox" data-site-id="${site.SiteID}" onchange="updatePrintSelectionCount()">
+              <input type="checkbox" class="print-site-checkbox" data-site-id="${site.SiteID}" data-site-type="${site.Type}" onchange="updatePrintSelectionCount()">
             </td>
             <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: 600;">${site.SiteID}</td>
             <td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">${typeNames[site.Type] || site.Type}</td>
@@ -1968,8 +1968,10 @@
     }
 
     function getSelectedPrintSites() {
-      const selectedIds = Array.from(document.querySelectorAll('.print-site-checkbox:checked')).map(cb => cb.dataset.siteId);
-      return sampleSitesData.filter(s => selectedIds.includes(s.SiteID));
+      // Get both SiteID and Type to uniquely identify each site
+      const selectedKeys = Array.from(document.querySelectorAll('.print-site-checkbox:checked'))
+        .map(cb => `${cb.dataset.siteId}|${cb.dataset.siteType}`);
+      return sampleSitesData.filter(s => selectedKeys.includes(`${s.SiteID}|${s.Type}`));
     }
 
     function generateLabels(format) {
