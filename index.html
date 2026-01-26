@@ -536,8 +536,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.184";
-    const BUILD_DATE = "2026-01-26T14:51:25";
+    const APP_VERSION = "v1.0.185";
+    const BUILD_DATE = "2026-01-26T15:04:59";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1541,7 +1541,7 @@
       }
     }
 
-    // Delete a sample site by SiteID
+    // Delete a sample site by SiteID (hard delete - removes from sheet)
     async function deleteSampleSite(siteId) {
       // Find ALL sites with this SiteID (multiple types may share same ID)
       const matchingSites = sampleSitesData.filter(s => s.SiteID === siteId && s.Active !== 'FALSE');
@@ -1554,7 +1554,7 @@
       const types = matchingSites.map(s => typeNames[s.Type] || s.Type).join(', ');
       const field = matchingSites[0].Field || 'N/A';
 
-      if (!confirm(`Delete sample site "${siteId}"?\n\nTypes: ${types}\nField: ${field}\n\nThis will remove ${matchingSites.length > 1 ? 'all ' + matchingSites.length + ' entries' : 'the site'} from the map.`)) {
+      if (!confirm(`Delete sample site "${siteId}"?\n\nTypes: ${types}\nField: ${field}\n\nThis will permanently remove ${matchingSites.length > 1 ? 'all ' + matchingSites.length + ' entries' : 'the site'}.`)) {
         return;
       }
 
@@ -1562,99 +1562,100 @@
       map.closePopup();
 
       try {
-        // Update Google Sheet - set Active to FALSE for ALL matching rows
+        // Hard delete from Google Sheet - actually remove rows
         if (SheetsAPI.isSignedIn) {
-          const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: CONFIG.SHEET_ID,
-            range: 'SampleSites!A:J'
-          });
-
-          const rows = response.result.values || [];
-          const headerRow = rows[0] || [];
-          const siteIdCol = headerRow.indexOf('SiteID');
-          const activeCol = headerRow.indexOf('Active');
-
-          if (siteIdCol >= 0 && activeCol >= 0) {
-            // Find ALL rows with this SiteID and batch update them
-            const updates = [];
-            for (let i = 1; i < rows.length; i++) {
-              if (rows[i][siteIdCol] === siteId) {
-                updates.push({
-                  range: `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`,
-                  values: [['FALSE']]
-                });
-              }
-            }
-
-            if (updates.length > 0) {
-              await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: CONFIG.SHEET_ID,
-                resource: {
-                  valueInputOption: 'RAW',
-                  data: updates
-                }
-              });
-            }
-          }
+          await hardDeleteFromSheet(siteId);
         }
 
-        // Mark ALL matching sites as inactive in local data
-        matchingSites.forEach(site => site.Active = 'FALSE');
+        // Remove from local data
+        sampleSitesData = sampleSitesData.filter(s => s.SiteID !== siteId);
 
-        // Refresh markers (will filter out inactive sites)
+        // Refresh markers
         displaySampleSiteMarkers();
 
-        Utils.showStatus(`✓ Deleted ${matchingSites.length > 1 ? matchingSites.length + ' entries for' : 'site'} "${siteId}"`, true);
+        Utils.showStatus(`✓ Permanently deleted ${matchingSites.length > 1 ? matchingSites.length + ' entries for' : 'site'} "${siteId}"`, true);
       } catch (error) {
         console.error('Error deleting sample site:', error);
         Utils.showStatus('Error deleting site: ' + error.message, false);
       }
     }
 
+    // Hard delete rows from SampleSites sheet
+    async function hardDeleteFromSheet(siteId, siteType = null) {
+      // Get sheet metadata to find the sheet ID
+      const sheetMeta = await gapi.client.sheets.spreadsheets.get({
+        spreadsheetId: CONFIG.SHEET_ID
+      });
+
+      const sampleSitesSheet = sheetMeta.result.sheets.find(s => s.properties.title === 'SampleSites');
+      if (!sampleSitesSheet) return;
+
+      const sheetId = sampleSitesSheet.properties.sheetId;
+
+      // Get all data to find row indices
+      const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: CONFIG.SHEET_ID,
+        range: 'SampleSites!A:J'
+      });
+
+      const rows = response.result.values || [];
+      const headerRow = rows[0] || [];
+      const siteIdCol = headerRow.indexOf('SiteID');
+      const typeCol = headerRow.indexOf('Type');
+
+      if (siteIdCol < 0) return;
+
+      // Find rows to delete (collect indices, working backwards to avoid shifting)
+      const rowsToDelete = [];
+      for (let i = rows.length - 1; i >= 1; i--) {
+        const rowSiteId = rows[i][siteIdCol];
+        const rowType = typeCol >= 0 ? rows[i][typeCol] : null;
+
+        if (rowSiteId === siteId && (!siteType || rowType === siteType)) {
+          rowsToDelete.push(i);
+        }
+      }
+
+      // Delete rows (already in reverse order)
+      if (rowsToDelete.length > 0) {
+        const requests = rowsToDelete.map(rowIndex => ({
+          deleteDimension: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1
+            }
+          }
+        }));
+
+        await gapi.client.sheets.spreadsheets.batchUpdate({
+          spreadsheetId: CONFIG.SHEET_ID,
+          resource: { requests }
+        });
+      }
+    }
+
     // Silent delete for edit mode (no confirmation, no status message)
+    // Silent delete for edit mode - hard delete (removes row from sheet)
     // siteType parameter allows matching specific type when multiple types share same SiteID
     async function deleteSampleSiteById(siteId, siteType, silent = false) {
       // Find site matching both SiteID and Type (or just SiteID if type not provided)
-      const site = sampleSitesData.find(s =>
+      const siteIndex = sampleSitesData.findIndex(s =>
         s.SiteID === siteId &&
         s.Active !== 'FALSE' &&
         (!siteType || s.Type === siteType)
       );
-      if (!site) return;
+      if (siteIndex < 0) return;
 
       try {
+        // Hard delete from Google Sheet
         if (SheetsAPI.isSignedIn) {
-          const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: CONFIG.SHEET_ID,
-            range: 'SampleSites!A:J'
-          });
-
-          const rows = response.result.values || [];
-          const headerRow = rows[0] || [];
-          const siteIdCol = headerRow.indexOf('SiteID');
-          const typeCol = headerRow.indexOf('Type');
-          const activeCol = headerRow.indexOf('Active');
-
-          if (siteIdCol >= 0 && activeCol >= 0) {
-            for (let i = 1; i < rows.length; i++) {
-              const rowSiteId = rows[i][siteIdCol];
-              const rowType = typeCol >= 0 ? rows[i][typeCol] : null;
-              // Match SiteID and Type (if type provided)
-              if (rowSiteId === siteId && (!siteType || rowType === siteType)) {
-                const range = `SampleSites!${String.fromCharCode(65 + activeCol)}${i + 1}`;
-                await gapi.client.sheets.spreadsheets.values.update({
-                  spreadsheetId: CONFIG.SHEET_ID,
-                  range: range,
-                  valueInputOption: 'RAW',
-                  resource: { values: [['FALSE']] }
-                });
-                break;
-              }
-            }
-          }
+          await hardDeleteFromSheet(siteId, siteType);
         }
 
-        site.Active = 'FALSE';
+        // Remove from local data
+        sampleSitesData.splice(siteIndex, 1);
         displaySampleSiteMarkers();
       } catch (error) {
         console.error('Error deleting sample site:', error);
