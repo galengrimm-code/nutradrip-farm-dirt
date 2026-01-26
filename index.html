@@ -380,15 +380,27 @@
             </div>
           </div>
 
-          <!-- Type Dropdown -->
+          <!-- Type Checkboxes (multi-select) -->
           <div style="margin-bottom: 0.875rem;">
-            <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">SAMPLE TYPE</label>
-            <select id="siteTypeSelect" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem;">
-              <option value="TIS">🌿 Plant Tissue</option>
-              <option value="WAT">💧 Water</option>
-              <option value="SAP">🧪 Plant Sap</option>
-              <option value="ISS">🌱 In-Season Soil</option>
-            </select>
+            <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.5rem;">SAMPLE TYPES (select all that apply)</label>
+            <div id="siteTypeCheckboxes" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;">
+                <input type="checkbox" name="siteType" value="TIS" style="width: 1rem; height: 1rem; accent-color: #22c55e;">
+                <span>🌿 Tissue</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;">
+                <input type="checkbox" name="siteType" value="SAP" style="width: 1rem; height: 1rem; accent-color: #f59e0b;">
+                <span>🧪 Sap</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;">
+                <input type="checkbox" name="siteType" value="ISS" style="width: 1rem; height: 1rem; accent-color: #8b5cf6;">
+                <span>🌱 In-Season Soil</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;">
+                <input type="checkbox" name="siteType" value="WAT" style="width: 1rem; height: 1rem; accent-color: #3b82f6;">
+                <span>💧 Water</span>
+              </label>
+            </div>
           </div>
 
           <!-- Client Dropdown -->
@@ -452,8 +464,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.174";
-    const BUILD_DATE = "2026-01-26T10:32:26";
+    const APP_VERSION = "v1.0.175";
+    const BUILD_DATE = "2026-01-26T10:38:16";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1042,6 +1054,9 @@
       document.getElementById('siteIdInput').value = '';
       document.getElementById('siteNotesInput').value = '';
 
+      // Clear all type checkboxes
+      document.querySelectorAll('input[name="siteType"]').forEach(cb => cb.checked = false);
+
       // Reset GPS tracking button state
       stopLocationTracking();
 
@@ -1174,7 +1189,9 @@
 
     // Auto-generate Site ID based on current selections
     function autoGenerateSiteId() {
-      const typeCode = document.getElementById('siteTypeSelect').value;
+      // Get first selected type from checkboxes
+      const selectedType = document.querySelector('input[name="siteType"]:checked');
+      const typeCode = selectedType ? selectedType.value : 'TIS';
       const fieldName = document.getElementById('siteFieldDisplay').textContent;
       const siteId = generateSiteId(typeCode, fieldName);
       document.getElementById('siteIdInput').value = siteId;
@@ -1201,7 +1218,7 @@
       return `${prefix}-${seqNum}`;
     }
 
-    // Save sample site
+    // Save sample site(s) - supports multiple types at same location
     async function saveSampleSite() {
       if (!pendingSiteCoords) {
         Utils.showStatus('No location selected', false);
@@ -1213,7 +1230,13 @@
         return;
       }
 
-      const typeCode = document.getElementById('siteTypeSelect').value;
+      // Get selected types from checkboxes
+      const selectedTypes = Array.from(document.querySelectorAll('input[name="siteType"]:checked')).map(cb => cb.value);
+      if (selectedTypes.length === 0) {
+        Utils.showStatus('Please select at least one sample type', false);
+        return;
+      }
+
       const clientId = document.getElementById('siteClientSelect').value;
       const farmId = document.getElementById('siteFarmSelect').value;
       const fieldName = document.getElementById('siteFieldDisplay').textContent;
@@ -1232,42 +1255,46 @@
       const client = clientsData.find(c => c.id === clientId);
       const farm = farmsData.find(f => f.id === farmId);
 
-      // Get Site ID from input (user-entered or auto-generated)
-      let siteId = document.getElementById('siteIdInput').value.trim();
-      if (!siteId) {
-        // Auto-generate if not provided
-        siteId = generateSiteId(typeCode, fieldName);
-        document.getElementById('siteIdInput').value = siteId;
-      }
+      // Get base Site ID from input (user-entered or will auto-generate per type)
+      const baseSiteId = document.getElementById('siteIdInput').value.trim();
 
       // Stop GPS tracking before saving
       stopLocationTracking();
-
-      const siteData = {
-        SiteID: siteId,
-        Type: typeCode,
-        Client: client?.name || '',
-        Farm: farm?.name || '',
-        Field: fieldName.includes('No field') ? '' : fieldName,
-        Lat: pendingSiteCoords.lat,
-        Lng: pendingSiteCoords.lng,
-        Notes: notes,
-        Active: 'TRUE',
-        CreatedDate: new Date().toISOString()
-      };
 
       try {
         document.getElementById('saveSiteBtn').textContent = 'Saving...';
         document.getElementById('saveSiteBtn').disabled = true;
 
         await ensureSampleSitesTab();
-        await appendSampleSiteToSheet(siteData);
 
-        sampleSitesData.push(siteData);
-        addSampleSiteMarker(siteData);
+        const savedSites = [];
+        for (const typeCode of selectedTypes) {
+          // Generate unique Site ID for each type
+          const siteId = baseSiteId || generateSiteId(typeCode, fieldName);
+
+          const siteData = {
+            SiteID: siteId,
+            Type: typeCode,
+            Client: client?.name || '',
+            Farm: farm?.name || '',
+            Field: fieldName.includes('No field') ? '' : fieldName,
+            Lat: pendingSiteCoords.lat,
+            Lng: pendingSiteCoords.lng,
+            Notes: notes,
+            Active: 'TRUE',
+            CreatedDate: new Date().toISOString()
+          };
+
+          await appendSampleSiteToSheet(siteData);
+          sampleSitesData.push(siteData);
+          addSampleSiteMarker(siteData);
+          savedSites.push(siteId);
+        }
 
         closeSampleSiteModal();
-        Utils.showStatus(`Sample site ${siteId} saved`, true);
+        const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
+        const savedTypeNames = selectedTypes.map(t => typeNames[t] || t).join(', ');
+        Utils.showStatus(`✓ Saved ${selectedTypes.length} site(s): ${savedTypeNames}`, true);
       } catch (error) {
         console.error('Error saving sample site:', error);
         Utils.showStatus('Error saving: ' + error.message, false);
