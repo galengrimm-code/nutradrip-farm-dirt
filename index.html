@@ -473,11 +473,7 @@
           <div style="flex: 1; min-width: 150px;">
             <label style="font-size: 0.6875rem; font-weight: 600; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">FILTER BY TYPE</label>
             <select id="printFilterType" onchange="filterPrintSites()" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem;">
-              <option value="all">All Types</option>
-              <option value="TIS">🌿 Tissue</option>
-              <option value="SAP">🧪 Sap</option>
-              <option value="ISS">🌱 In-Season Soil</option>
-              <option value="WAT">💧 Water</option>
+              <!-- Populated dynamically based on existing sites -->
             </select>
           </div>
           <div style="flex: 1; min-width: 150px;">
@@ -532,8 +528,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.178";
-    const BUILD_DATE = "2026-01-26T12:10:11";
+    const APP_VERSION = "v1.0.179";
+    const BUILD_DATE = "2026-01-26T13:52:39";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1747,7 +1743,7 @@
 
     function openPrintSamplesModal() {
       const modal = document.getElementById('printSamplesModal');
-      populatePrintFieldFilter();
+      populatePrintFilters();
       populatePrintSitesList();
       updatePrintSelectionCount();
       modal.style.display = 'flex';
@@ -1757,16 +1753,29 @@
       document.getElementById('printSamplesModal').style.display = 'none';
     }
 
-    function populatePrintFieldFilter() {
-      const fieldSelect = document.getElementById('printFilterField');
+    function populatePrintFilters() {
       const activeSites = sampleSitesData.filter(s => s.Active !== 'FALSE');
+
+      // Populate type filter - only show types that have sites
+      const typeSelect = document.getElementById('printFilterType');
+      const typeNames = { 'TIS': '🌿 Tissue', 'WAT': '💧 Water', 'SAP': '🧪 Sap', 'ISS': '🌱 In-Season Soil' };
+      const existingTypes = [...new Set(activeSites.map(s => s.Type).filter(t => t))];
+
+      let typeHtml = '<option value="all">All Types</option>';
+      existingTypes.sort().forEach(t => {
+        typeHtml += `<option value="${t}">${typeNames[t] || t}</option>`;
+      });
+      typeSelect.innerHTML = typeHtml;
+
+      // Populate field filter
+      const fieldSelect = document.getElementById('printFilterField');
       const fields = [...new Set(activeSites.map(s => s.Field).filter(f => f))].sort();
 
-      let html = '<option value="all">All Fields</option>';
+      let fieldHtml = '<option value="all">All Fields</option>';
       fields.forEach(f => {
-        html += `<option value="${f}">${f}</option>`;
+        fieldHtml += `<option value="${f}">${f}</option>`;
       });
-      fieldSelect.innerHTML = html;
+      fieldSelect.innerHTML = fieldHtml;
     }
 
     function populatePrintSitesList() {
