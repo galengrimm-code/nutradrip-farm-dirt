@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.164";
-    const BUILD_DATE = "2026-01-26T07:43:40";
+    const APP_VERSION = "v1.0.165";
+    const BUILD_DATE = "2026-01-26T07:45:30";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -726,7 +726,9 @@
 
     // Get fields filtered by active client/farm selection (uses local state)
     function getActiveFields() {
-      return DataCore.getActiveFields(fieldBoundaries, farmsData, activeClientId, activeFarmId);
+      const fields = DataCore.getActiveFields(fieldBoundaries, farmsData, activeClientId, activeFarmId);
+      console.log('getActiveFields:', { activeClientId, activeFarmId, totalBoundaries: Object.keys(fieldBoundaries).length, activeFieldsCount: fields.length });
+      return fields;
     }
 
     // Get boundary coordinates for a field
