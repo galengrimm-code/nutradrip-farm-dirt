@@ -593,8 +593,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.167";
-    const BUILD_DATE = "2026-01-26T08:08:11";
+    const APP_VERSION = "v1.0.168";
+    const BUILD_DATE = "2026-01-26T08:27:03";
 
     // Reference shared data config with analysis-specific additions
     const CONFIG = {
@@ -1181,10 +1181,10 @@
 
     // --- PART 2: Flat Thresholds (slope thresholds for "no real change") ---
     const FLAT_THRESHOLDS = {
-      pH: 0.05,     // units/yr
+      pH: 0.03,     // units/yr (tightened: 0.05 implies 0.5 pH in 10 years)
       P: 1.0,       // ppm/yr
       K: 5.0,       // ppm/yr
-      OM: 0.1,      // %/yr
+      OM: 0.05,     // %/yr (tightened: 0.1 is too aggressive, labels working management as flat)
       Zn: 0.1,      // ppm/yr
       S: 1.0,       // ppm/yr
       B: 0.05,      // ppm/yr
@@ -1321,10 +1321,12 @@
     }
 
     // --- PART 7: Dynamic Zn Target ---
+    // Guardrail: Cap at 5.0 ppm to prevent unrealistic targets (e.g., P=75 → Zn target 7.5 is too aggressive)
     function getDynamicZnTarget(P_ppm) {
       const baseMin = getNutrientThresholds('Zn').optimalMin;
       const ratioTarget = P_ppm / 10;
-      return Math.max(baseMin, ratioTarget);
+      const dynamicTarget = Math.max(baseMin, ratioTarget);
+      return Math.min(dynamicTarget, 5.0); // Cap at 5.0 ppm max
     }
 
     function getZnStatus(Zn_ppm, P_ppm) {
@@ -1334,6 +1336,164 @@
       if (Zn_ppm < thresh.low) return 'Low';
       if (Zn_ppm < target) return 'Marginal';
       return 'Adequate';
+    }
+
+    // --- PART 7b: Interaction Notes System ---
+    // Collects interaction-based notes for Fe/Mn/B and stacked risk scenarios
+    // These are returned as interactionNotes[] on cards - shown only when relevant
+    function collectInteractionNotes(x) {
+      const notes = [];
+
+      // Get pH thresholds from settings
+      const phThresh = getPHThresholds();
+      const pH_high = x.pH > phThresh.optimalMax;
+      const pH_very_high = x.pH >= (phThresh.optimalMax + 0.8) || !!x.calcareous;
+      const pH_very_low = x.pH < phThresh.veryLow;
+
+      const P_high = x.P_ppm > getNutrientThresholds('P').optimalMax;
+
+      const znThresh = getZnThresholds();
+      const Zn_low = x.Zn_ppm < znThresh.low;
+      const Zn_marg = x.Zn_ppm >= znThresh.low && x.Zn_ppm <= znThresh.marginal;
+
+      const ratioThresh = getRatioThresholds();
+      const ratio_elev = x.PZn_ratio > ratioThresh.normal;
+      const ratio_high = x.PZn_ratio > ratioThresh.highRisk;
+
+      // ---- High pH: micronutrient availability cluster (Zn/Fe/Mn) ----
+      if (pH_high && !notes.some(n => n.code === 'PH_HIGH_MICRO_AVAIL')) {
+        notes.push({
+          code: 'PH_HIGH_MICRO_AVAIL',
+          severity: pH_very_high ? 3 : 2,
+          message: 'High pH increases risk of micronutrient limitation (Zn/Fe/Mn availability). Confirm with tissue/scouting; placement often matters more than rate.'
+        });
+      }
+
+      // ---- Very low pH: root restriction + P efficiency + Mn toxicity risk ----
+      if (pH_very_low) {
+        notes.push({
+          code: 'PH_VERY_LOW_ROOT_P',
+          severity: 3,
+          message: 'Very low pH can restrict roots (Al toxicity risk) and reduce P efficiency (strong fixation). Mn toxicity risk may increase in wet areas.'
+        });
+      }
+
+      // ---- P:Zn ratio + Zn status ----
+      if (ratio_high && (Zn_low || Zn_marg)) {
+        notes.push({
+          code: 'RATIO_HIGH_ZN_LOW',
+          severity: 3,
+          message: 'High P:Zn ratio with low/marginal Zn = high Zn limitation risk (especially corn). Prioritize starter/banded Zn; use foliar only as rescue when confirmed.'
+        });
+      } else if (ratio_high && !(Zn_low || Zn_marg)) {
+        notes.push({
+          code: 'RATIO_HIGH_ZN_OK',
+          severity: 2,
+          message: 'High P:Zn ratio can still signal Zn uptake risk even if soil Zn is adequate—especially under high pH. Monitor/tissue test before adding Zn.'
+        });
+      } else if (ratio_elev && (Zn_low || Zn_marg)) {
+        notes.push({
+          code: 'RATIO_ELEV_ZN_LOW',
+          severity: 2,
+          message: 'Elevated P:Zn ratio plus low/marginal Zn increases early-season Zn risk. Placement and verification recommended.'
+        });
+      }
+
+      // ---- High P + elevated ratio guardrail ----
+      if (P_high && ratio_elev) {
+        notes.push({
+          code: 'P_HIGH_RATIO_GUARD',
+          severity: ratio_high ? 2 : 1,
+          message: 'P is above optimal and P:Zn is elevated—avoid additional P inputs; focus on Zn access/placement if risk is present.'
+        });
+      }
+
+      // ---- Fe (availability warning: pH-driven) ----
+      if (pH_high) {
+        notes.push({
+          code: 'FE_CHLOROSIS_RISK',
+          severity: pH_very_high ? 3 : 2,
+          message: 'High pH/calcareous zones increase iron chlorosis risk (availability-limited). Soil Fe tests may not predict plant response.'
+        });
+      }
+      if (typeof x.Fe_ppm === 'number' && x.Fe_ppm < 10 && pH_high) {
+        notes.push({
+          code: 'FE_LOW_SUPPORT',
+          severity: 2,
+          message: 'Low soil Fe + high pH increases confidence of Fe limitation risk in high pH zones. Confirm with tissue/symptoms.'
+        });
+      }
+
+      // ---- Mn (deficiency at high pH, toxicity at very low pH) ----
+      if (pH_high && !notes.some(n => n.code === 'MN_DEF_RISK')) {
+        notes.push({
+          code: 'MN_DEF_RISK',
+          severity: pH_very_high ? 2 : 1,
+          message: 'High pH increases Mn deficiency risk; can co-occur with Zn/Fe issues.'
+        });
+      }
+      if (pH_very_low) {
+        notes.push({
+          code: 'MN_TOX_RISK',
+          severity: 3,
+          message: 'Very low pH increases risk of Mn toxicity, especially in wet/poorly drained zones.'
+        });
+      }
+      if (typeof x.Mn_ppm === 'number' && x.Mn_ppm < 10 && pH_high) {
+        notes.push({
+          code: 'MN_LOW_SUPPORT',
+          severity: 2,
+          message: 'Low soil Mn + high pH increases confidence of Mn deficiency risk. Confirm before applying.'
+        });
+      }
+
+      // ---- Boron: narrow window + Zn guardrail ----
+      if (typeof x.B_ppm === 'number') {
+        if (x.B_ppm < 0.5) {
+          notes.push({
+            code: 'B_LOW',
+            severity: 2,
+            message: 'Soil B is low. Boron has a narrow safe range—confirm with tissue/symptoms before correcting.'
+          });
+        }
+        if (x.B_ppm > 2.0) {
+          notes.push({
+            code: 'B_HIGH_TOX',
+            severity: 3,
+            message: 'Soil B is high—boron toxicity risk. Avoid additional B inputs.'
+          });
+        }
+        if ((Zn_low || Zn_marg) && x.B_ppm >= 1.0) {
+          notes.push({
+            code: 'ZN_LOW_B_GUARD',
+            severity: 2,
+            message: 'When Zn is low/marginal, plants can be more sensitive to B—avoid applying B unless tissue confirms deficiency.'
+          });
+        }
+      }
+
+      // ---- Stacked interaction: High pH + elevated ratio + low Zn ----
+      if ((ratio_elev || ratio_high) && (Zn_low || Zn_marg) && (pH_high || pH_very_high)) {
+        notes.push({
+          code: 'STACKED_MICRO_RISK',
+          severity: 3,
+          message: 'Stacked interaction: High pH + elevated ratio + low Zn strongly increases micronutrient limitation risk. Prioritize starter/banded Zn in high-risk zones.'
+        });
+      }
+
+      // ---- Dynamic Zn target guardrail (risk overlay, not deficiency reclass) ----
+      const dynamicZnTarget = getDynamicZnTarget(x.P_ppm || 30);
+      if (x.Zn_ppm < dynamicZnTarget && x.P_ppm > 25 && !Zn_low) {
+        notes.push({
+          code: 'ZN_DYNAMIC_TARGET_OVERLAY',
+          severity: 1,
+          message: `Relative to P level, Zn is below balance target (${dynamicZnTarget.toFixed(1)} ppm). Focus on placement + confirmation rather than building to this target.`
+        });
+      }
+
+      // De-duplicate by code
+      const seen = new Set();
+      return notes.filter(n => (seen.has(n.code) ? false : (seen.add(n.code), true)));
     }
 
     // --- PART 8: Build pH Card ---
@@ -1761,7 +1921,7 @@
     }
 
     // --- PART 13: Render Insight Card HTML ---
-    function renderInsightCard(card) {
+    function renderInsightCard(card, interactionNotes = []) {
       if (!card || (!card.insight && card.tips.length === 0 && card.warnings.length === 0)) return '';
 
       const bgColors = {
@@ -1791,8 +1951,40 @@
         html += `</div>`;
       }
 
+      // Render interaction notes (Fe/Mn/B risk overlays) if relevant to this card
+      const relevantNotes = filterInteractionNotesForCard(card.key, interactionNotes);
+      if (relevantNotes.length > 0) {
+        html += `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #94a3b8; font-size: 0.75rem;">`;
+        html += `<div style="font-weight: 600; color: #7c3aed; margin-bottom: 0.25rem;">🔗 Potential Interactions:</div>`;
+        relevantNotes.forEach(note => {
+          const severityIcon = note.severity === 3 ? '🔴' : (note.severity === 2 ? '🟡' : '💡');
+          html += `<div style="margin-bottom: 0.25rem; color: #475569;">${severityIcon} ${note.message}</div>`;
+        });
+        html += `</div>`;
+      }
+
       html += `</div>`;
       return html;
+    }
+
+    // Filter interaction notes relevant to a specific card
+    function filterInteractionNotesForCard(cardKey, notes) {
+      if (!notes || notes.length === 0) return [];
+
+      // Map card keys to relevant interaction note codes
+      const relevance = {
+        'pH': ['PH_HIGH_MICRO_AVAIL', 'PH_VERY_LOW_ROOT_P', 'FE_CHLOROSIS_RISK', 'MN_DEF_RISK', 'MN_TOX_RISK', 'STACKED_MICRO_RISK'],
+        'P': ['PH_VERY_LOW_ROOT_P', 'RATIO_HIGH_ZN_LOW', 'RATIO_HIGH_ZN_OK', 'RATIO_ELEV_ZN_LOW', 'P_HIGH_RATIO_GUARD'],
+        'Zn': ['PH_HIGH_MICRO_AVAIL', 'RATIO_HIGH_ZN_LOW', 'RATIO_HIGH_ZN_OK', 'RATIO_ELEV_ZN_LOW', 'P_HIGH_RATIO_GUARD', 'ZN_DYNAMIC_TARGET_OVERLAY', 'ZN_LOW_B_GUARD', 'STACKED_MICRO_RISK'],
+        'P_Zn_Ratio': ['RATIO_HIGH_ZN_LOW', 'RATIO_HIGH_ZN_OK', 'RATIO_ELEV_ZN_LOW', 'P_HIGH_RATIO_GUARD', 'STACKED_MICRO_RISK'],
+        'Fe': ['PH_HIGH_MICRO_AVAIL', 'FE_CHLOROSIS_RISK', 'FE_LOW_SUPPORT', 'STACKED_MICRO_RISK'],
+        'Mn': ['PH_HIGH_MICRO_AVAIL', 'MN_DEF_RISK', 'MN_TOX_RISK', 'MN_LOW_SUPPORT', 'STACKED_MICRO_RISK'],
+        'Boron': ['B_LOW', 'B_HIGH_TOX', 'ZN_LOW_B_GUARD'],
+        'B': ['B_LOW', 'B_HIGH_TOX', 'ZN_LOW_B_GUARD']
+      };
+
+      const relevantCodes = relevance[cardKey] || [];
+      return notes.filter(n => relevantCodes.includes(n.code));
     }
 
     // ========== TAB 1: Year Comparison ==========
@@ -2057,7 +2249,22 @@
             const currentPH = getAvgValue(recentSamples, 'pH');
             const currentP = getAvgValue(recentSamples, 'P');
             const currentZn = getAvgValue(recentSamples, 'Zn');
+            const currentFe = getAvgValue(recentSamples, 'Fe');
+            const currentMn = getAvgValue(recentSamples, 'Mn');
+            const currentB = getAvgValue(recentSamples, 'Boron') || getAvgValue(recentSamples, 'B');
             const currentPZnRatio = (currentP !== null && currentZn !== null && currentZn > 0) ? currentP / currentZn : null;
+
+            // Collect interaction notes for Fe/Mn/B risk overlays
+            const interactionNotes = collectInteractionNotes({
+              pH: currentPH || 6.5,
+              calcareous: false,
+              P_ppm: currentP || 0,
+              Zn_ppm: currentZn || 0,
+              PZn_ratio: currentPZnRatio || 0,
+              Fe_ppm: currentFe,
+              Mn_ppm: currentMn,
+              B_ppm: currentB
+            });
 
             // Get CV/SD from trendInsight if available
             const stabilityValue = trendInsight ? trendInsight.stability.value : null;
@@ -2124,7 +2331,7 @@
               }
 
               if (triggerCard) {
-                triggerCardHtml = renderInsightCard(triggerCard);
+                triggerCardHtml = renderInsightCard(triggerCard, interactionNotes);
                 // Override the urgency badge with the trigger card badge
                 if (triggerCard.badge) {
                   const badgeColors = {
