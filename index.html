@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.170";
-    const BUILD_DATE = "2026-01-26T09:24:25";
+    const APP_VERSION = "v1.0.171";
+    const BUILD_DATE = "2026-01-26T09:51:24";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -2151,6 +2151,73 @@
       }
     }
 
+    // Delete a sample by matching lat/lon/year (and optionally sampleType)
+    async function deleteSample(sample) {
+      const sampleId = sample.sampleId || 'Unknown';
+      const sampleType = sample.sampleType || 'soil';
+
+      // Find matching samples at this location
+      const matchingSamples = sampleData.filter(s =>
+        s.lat === sample.lat &&
+        s.lon === sample.lon &&
+        s.year === sample.year
+      );
+
+      let confirmed = false;
+
+      if (matchingSamples.length > 1) {
+        // Multiple sample types at this location - ask which to delete
+        const types = matchingSamples.map(s => s.sampleType || 'soil').join(', ');
+        confirmed = confirm(`Delete sample "${sampleId}" (${sample.year})?\n\nThis location has multiple sample types: ${types}\n\nThis will delete only the "${sampleType}" sample.`);
+      } else {
+        confirmed = confirm(`Delete sample "${sampleId}" (${sample.year})?\n\nField: ${sample.field || 'Unknown'}\nType: ${sampleType}`);
+      }
+
+      if (!confirmed) return;
+
+      // Remove the specific sample
+      const beforeCount = sampleData.length;
+      sampleData = sampleData.filter(s => !(
+        s.lat === sample.lat &&
+        s.lon === sample.lon &&
+        s.year === sample.year &&
+        (s.sampleType || 'soil') === sampleType
+      ));
+
+      const deletedCount = beforeCount - sampleData.length;
+
+      if (deletedCount > 0) {
+        // Save and refresh
+        saveLocalData();
+        await saveToIndexedDB();
+        clearStabilityCache();
+        updateMap();
+        showStatus(`✓ Deleted sample "${sampleId}"`, true);
+
+        // Sync to Sheets if signed in
+        if (SheetsAPI.isSignedIn) {
+          try {
+            await SheetsAPI.syncSamples(sampleData);
+          } catch (e) {
+            console.warn('Failed to sync deletion to Sheets:', e);
+          }
+        }
+      }
+    }
+
+    // Helper for popup delete button - reads data attributes from button element
+    function deleteSampleByAttrs(btn) {
+      const sample = {
+        lat: parseFloat(btn.dataset.lat),
+        lon: parseFloat(btn.dataset.lon),
+        year: parseInt(btn.dataset.year, 10),
+        sampleType: btn.dataset.type || 'soil',
+        sampleId: btn.dataset.id || 'Unknown',
+        field: btn.dataset.field || 'Unknown'
+      };
+      deleteSample(sample);
+    }
+
     function updateLastUpdated() {
       const cacheTime = localStorage.getItem('soilDataCacheTime');
       const el = document.getElementById('lastUpdated');
@@ -2818,15 +2885,33 @@
         });
         const marker = L.marker([sample.lat, sample.lon], { icon }).addTo(map);
         marker.bindPopup(buildSamplePopup(sample, stabilityInfo));
+
+        // Double-click to delete sample
+        marker.on('dblclick', (e) => {
+          L.DomEvent.stopPropagation(e);
+          deleteSample(sample);
+        });
+
         currentLayers.push(marker);
       });
     }
 
     function buildSamplePopup(sample, stabilityInfo = null) {
       const visibleNutrients = getVisibleNutrients();
+      const sampleType = sample.sampleType || 'soil';
+      const typeLabels = {
+        'soil': 'Soil Sample',
+        'tissue': 'Tissue Sample',
+        'sap': 'Sap Sample',
+        'in-season-soil': 'In-Season Soil'
+      };
+      const typeLabel = typeLabels[sampleType] || sampleType;
+
       let html = `<div style="max-height: 350px; overflow-y: auto; min-width: 220px;">`;
-      html += `<div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid #3b82f6; padding-bottom: 4px;">`;
+      html += `<div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; border-bottom: 2px solid #3b82f6; padding-bottom: 4px;">`;
       html += `Sample ${sample.sampleId || 'Unknown'}</div>`;
+      html += `<div style="margin-bottom: 8px; padding: 3px 6px; background: #f1f5f9; border-radius: 4px; font-size: 11px; color: #475569; display: inline-block;">`;
+      html += `${typeLabel}</div>`;
       html += `<div style="margin-bottom: 8px; color: #64748b; font-size: 12px;">`;
       html += `<strong>Field:</strong> ${sample.field || 'Unknown'}<br>`;
       html += `<strong>Year:</strong> ${sample.year || 'N/A'}`;
@@ -2868,7 +2953,19 @@
         html += `</tr>`;
       });
 
-      html += `</table></div>`;
+      html += `</table>`;
+
+      // Add delete button with data attributes for identification
+      html += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center;">`;
+      html += `<button onclick="deleteSampleByAttrs(this)" `;
+      html += `data-lat="${sample.lat}" data-lon="${sample.lon}" data-year="${sample.year}" data-type="${sampleType}" `;
+      html += `data-id="${sample.sampleId || ''}" data-field="${sample.field || ''}" `;
+      html += `style="padding: 4px 12px; font-size: 11px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">`;
+      html += `🗑️ Delete Sample</button>`;
+      html += `<div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">or double-click marker</div>`;
+      html += `</div>`;
+
+      html += `</div>`;
       return html;
     }
 
