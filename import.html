@@ -382,6 +382,7 @@
       <h3>🔄 Data Management</h3>
       <div class="btn-row">
         <button class="button primary" id="loadFromSheetsBtn" style="background: #059669; color: white;">📥 Load from Google Sheets</button>
+        <button class="button primary" id="syncToSheetsBtn" style="background: #7c3aed; color: white;">📤 Sync to Google Sheets</button>
         <button class="button" id="reassignBtn" style="background: #3b82f6; color: white;">🔄 Reassign Samples to Boundaries</button>
       </div>
       <div class="btn-row" style="margin-top: 0.75rem;">
@@ -390,7 +391,7 @@
         <button class="button danger" id="clearYieldBtn">🗑️ Clear Yield Data</button>
         <button class="button danger" id="clearAllBtn">🗑️ Clear All</button>
       </div>
-      <small style="display:block; margin-top:0.75rem; color:#64748b;">Imports auto-sync to Google Sheets when signed in. Use "Load from Sheets" to pull data from another device.</small>
+      <small style="display:block; margin-top:0.75rem; color:#64748b;">Use "Sync to Sheets" to push local data to Google Sheets. Use "Load from Sheets" to pull data from the cloud.</small>
     </div>
 
     <!-- Data Quality / Outlier Removal Section -->
@@ -1198,8 +1199,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.173";
-    const BUILD_DATE = "2026-01-26T10:16:21";
+    const APP_VERSION = "v1.0.174";
+    const BUILD_DATE = "2026-01-26T10:32:26";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -1467,6 +1468,7 @@
       document.getElementById('uploadSampleBtn').addEventListener('click', uploadSamples);
       document.getElementById('uploadYieldBtn').addEventListener('click', uploadYield);
       document.getElementById('loadFromSheetsBtn').addEventListener('click', loadFromSheets);
+      document.getElementById('syncToSheetsBtn').addEventListener('click', syncToSheets);
       document.getElementById('clearSamplesBtn').addEventListener('click', clearSamples);
       document.getElementById('clearBoundariesBtn').addEventListener('click', clearBoundaries);
       document.getElementById('clearYieldBtn').addEventListener('click', clearYieldData);
