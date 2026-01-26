@@ -536,8 +536,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.187";
-    const BUILD_DATE = "2026-01-26T16:13:35";
+    const APP_VERSION = "v1.0.188";
+    const BUILD_DATE = "2026-01-26T16:21:19";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1707,16 +1707,26 @@
       }
     }
 
-    // Append site to sheet
+    // Append site to sheet - explicitly write to next empty row in column A
     async function appendSampleSiteToSheet(siteData) {
       const row = [
         siteData.SiteID, siteData.Type, siteData.Client, siteData.Farm, siteData.Field,
         siteData.Lat, siteData.Lng, siteData.Notes, siteData.Active, siteData.CreatedDate
       ];
 
-      await gapi.client.sheets.spreadsheets.values.append({
+      // Find the next empty row by reading column A
+      const response = await gapi.client.sheets.spreadsheets.values.get({
         spreadsheetId: CONFIG.SHEET_ID,
-        range: 'SampleSites!A:J',
+        range: 'SampleSites!A:A'
+      });
+
+      const existingRows = response.result.values || [];
+      const nextRow = existingRows.length + 1;
+
+      // Write to specific row starting at column A
+      await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: CONFIG.SHEET_ID,
+        range: `SampleSites!A${nextRow}:J${nextRow}`,
         valueInputOption: 'RAW',
         resource: { values: [row] }
       });
