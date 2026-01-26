@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.159";
-    const BUILD_DATE = "2026-01-26T07:20:44";
+    const APP_VERSION = "v1.0.160";
+    const BUILD_DATE = "2026-01-26T07:23:35";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1904,6 +1904,9 @@
         updateFieldSelector();
         updateYearSelector();
         refreshStabilityCache(); // Pre-calculate stability data
+
+        // Re-enable updateMap BEFORE calling it
+        isLoadingFromSheets = false;
         updateMap();
         saveLocalData();
 
@@ -1914,7 +1917,6 @@
         } catch (e) { console.log('Sample sites not loaded:', e); }
 
         Utils.showStatus(`Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
-        isLoadingFromSheets = false; // Re-enable updateMap
 
         // Restore saved OAuth token for edit capabilities (if available)
         if (SheetsAPI.restoreSavedToken()) {
@@ -1966,6 +1968,9 @@
         updateFieldSelector();
         updateYearSelector();
         refreshStabilityCache(); // Pre-calculate stability data
+
+        // Re-enable updateMap BEFORE calling it
+        isLoadingFromSheets = false;
         updateMap();
         saveLocalData();
 
@@ -1976,7 +1981,6 @@
         } catch (e) { console.log('Sample sites not loaded:', e); }
 
         Utils.showStatus(`✓ Loaded ${sampleData.length} samples, ${Object.keys(fieldBoundaries).length} fields`, true);
-        isLoadingFromSheets = false; // Re-enable updateMap
       };
 
       try {
