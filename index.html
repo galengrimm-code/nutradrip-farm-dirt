@@ -452,8 +452,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.166";
-    const BUILD_DATE = "2026-01-26T07:59:40";
+    const APP_VERSION = "v1.0.167";
+    const BUILD_DATE = "2026-01-26T08:08:11";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -926,8 +926,10 @@
           continue;
         }
 
-        // Handle multi-polygon or single polygon
-        const isMultiPoly = Array.isArray(polys[0]?.[0]?.[0]);
+        // Determine polygon format:
+        // - Single polygon: [[lat,lng], [lat,lng], ...] - polys[0][0] is a number (lat)
+        // - Multi-polygon:  [[[lat,lng], ...], [[lat,lng], ...]] - polys[0][0] is an array [lat,lng]
+        const isMultiPoly = Array.isArray(polys[0]?.[0]);
         const polyArray = isMultiPoly ? polys : [polys];
 
         for (const poly of polyArray) {
