@@ -536,8 +536,8 @@
 
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.185";
-    const BUILD_DATE = "2026-01-26T15:04:59";
+    const APP_VERSION = "v1.0.186";
+    const BUILD_DATE = "2026-01-26T15:09:44";
 
     // ========== CONFIG ==========
     // Reference shared data config and add app-specific config
@@ -1465,13 +1465,22 @@
         const typeNames = { 'TIS': 'Tissue', 'WAT': 'Water', 'SAP': 'Sap', 'ISS': 'In-Season Soil' };
         const messages = [];
 
-        // Handle rename or notes update for all existing sites at this location
+        // Handle rename or notes update for sites at THIS location only
         if ((hasRename || hasNotesChange) && existingSites.length > 0) {
-          const oldSiteId = existingSites[0].SiteID; // All sites at this location share the same SiteID
-          await updateSampleSiteInSheet(oldSiteId, newSiteId || oldSiteId, newNotes);
+          const oldSiteId = existingSites[0].SiteID;
+          const lat = pendingSiteCoords.lat;
+          const lng = pendingSiteCoords.lng;
 
-          // Update local data for all sites with this SiteID
-          sampleSitesData.filter(s => s.SiteID === oldSiteId).forEach(localSite => {
+          // Update sheet - pass lat/lng to match only this location
+          await updateSampleSiteInSheet(oldSiteId, newSiteId || oldSiteId, newNotes, lat, lng);
+
+          // Update local data for sites at THIS location only
+          const tolerance = 0.0001;
+          sampleSitesData.filter(s =>
+            s.SiteID === oldSiteId &&
+            Math.abs(s.Lat - lat) < tolerance &&
+            Math.abs(s.Lng - lng) < tolerance
+          ).forEach(localSite => {
             if (hasRename) localSite.SiteID = newSiteId;
             localSite.Notes = newNotes;
           });
@@ -1713,8 +1722,8 @@
       });
     }
 
-    // Update sample site(s) in sheet - updates SiteID and Notes for all matching sites
-    async function updateSampleSiteInSheet(oldSiteId, newSiteId, newNotes) {
+    // Update sample site(s) in sheet - updates SiteID and Notes for sites at specific location
+    async function updateSampleSiteInSheet(oldSiteId, newSiteId, newNotes, lat, lng) {
       try {
         // Read all data from sheet
         const response = await gapi.client.sheets.spreadsheets.values.get({
@@ -1724,10 +1733,22 @@
 
         const rows = response.result.values || [];
         const updates = [];
+        const tolerance = 0.0001;
 
-        // Find all rows with matching SiteID and prepare updates
+        // Find rows matching SiteID AND location (lat/lng)
         rows.forEach((row, index) => {
-          if (row[0] === oldSiteId) {
+          const rowSiteId = row[0];
+          const rowLat = parseFloat(row[5]) || 0;
+          const rowLng = parseFloat(row[6]) || 0;
+
+          // Match SiteID and location
+          const siteIdMatch = rowSiteId === oldSiteId;
+          const locationMatch = !lat || !lng || (
+            Math.abs(rowLat - lat) < tolerance &&
+            Math.abs(rowLng - lng) < tolerance
+          );
+
+          if (siteIdMatch && locationMatch) {
             const rowNumber = index + 2; // +2 for header and 0-based index
             // Update SiteID (column A) if changed
             if (newSiteId !== oldSiteId) {
