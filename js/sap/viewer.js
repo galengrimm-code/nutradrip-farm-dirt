@@ -501,6 +501,7 @@ window.SapViewer = (function() {
           <h4>Season Trends</h4>
           <button class="sap-expand-btn" onclick="SapViewer.toggleAllTrends()">Show all nutrients</button>
         </div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem;">New leaf (top) / Old leaf (bottom)</div>
         <div class="sap-trend-table-wrapper">
           <table class="sap-trend-table">
             <thead>
