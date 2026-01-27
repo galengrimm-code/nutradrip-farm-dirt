@@ -7507,6 +7507,7 @@
         if (rows.length < 2) return;
 
         const headers = rows[0];
+        console.log('SampleSites headers:', headers);
         sampleSitesData = [];
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
@@ -7514,11 +7515,17 @@
           headers.forEach((h, idx) => {
             site[h] = row[idx] || '';
           });
+          // Normalize header names for Lat/Lng (handle variations)
+          site.Lat = site.Lat || site.Latitude || site.lat || '';
+          site.Lng = site.Lng || site.Longitude || site.lng || site.Lon || site.lon || '';
           if (site.SiteID) {
             sampleSitesData.push(site);
           }
         }
         console.log(`Loaded ${sampleSitesData.length} sample sites for linking`);
+        // Debug: show sites with Lat/Lng
+        const sitesWithCoords = sampleSitesData.filter(s => s.Lat && s.Lng);
+        console.log(`Sites with Lat/Lng: ${sitesWithCoords.length}`, sitesWithCoords.map(s => s.SiteID));
       } catch (e) {
         console.warn('Could not load sample sites:', e);
       }
@@ -7717,11 +7724,15 @@
           const site = sampleSitesData.find(s => s.SiteID?.toLowerCase() === record.SiteId?.toLowerCase());
           if (site) {
             record.Field = record.Field || site.Field || '';
-            record.Lat = site.Lat;
-            record.Lng = site.Lng;
-            record.Client = site.Client;
-            record.Farm = site.Farm;
+            record.Lat = site.Lat || '';
+            record.Lng = site.Lng || '';
+            record.Client = site.Client || '';
+            record.Farm = site.Farm || '';
             matchedSiteIds.add(record.SiteId);
+            // Debug first few matches
+            if (matchedSiteIds.size <= 3) {
+              console.log(`Matched "${record.SiteId}" to site:`, site, '-> Lat:', record.Lat, 'Lng:', record.Lng);
+            }
           } else {
             unmatchedSiteIds.add(record.SiteId);
           }
