@@ -1140,10 +1140,15 @@ window.SapViewer = (function() {
    * Expand a chart to full-screen modal
    */
   function expandChart(chartKey) {
+    console.log('expandChart called:', chartKey, 'cache:', chartDataCache);
     const { displayDates, chartGroups, crop } = chartDataCache;
-    if (!displayDates || !chartGroups) return;
+    if (!displayDates || !chartGroups) {
+      console.log('No cache data');
+      return;
+    }
 
     const group = chartGroups.find(g => g.key === chartKey);
+    console.log('Found group:', group?.key);
     if (!group) return;
 
     try {
@@ -1786,7 +1791,9 @@ window.SapViewer = (function() {
     document.addEventListener('click', (e) => {
       // Chart panel click (for expand)
       const chartPanel = e.target.closest('.sap-chart-expandable[data-chart-key]');
+      console.log('Click detected, chartPanel:', chartPanel, 'target:', e.target.className);
       if (chartPanel) {
+        console.log('Expanding chart:', chartPanel.dataset.chartKey);
         expandChart(chartPanel.dataset.chartKey);
         return;
       }
