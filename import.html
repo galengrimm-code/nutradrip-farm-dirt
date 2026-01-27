@@ -7847,12 +7847,12 @@
       // Load existing data
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
 
-      // Check for duplicates using composite key
-      const existingKeys = new Set(inSeasonData.map(r => `${r.SiteId}-${r.Type}-${r.Year}-${r.LabDate}`));
+      // Check for duplicates using composite key (includes LeafAge for SAP old/new leaf pairs)
+      const existingKeys = new Set(inSeasonData.map(r => `${r.SiteId}-${r.Type}-${r.Year}-${r.LabDate}-${r.LeafAge || ''}`));
 
       let imported = 0, skipped = 0;
       recordsToImport.forEach(rec => {
-        const key = `${rec.SiteId}-${rec.Type}-${rec.Year}-${rec.LabDate}`;
+        const key = `${rec.SiteId}-${rec.Type}-${rec.Year}-${rec.LabDate}-${rec.LeafAge || ''}`;
         if (existingKeys.has(key)) {
           skipped++;
         } else {
