@@ -419,7 +419,8 @@ window.SapViewer = (function() {
       aggregateData.forEach(sd => {
         const val = sd.new_leaf?.[nutrient];
         const thresh = ruleset.getThreshold?.('corn', 'new_leaf', nutrient);
-        const status = val !== undefined ? SapLogic.getStatus(val, thresh) : null;
+        const evalResult = val !== undefined ? SapLogic.evaluateNutrientStatus(val, thresh) : null;
+        const status = evalResult?.status;
         const colors = status ? SapLogic.getStatusColors(status) : { bg: 'transparent', text: '#94a3b8' };
         const display = val !== undefined ? formatValue(val, nutrient) : '-';
         html += `<td style="background: ${colors.bg}; color: ${colors.text}; font-weight: 500;">${display}</td>`;
@@ -433,7 +434,8 @@ window.SapViewer = (function() {
       aggregateData.forEach(sd => {
         const val = sd.old_leaf?.[nutrient];
         const thresh = ruleset.getThreshold?.('corn', 'old_leaf', nutrient);
-        const status = val !== undefined ? SapLogic.getStatus(val, thresh) : null;
+        const evalResult = val !== undefined ? SapLogic.evaluateNutrientStatus(val, thresh) : null;
+        const status = evalResult?.status;
         const colors = status ? SapLogic.getStatusColors(status) : { bg: 'transparent', text: '#94a3b8' };
         const display = val !== undefined ? formatValue(val, nutrient) : '-';
         html += `<td style="background: ${colors.bg}; color: ${colors.text}; opacity: 0.8;">${display}</td>`;
