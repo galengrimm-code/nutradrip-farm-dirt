@@ -824,11 +824,11 @@ window.SapViewer = (function() {
     const signal = row.leafSignal || { signal: '', color: '#94a3b8' };
 
     let html = '';
-    html += `<td class="sap-nutrient-name" data-metric="${row.key}">${row.label}</td>`;
+    html += `<td class="sap-col-nutrient" data-metric="${row.key}">${row.label}</td>`;
 
     if (viewMode !== 'old') {
-      html += `<td class="sap-value">${SapLogic.formatValue(row.newVal, row.key)}</td>`;
-      html += `<td class="sap-status">
+      html += `<td class="sap-col-new">${SapLogic.formatValue(row.newVal, row.key)}</td>`;
+      html += `<td class="sap-col-status">
         <span class="sap-status-chip clickable"
               data-metric="${row.key}"
               data-leaf="new"
@@ -854,15 +854,15 @@ window.SapViewer = (function() {
                title="${signal.description}">${signal.signal}</div>`
         : '';
 
-      html += `<td class="sap-delta">
+      html += `<td class="sap-col-delta">
         <div style="color: ${deltaColor};">${arrow} ${deltaPctStr}</div>
         ${signalHtml}
       </td>`;
     }
 
     if (viewMode !== 'new') {
-      html += `<td class="sap-value">${SapLogic.formatValue(row.oldVal, row.key)}</td>`;
-      html += `<td class="sap-status">
+      html += `<td class="sap-col-old">${SapLogic.formatValue(row.oldVal, row.key)}</td>`;
+      html += `<td class="sap-col-status">
         <span class="sap-status-chip clickable"
               data-metric="${row.key}"
               data-leaf="old"
