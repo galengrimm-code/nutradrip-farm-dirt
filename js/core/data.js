@@ -392,6 +392,44 @@ const SheetsAPI = {
       console.error('getSettings error:', e);
       return {};
     }
+  },
+
+  async getInSeasonAnalysis() {
+    try {
+      const sheetId = DataConfig.SHEET_ID;
+      console.log('[Sheets] Loading InSeasonAnalysis...');
+      const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: sheetId,
+        range: 'InSeasonAnalysis!A1:BZ10000'
+      });
+      const rows = response.result.values || [];
+      if (rows.length < 2) {
+        console.log('[Sheets] InSeasonAnalysis: No data rows');
+        return [];
+      }
+      const headers = rows[0];
+      const records = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        const record = {};
+        headers.forEach((header, idx) => {
+          const value = row[idx];
+          if (value === undefined || value === '') return;
+          // Try to parse as number for nutrient columns
+          const num = parseFloat(value);
+          record[header] = isNaN(num) ? value : num;
+        });
+        if (Object.keys(record).length > 0) {
+          records.push(record);
+        }
+      }
+      console.log(`[Sheets] InSeasonAnalysis: Loaded ${records.length} records`);
+      return records;
+    } catch (e) {
+      console.error('getInSeasonAnalysis error:', e);
+      return [];
+    }
   }
 };
 

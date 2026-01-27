@@ -54,7 +54,24 @@ window.SapViewer = (function() {
    */
   async function loadData() {
     try {
+      // Try IndexedDB first
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
+      console.log('SapViewer: IndexedDB returned', inSeasonData.length, 'records');
+
+      // If empty and signed in, try loading from Google Sheets
+      if (inSeasonData.length === 0 && window.SheetsAPI?.isSignedIn) {
+        console.log('SapViewer: IndexedDB empty, trying Google Sheets...');
+        try {
+          inSeasonData = await window.SheetsAPI.getInSeasonAnalysis() || [];
+          // Cache to IndexedDB for future use
+          if (inSeasonData.length > 0) {
+            await DataCore.saveInSeasonToIndexedDB(inSeasonData);
+            console.log('SapViewer: Cached', inSeasonData.length, 'records to IndexedDB');
+          }
+        } catch (sheetsErr) {
+          console.error('SapViewer: Sheets load failed:', sheetsErr);
+        }
+      }
 
       // Filter to SAP type only
       const sapData = inSeasonData.filter(r => r.Type === 'Sap' || r.Type === 'SAP');
