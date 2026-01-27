@@ -12,59 +12,58 @@ window.SapLogic = (function() {
   // Default ruleset reference
   const getRuleset = () => window.SapRulesets?.v1 || {};
 
+  // ========== CONFIG-DRIVEN RATIO DEFINITIONS ==========
+  const RATIO_DEFS = [
+    { id: 'K_Ca', label: 'K:Ca', fn: (leaf) => leaf.Potassium && leaf.Calcium ? leaf.Potassium / leaf.Calcium : null },
+    { id: 'K_Mg', label: 'K:Mg', fn: (leaf) => leaf.Potassium && leaf.Magnesium ? leaf.Potassium / leaf.Magnesium : null },
+    { id: 'K_over_CaMg', label: 'K/(Ca+Mg)', fn: (leaf) => leaf.Potassium && leaf.Calcium && leaf.Magnesium && (leaf.Calcium + leaf.Magnesium) > 0 ? leaf.Potassium / (leaf.Calcium + leaf.Magnesium) : null },
+    { id: 'NO3_NH4', label: 'NO\u2083:NH\u2084', fn: (leaf) => leaf.Nitrogen_NO3 && leaf.Nitrogen_NH4 && leaf.Nitrogen_NH4 > 0 ? leaf.Nitrogen_NO3 / leaf.Nitrogen_NH4 : null },
+    { id: 'Ca_Mg', label: 'Ca:Mg', fn: (leaf) => leaf.Calcium && leaf.Magnesium && leaf.Magnesium > 0 ? leaf.Calcium / leaf.Magnesium : null },
+    { id: 'Sugar_K', label: 'Sugar:K', fn: (leaf) => leaf.Sugars && leaf.Potassium && leaf.Potassium > 0 ? (leaf.Sugars * 1000) / leaf.Potassium : null },
+  ];
+
+  // Importance weights for system ranking (higher = surfaces first when issues exist)
+  const SYSTEM_IMPORTANCE = {
+    N: 1.0,
+    CATIONS: 1.0,
+    SUGARS: 0.9,
+    MICROS: 0.7
+  };
+
   /**
-   * Compute derived metrics (ratios) from raw sap values
-   * @param {Object} values - Object with nutrient keys and values
-   * @returns {Object} - Computed ratios
+   * Compute derived metrics (ratios) for BOTH leaves separately
+   * @param {Object} sampleDate - { new_leaf: {...}, old_leaf: {...} }
+   * @returns {Object} - { new_leaf: {ratios}, old_leaf: {ratios} }
    */
-  function computeDerivedMetrics(values) {
-    if (!values) return {};
+  function computeDerivedMetrics(sampleDate) {
+    const result = { new_leaf: {}, old_leaf: {} };
 
-    const metrics = {};
-    const get = (key) => {
-      const v = values[key];
-      return (v !== undefined && v !== null && v !== '' && !isNaN(parseFloat(v))) ? parseFloat(v) : null;
-    };
+    ['new_leaf', 'old_leaf'].forEach(tissue => {
+      const leaf = sampleDate[tissue] || {};
+      // Parse all values to numbers
+      const parsed = {};
+      Object.keys(leaf).forEach(k => {
+        const v = parseFloat(leaf[k]);
+        if (!isNaN(v)) parsed[k] = v;
+      });
 
-    // K:Ca ratio
-    const K = get('Potassium');
-    const Ca = get('Calcium');
-    const Mg = get('Magnesium');
+      // Compute each ratio
+      RATIO_DEFS.forEach(def => {
+        const val = def.fn(parsed);
+        if (val !== null) {
+          result[tissue][def.id] = val;
+        }
+      });
+    });
 
-    if (K !== null && Ca !== null && Ca > 0) {
-      metrics.K_Ca = K / Ca;
-    }
+    return result;
+  }
 
-    // K:Mg ratio
-    if (K !== null && Mg !== null && Mg > 0) {
-      metrics.K_Mg = K / Mg;
-    }
-
-    // K/(Ca+Mg) ratio - critical cation balance
-    if (K !== null && Ca !== null && Mg !== null && (Ca + Mg) > 0) {
-      metrics.K_over_CaMg = K / (Ca + Mg);
-    }
-
-    // NO3:NH4 ratio
-    const NO3 = get('Nitrogen_NO3');
-    const NH4 = get('Nitrogen_NH4');
-    if (NO3 !== null && NH4 !== null && NH4 > 0) {
-      metrics.NO3_NH4 = NO3 / NH4;
-    }
-
-    // Sugar:K ratio (indicator of energy vs K uptake)
-    const Sugars = get('Sugars');
-    if (Sugars !== null && K !== null && K > 0) {
-      metrics.Sugar_over_K = Sugars / K;
-    }
-
-    // N conversion efficiency (if present in raw data)
-    const NCE = get('N_Conversion_Efficiency');
-    if (NCE !== null) {
-      metrics.N_Conversion_Efficiency = NCE;
-    }
-
-    return metrics;
+  /**
+   * Get ratio definitions for UI
+   */
+  function getRatioDefs() {
+    return RATIO_DEFS;
   }
 
   /**
@@ -130,11 +129,58 @@ window.SapLogic = (function() {
   }
 
   /**
+   * Determine leaf signal (pattern interpretation)
+   * @param {Object} newStatus - Status object for new leaf
+   * @param {Object} oldStatus - Status object for old leaf
+   * @returns {Object} - { signal: string, color: string, description: string }
+   */
+  function getLeafSignal(newStatus, oldStatus) {
+    const newLow = newStatus?.direction === 'low';
+    const newHigh = newStatus?.direction === 'high';
+    const newOK = newStatus?.status === 'OK' || newStatus?.status === 'Unknown';
+    const oldLow = oldStatus?.direction === 'low';
+    const oldHigh = oldStatus?.direction === 'high';
+    const oldOK = oldStatus?.status === 'OK' || oldStatus?.status === 'Unknown';
+
+    // Both low - supply limitation
+    if (newLow && oldLow) {
+      return { signal: 'SUPPLY LOW', color: '#dc2626', description: 'Whole-plant deficiency - check root uptake' };
+    }
+
+    // Both high - excess
+    if (newHigh && oldHigh) {
+      return { signal: 'EXCESS', color: '#7c3aed', description: 'Accumulation in both - reduce inputs or dilution issue' };
+    }
+
+    // New low, Old OK/high - uptake/transport limitation
+    if (newLow && (oldOK || oldHigh)) {
+      return { signal: 'NEW LIMIT', color: '#f59e0b', description: 'Transport to new growth limited - check mobility' };
+    }
+
+    // New OK/high, Old low - remobilization
+    if ((newOK || newHigh) && oldLow) {
+      return { signal: 'REMOB', color: '#0891b2', description: 'Remobilizing from old leaves - normal or stress response' };
+    }
+
+    // New high, Old OK - accumulating in new growth
+    if (newHigh && oldOK) {
+      return { signal: 'NEW BUILD', color: '#8b5cf6', description: 'Accumulating in new growth' };
+    }
+
+    // New OK, Old high - stored in old leaves
+    if (newOK && oldHigh) {
+      return { signal: 'OLD BUILD', color: '#6366f1', description: 'Stored in old tissue' };
+    }
+
+    return { signal: '', color: '#94a3b8', description: '' };
+  }
+
+  /**
    * Evaluate status for a full sample date (both leaves)
    * @param {Object} sampleDate - { new_leaf: {...}, old_leaf: {...} }
    * @param {Object} context - { crop, growth_stage }
    * @param {Object} ruleset - Optional ruleset override
-   * @returns {Object} - { per_nutrient_status, system_status, derived }
+   * @returns {Object} - { per_nutrient_status, system_status, derived, leafSignals }
    */
   function evaluateStatus(sampleDate, context = {}, ruleset = null) {
     const rules = ruleset || getRuleset();
@@ -146,25 +192,20 @@ window.SapLogic = (function() {
         old_leaf: {}
       },
       deltas: {},
+      leafSignals: {},
       system_status: {
-        N: { status: 'OK', reason: '', confidence: 'Low', issues: [] },
-        CATIONS: { status: 'OK', reason: '', confidence: 'Low', issues: [] },
-        MICROS: { status: 'OK', reason: '', confidence: 'Low', issues: [] },
-        SUGARS: { status: 'OK', reason: '', confidence: 'Low', issues: [] }
+        N: { status: 'OK', reason: '', confidence: 'Low', issues: [], score: 0 },
+        CATIONS: { status: 'OK', reason: '', confidence: 'Low', issues: [], score: 0 },
+        MICROS: { status: 'OK', reason: '', confidence: 'Low', issues: [], score: 0 },
+        SUGARS: { status: 'OK', reason: '', confidence: 'Low', issues: [], score: 0 }
       },
-      derived: {
-        new_leaf: {},
-        old_leaf: {}
-      }
+      derived: computeDerivedMetrics(sampleDate)
     };
 
     // Process each tissue type
     ['new_leaf', 'old_leaf'].forEach(tissue => {
       const values = sampleDate[tissue] || {};
-      const tissueKey = tissue === 'new_leaf' ? 'new_leaf' : 'old_leaf';
-
-      // Compute derived metrics
-      result.derived[tissue] = computeDerivedMetrics(values);
+      const tissueKey = tissue;
 
       // Evaluate each nutrient
       Object.keys(values).forEach(nutrient => {
@@ -185,7 +226,7 @@ window.SapLogic = (function() {
       });
     });
 
-    // Compute deltas between new and old
+    // Compute deltas and leaf signals for all nutrients
     const newVals = sampleDate.new_leaf || {};
     const oldVals = sampleDate.old_leaf || {};
     const allNutrients = new Set([...Object.keys(newVals), ...Object.keys(oldVals)]);
@@ -197,21 +238,35 @@ window.SapLogic = (function() {
         isNaN(newVal) ? null : newVal,
         isNaN(oldVal) ? null : oldVal
       );
+
+      // Compute leaf signal
+      const newStatus = result.per_nutrient_status.new_leaf[nutrient];
+      const oldStatus = result.per_nutrient_status.old_leaf[nutrient];
+      result.leafSignals[nutrient] = getLeafSignal(newStatus, oldStatus);
     });
 
-    // Build system status summaries
+    // Also compute signals for ratios
+    RATIO_DEFS.forEach(def => {
+      const newStatus = result.per_nutrient_status.new_leaf[def.id];
+      const oldStatus = result.per_nutrient_status.old_leaf[def.id];
+      if (newStatus || oldStatus) {
+        result.leafSignals[def.id] = getLeafSignal(newStatus, oldStatus);
+      }
+    });
+
+    // Build system status summaries with weighted scoring
     result.system_status = buildSystemStatus(result, rules, crop);
 
     return result;
   }
 
   /**
-   * Build system-level status summaries
+   * Build system-level status summaries with weighted scoring
    */
   function buildSystemStatus(evaluationResult, rules, crop) {
     const systemGroups = rules.systemGroups || {
-      N: ['Nitrogen', 'Nitrogen_NO3', 'Nitrogen_NH4'],
-      CATIONS: ['Potassium', 'Calcium', 'Magnesium', 'K_over_CaMg'],
+      N: ['Nitrogen', 'Nitrogen_NO3', 'Nitrogen_NH4', 'NO3_NH4'],
+      CATIONS: ['Potassium', 'Calcium', 'Magnesium', 'K_over_CaMg', 'K_Ca', 'K_Mg', 'Ca_Mg'],
       MICROS: ['Boron', 'Zinc', 'Manganese', 'Copper', 'Iron', 'Molybdenum'],
       SUGARS: ['Brix', 'Sugars', 'EC']
     };
@@ -265,15 +320,20 @@ window.SapLogic = (function() {
         confidence = 'Med';
       }
 
-      // Build reason text
+      // Compute weighted score for ranking: severity × confidence × importance
+      const confidenceMultiplier = confidence === 'High' ? 0 : (confidence === 'Med' ? 1.2 : 1.0);
+      const importanceWeight = SYSTEM_IMPORTANCE[system] || 0.5;
+      const score = maxSeverity * confidenceMultiplier * importanceWeight;
+
+      // Build reason text - sort by severity first
       let reason = '';
       if (issues.length === 0) {
         reason = 'All values in range';
       } else {
-        // Pick top issue by severity
         issues.sort((a, b) => b.severity - a.severity);
         const top = issues[0];
-        reason = `${top.nutrient} ${top.reason.toLowerCase()}`;
+        const nutrientLabel = formatNutrientName(top.nutrient);
+        reason = `${nutrientLabel} ${top.reason.toLowerCase()}`;
         if (issues.length > 1) {
           reason += ` (+${issues.length - 1} more)`;
         }
@@ -284,7 +344,8 @@ window.SapLogic = (function() {
         reason,
         confidence,
         issues,
-        maxSeverity
+        maxSeverity,
+        score
       };
     });
 
@@ -292,18 +353,105 @@ window.SapLogic = (function() {
   }
 
   /**
+   * Build rows for the comparison table (unified row model)
+   * @param {string} viewMode - 'raw' or 'ratios'
+   * @param {Object} sampleDate - The sample date data
+   * @param {Object} evaluation - The evaluation result
+   * @returns {Array} - Array of row objects grouped by category
+   */
+  function buildTableRows(viewMode, sampleDate, evaluation) {
+    const rules = getRuleset();
+    const groups = [];
+
+    if (viewMode === 'ratios') {
+      // Ratio rows
+      const ratioRows = RATIO_DEFS.map(def => ({
+        key: def.id,
+        label: def.label,
+        newVal: evaluation.derived.new_leaf[def.id],
+        oldVal: evaluation.derived.old_leaf[def.id],
+        newStatus: evaluation.per_nutrient_status.new_leaf[def.id] || { status: 'Unknown' },
+        oldStatus: evaluation.per_nutrient_status.old_leaf[def.id] || { status: 'Unknown' },
+        delta: computeDelta(
+          evaluation.derived.new_leaf[def.id],
+          evaluation.derived.old_leaf[def.id]
+        ),
+        leafSignal: evaluation.leafSignals[def.id] || { signal: '' },
+        isRatio: true
+      })).filter(r => r.newVal !== undefined || r.oldVal !== undefined);
+
+      groups.push({ group: 'ratios', name: 'Calculated Ratios', rows: ratioRows });
+    } else {
+      // Nutrient rows grouped by category
+      const allNutrients = new Set([
+        ...Object.keys(sampleDate.new_leaf || {}),
+        ...Object.keys(sampleDate.old_leaf || {})
+      ]);
+
+      const groupDefs = rules.nutrientGroups || {
+        nitrogen: ['Nitrogen', 'Nitrogen_NO3', 'Nitrogen_NH4'],
+        cations: ['Potassium', 'Calcium', 'Magnesium'],
+        phosphorus_sulfur: ['Phosphorus', 'Sulfur'],
+        micros: ['Boron', 'Zinc', 'Manganese', 'Copper', 'Iron', 'Molybdenum'],
+        other: ['Chloride', 'Sodium', 'Silica', 'Aluminum', 'Cobalt', 'Nickel', 'Selenium'],
+        sugars: ['Brix', 'Sugars', 'EC', 'pH']
+      };
+
+      const groupNames = rules.groupNames || {
+        nitrogen: 'Nitrogen',
+        cations: 'Cations',
+        phosphorus_sulfur: 'P & S',
+        micros: 'Micronutrients',
+        other: 'Other Elements',
+        sugars: 'Sugars & Energy'
+      };
+
+      Object.keys(groupDefs).forEach(groupKey => {
+        const nutrientList = groupDefs[groupKey].filter(n => allNutrients.has(n));
+        if (nutrientList.length === 0) return;
+
+        const rows = nutrientList.map(nutrient => {
+          const newVal = parseFloat(sampleDate.new_leaf?.[nutrient]);
+          const oldVal = parseFloat(sampleDate.old_leaf?.[nutrient]);
+          return {
+            key: nutrient,
+            label: formatNutrientName(nutrient),
+            newVal: isNaN(newVal) ? null : newVal,
+            oldVal: isNaN(oldVal) ? null : oldVal,
+            newStatus: evaluation.per_nutrient_status.new_leaf[nutrient] || { status: 'Unknown' },
+            oldStatus: evaluation.per_nutrient_status.old_leaf[nutrient] || { status: 'Unknown' },
+            delta: evaluation.deltas[nutrient] || { delta: null, deltaPct: null },
+            leafSignal: evaluation.leafSignals[nutrient] || { signal: '' },
+            isRatio: false
+          };
+        });
+
+        groups.push({ group: groupKey, name: groupNames[groupKey] || groupKey, rows });
+      });
+    }
+
+    return groups;
+  }
+
+  /**
+   * Sort rows by severity (worst first)
+   */
+  function sortRowsBySeverity(rows) {
+    return [...rows].sort((a, b) => {
+      const aMax = Math.max(a.newStatus?.severity || 0, a.oldStatus?.severity || 0);
+      const bMax = Math.max(b.newStatus?.severity || 0, b.oldStatus?.severity || 0);
+      return bMax - aMax;
+    });
+  }
+
+  /**
    * Evaluate trend across multiple sample dates
-   * @param {Array} sampleDates - Array of { date, new_leaf, old_leaf }
-   * @param {string} nutrient - Nutrient key to analyze
-   * @param {string} tissue - 'new_leaf' or 'old_leaf'
-   * @returns {Object} - { trend: 'up'|'down'|'stable', change: number, values: Array }
    */
   function evaluateTrend(sampleDates, nutrient, tissue = 'new_leaf') {
     if (!sampleDates || sampleDates.length < 2) {
       return { trend: 'insufficient', change: 0, values: [] };
     }
 
-    // Sort by date and extract values
     const sorted = [...sampleDates].sort((a, b) =>
       new Date(a.sample_date || a.date) - new Date(b.sample_date || b.date)
     );
@@ -317,7 +465,6 @@ window.SapLogic = (function() {
       return { trend: 'insufficient', change: 0, values };
     }
 
-    // Simple linear regression
     const n = values.length;
     const xMean = (n - 1) / 2;
     const yMean = values.reduce((s, v) => s + v.value, 0) / n;
@@ -334,7 +481,6 @@ window.SapLogic = (function() {
     const last = values[values.length - 1].value;
     const changePercent = first !== 0 ? ((last - first) / first) * 100 : 0;
 
-    // Determine trend direction
     let trend = 'stable';
     if (Math.abs(changePercent) > 10) {
       trend = changePercent > 0 ? 'up' : 'down';
@@ -345,8 +491,6 @@ window.SapLogic = (function() {
 
   /**
    * Get status color based on status string
-   * @param {string} status - 'OK', 'Watch', or 'Action'
-   * @returns {Object} - { bg, text, border }
    */
   function getStatusColors(status) {
     switch (status) {
@@ -363,36 +507,29 @@ window.SapLogic = (function() {
 
   /**
    * Get delta color based on percent change
-   * @param {number} deltaPct - Percent change
-   * @returns {string} - CSS color
    */
   function getDeltaColor(deltaPct) {
     if (deltaPct === null || isNaN(deltaPct)) return '#94a3b8';
     if (Math.abs(deltaPct) < 10) return '#64748b';
-    if (deltaPct > 50) return '#dc2626'; // Large increase
-    if (deltaPct > 20) return '#f59e0b'; // Moderate increase
-    if (deltaPct < -50) return '#3b82f6'; // Large decrease
-    if (deltaPct < -20) return '#0891b2'; // Moderate decrease
+    if (deltaPct > 50) return '#dc2626';
+    if (deltaPct > 20) return '#f59e0b';
+    if (deltaPct < -50) return '#3b82f6';
+    if (deltaPct < -20) return '#0891b2';
     return deltaPct > 0 ? '#22c55e' : '#06b6d4';
   }
 
   /**
    * Format nutrient value for display
-   * @param {number} value - The value
-   * @param {string} nutrient - Nutrient key (for determining decimals)
-   * @returns {string} - Formatted string
    */
   function formatValue(value, nutrient) {
     if (value === null || value === undefined || isNaN(value)) return '—';
 
-    // Determine decimal places based on magnitude
     let decimals = 1;
     if (Math.abs(value) < 0.1) decimals = 3;
     else if (Math.abs(value) < 1) decimals = 2;
     else if (Math.abs(value) < 10) decimals = 2;
     else if (Math.abs(value) >= 1000) decimals = 0;
 
-    // Special cases
     if (nutrient === 'pH') decimals = 2;
     if (nutrient === 'Brix') decimals = 1;
     if (nutrient === 'EC') decimals = 2;
@@ -401,10 +538,48 @@ window.SapLogic = (function() {
   }
 
   /**
-   * Group nutrients by category for display
-   * @param {Object} nutrients - Object of nutrient values
-   * @param {Object} ruleset - Ruleset with groupings
-   * @returns {Array} - Array of { group, name, nutrients }
+   * Format nutrient name for display
+   */
+  function formatNutrientName(key) {
+    const names = {
+      'Nitrogen': 'Total N',
+      'Nitrogen_NO3': 'NO\u2083-N',
+      'Nitrogen_NH4': 'NH\u2084-N',
+      'Phosphorus': 'P',
+      'Potassium': 'K',
+      'Calcium': 'Ca',
+      'Magnesium': 'Mg',
+      'Sulfur': 'S',
+      'Boron': 'B',
+      'Iron': 'Fe',
+      'Manganese': 'Mn',
+      'Copper': 'Cu',
+      'Zinc': 'Zn',
+      'Molybdenum': 'Mo',
+      'Chloride': 'Cl',
+      'Sodium': 'Na',
+      'Silica': 'Si',
+      'Aluminum': 'Al',
+      'Cobalt': 'Co',
+      'Nickel': 'Ni',
+      'Selenium': 'Se',
+      'Brix': 'Brix',
+      'Sugars': 'Sugars',
+      'EC': 'EC',
+      'pH': 'pH',
+      'N_Conversion_Efficiency': 'N Conv. Eff.',
+      'K_Ca': 'K:Ca',
+      'K_Mg': 'K:Mg',
+      'K_over_CaMg': 'K/(Ca+Mg)',
+      'NO3_NH4': 'NO\u2083:NH\u2084',
+      'Ca_Mg': 'Ca:Mg',
+      'Sugar_K': 'Sugar:K'
+    };
+    return names[key] || key;
+  }
+
+  /**
+   * Group nutrients by category for display (legacy support)
    */
   function groupNutrients(nutrients, ruleset = null) {
     const rules = ruleset || getRuleset();
@@ -443,7 +618,6 @@ window.SapLogic = (function() {
       }
     });
 
-    // Add any ungrouped nutrients
     const ungrouped = Object.keys(nutrients).filter(n => !included.has(n));
     if (ungrouped.length > 0) {
       result.push({
@@ -459,13 +633,19 @@ window.SapLogic = (function() {
   // Public API
   return {
     computeDerivedMetrics,
+    getRatioDefs,
     evaluateNutrientStatus,
     computeDelta,
+    getLeafSignal,
     evaluateStatus,
+    buildTableRows,
+    sortRowsBySeverity,
     evaluateTrend,
     getStatusColors,
     getDeltaColor,
     formatValue,
-    groupNutrients
+    formatNutrientName,
+    groupNutrients,
+    SYSTEM_IMPORTANCE
   };
 })();

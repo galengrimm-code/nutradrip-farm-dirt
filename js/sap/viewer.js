@@ -18,8 +18,10 @@ window.SapViewer = (function() {
   let selectedDate = null;
   let viewMode = 'both'; // 'both', 'new', 'old'
   let displayMode = 'raw'; // 'raw', 'ratios', 'status'
+  let sortMode = 'group'; // 'group', 'severity'
   let searchFilter = '';
   let notes = {}; // { siteId-date: 'note text' }
+  let collapsedGroups = new Set(); // Track collapsed groups
 
   /**
    * Initialize the sap viewer
@@ -347,19 +349,14 @@ window.SapViewer = (function() {
   }
 
   function renderComparisonTable(sampleDate, evaluation) {
-    // Get all nutrients present in either leaf
-    const allNutrients = new Set([
-      ...Object.keys(sampleDate.new_leaf || {}),
-      ...Object.keys(sampleDate.old_leaf || {})
-    ]);
-
-    // Group nutrients
-    const groups = SapLogic.groupNutrients(
-      Object.fromEntries([...allNutrients].map(n => [n, true]))
-    );
+    // Build rows using unified row model
+    const groups = SapLogic.buildTableRows(displayMode, sampleDate, evaluation);
 
     // Apply search filter
     const filterLower = searchFilter.toLowerCase();
+
+    // Determine column count
+    const colCount = viewMode === 'both' ? 6 : 4;
 
     let html = `
       <div class="sap-comparison-section">
@@ -378,6 +375,10 @@ window.SapViewer = (function() {
               <button class="sap-toggle-btn ${displayMode === 'ratios' ? 'active' : ''}" onclick="SapViewer.setDisplayMode('ratios')">Ratios</button>
               <button class="sap-toggle-btn ${displayMode === 'status' ? 'active' : ''}" onclick="SapViewer.setDisplayMode('status')">Status</button>
             </div>
+            <select id="sapSortSelect" class="sap-sort-select" onchange="SapViewer.setSortMode(this.value)">
+              <option value="group" ${sortMode === 'group' ? 'selected' : ''}>Sort: By Group</option>
+              <option value="severity" ${sortMode === 'severity' ? 'selected' : ''}>Sort: Worst First</option>
+            </select>
           </div>
         </div>
         <div class="sap-comparison-table-wrapper">
@@ -387,7 +388,7 @@ window.SapViewer = (function() {
                 <th>Nutrient</th>
                 ${viewMode !== 'old' ? '<th class="sap-col-new">New Leaf</th>' : ''}
                 ${viewMode !== 'old' ? '<th class="sap-col-status">Status</th>' : ''}
-                ${viewMode === 'both' ? '<th class="sap-col-delta">Delta</th>' : ''}
+                ${viewMode === 'both' ? '<th class="sap-col-delta">Delta / Signal</th>' : ''}
                 ${viewMode !== 'new' ? '<th class="sap-col-old">Old Leaf</th>' : ''}
                 ${viewMode !== 'new' ? '<th class="sap-col-status">Status</th>' : ''}
               </tr>
@@ -395,89 +396,48 @@ window.SapViewer = (function() {
             <tbody>
     `;
 
-    groups.forEach(group => {
-      // Filter nutrients in this group
-      const filtered = group.nutrients.filter(n =>
-        !filterLower || n.toLowerCase().includes(filterLower)
-      );
-
-      if (filtered.length === 0) return;
-
-      // Group header row
-      html += `
-        <tr class="sap-group-row">
-          <td colspan="${viewMode === 'both' ? 6 : 4}">${group.name}</td>
-        </tr>
-      `;
-
-      filtered.forEach(nutrient => {
-        const newVal = sampleDate.new_leaf?.[nutrient];
-        const oldVal = sampleDate.old_leaf?.[nutrient];
-        const newStatus = evaluation.per_nutrient_status.new_leaf?.[nutrient] || {};
-        const oldStatus = evaluation.per_nutrient_status.old_leaf?.[nutrient] || {};
-        const delta = evaluation.deltas?.[nutrient] || {};
-
-        const newColors = SapLogic.getStatusColors(newStatus.status);
-        const oldColors = SapLogic.getStatusColors(oldStatus.status);
-        const deltaColor = SapLogic.getDeltaColor(delta.deltaPct);
-
-        html += `<tr>`;
-        html += `<td class="sap-nutrient-name">${formatNutrientName(nutrient)}</td>`;
-
-        if (viewMode !== 'old') {
-          html += `<td class="sap-value">${SapLogic.formatValue(newVal, nutrient)}</td>`;
-          html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border};">${newStatus.status || '—'}</span></td>`;
-        }
-
-        if (viewMode === 'both') {
-          const arrow = delta.direction === 'up' ? '↑' : (delta.direction === 'down' ? '↓' : '–');
-          const deltaPctStr = delta.deltaPct !== null ? `${delta.deltaPct >= 0 ? '+' : ''}${delta.deltaPct.toFixed(0)}%` : '—';
-          html += `<td class="sap-delta" style="color: ${deltaColor};">${arrow} ${deltaPctStr}</td>`;
-        }
-
-        if (viewMode !== 'new') {
-          html += `<td class="sap-value">${SapLogic.formatValue(oldVal, nutrient)}</td>`;
-          html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border};">${oldStatus.status || '—'}</span></td>`;
-        }
-
-        html += `</tr>`;
+    // If sorting by severity, flatten all rows and sort
+    if (sortMode === 'severity') {
+      let allRows = [];
+      groups.forEach(g => {
+        g.rows.forEach(r => {
+          if (!filterLower || r.label.toLowerCase().includes(filterLower) || r.key.toLowerCase().includes(filterLower)) {
+            allRows.push(r);
+          }
+        });
       });
-    });
+      allRows = SapLogic.sortRowsBySeverity(allRows);
 
-    // Add derived ratios if displayMode is 'ratios'
-    if (displayMode === 'ratios') {
-      html += `<tr class="sap-group-row"><td colspan="${viewMode === 'both' ? 6 : 4}">Calculated Ratios</td></tr>`;
+      allRows.forEach(row => {
+        html += renderTableRow(row, colCount);
+      });
+    } else {
+      // Render by group with collapsible headers
+      groups.forEach(group => {
+        // Filter rows in this group
+        const filteredRows = group.rows.filter(r =>
+          !filterLower || r.label.toLowerCase().includes(filterLower) || r.key.toLowerCase().includes(filterLower)
+        );
 
-      const ratioKeys = ['K_Ca', 'K_Mg', 'K_over_CaMg', 'NO3_NH4', 'Sugar_over_K'];
-      ratioKeys.forEach(key => {
-        const newVal = evaluation.derived.new_leaf?.[key];
-        const oldVal = evaluation.derived.old_leaf?.[key];
-        const newStatus = evaluation.per_nutrient_status.new_leaf?.[key] || {};
-        const oldStatus = evaluation.per_nutrient_status.old_leaf?.[key] || {};
+        if (filteredRows.length === 0) return;
 
-        if (newVal === undefined && oldVal === undefined) return;
+        // Group header row (collapsible)
+        html += `
+          <tr class="sap-group-row" onclick="SapViewer.toggleGroup('${group.group}')" style="cursor: pointer;">
+            <td colspan="${colCount}">
+              <span class="sap-group-toggle" id="toggle-${group.group}">▼</span>
+              ${group.name}
+              <span style="font-weight: normal; color: #94a3b8; margin-left: 0.5rem;">(${filteredRows.length})</span>
+            </td>
+          </tr>
+        `;
 
-        const newColors = SapLogic.getStatusColors(newStatus.status);
-        const oldColors = SapLogic.getStatusColors(oldStatus.status);
-
-        html += `<tr>`;
-        html += `<td class="sap-nutrient-name">${formatRatioName(key)}</td>`;
-
-        if (viewMode !== 'old') {
-          html += `<td class="sap-value">${newVal !== undefined ? newVal.toFixed(2) : '—'}</td>`;
-          html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border};">${newStatus.status || '—'}</span></td>`;
-        }
-
-        if (viewMode === 'both') {
-          html += `<td class="sap-delta">—</td>`;
-        }
-
-        if (viewMode !== 'new') {
-          html += `<td class="sap-value">${oldVal !== undefined ? oldVal.toFixed(2) : '—'}</td>`;
-          html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border};">${oldStatus.status || '—'}</span></td>`;
-        }
-
-        html += `</tr>`;
+        // Data rows
+        filteredRows.forEach(row => {
+          html += `<tr class="sap-group-${group.group}-row">`;
+          html += renderTableRow(row, colCount);
+          html += `</tr>`;
+        });
       });
     }
 
@@ -487,6 +447,46 @@ window.SapViewer = (function() {
         </div>
       </div>
     `;
+
+    return html;
+  }
+
+  // Render a single table row
+  function renderTableRow(row, colCount) {
+    const newColors = SapLogic.getStatusColors(row.newStatus?.status);
+    const oldColors = SapLogic.getStatusColors(row.oldStatus?.status);
+    const deltaColor = SapLogic.getDeltaColor(row.delta?.deltaPct);
+    const signal = row.leafSignal || { signal: '', color: '#94a3b8' };
+
+    let html = '';
+    html += `<td class="sap-nutrient-name">${row.label}</td>`;
+
+    if (viewMode !== 'old') {
+      html += `<td class="sap-value">${SapLogic.formatValue(row.newVal, row.key)}</td>`;
+      html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border};">${row.newStatus?.status || '—'}</span></td>`;
+    }
+
+    if (viewMode === 'both') {
+      const arrow = row.delta?.direction === 'up' ? '↑' : (row.delta?.direction === 'down' ? '↓' : '–');
+      const deltaPctStr = row.delta?.deltaPct !== null && row.delta?.deltaPct !== undefined
+        ? `${row.delta.deltaPct >= 0 ? '+' : ''}${row.delta.deltaPct.toFixed(0)}%`
+        : '—';
+
+      // Show leaf signal chip if there's a pattern
+      const signalHtml = signal.signal
+        ? `<div class="sap-signal-chip" style="background: ${signal.color}; color: white;" title="${signal.description}">${signal.signal}</div>`
+        : '';
+
+      html += `<td class="sap-delta">
+        <div style="color: ${deltaColor};">${arrow} ${deltaPctStr}</div>
+        ${signalHtml}
+      </td>`;
+    }
+
+    if (viewMode !== 'new') {
+      html += `<td class="sap-value">${SapLogic.formatValue(row.oldVal, row.key)}</td>`;
+      html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border};">${row.oldStatus?.status || '—'}</span></td>`;
+    }
 
     return html;
   }
@@ -518,7 +518,7 @@ window.SapViewer = (function() {
       const trendOld = SapLogic.evaluateTrend(sampleDates, metric, 'old_leaf');
 
       html += `<tr>`;
-      html += `<td class="sap-trend-metric">${formatNutrientName(metric)}</td>`;
+      html += `<td class="sap-trend-metric">${SapLogic.formatNutrientName(metric)}</td>`;
 
       displayDates.forEach(sd => {
         const newVal = sd.new_leaf?.[metric];
@@ -676,49 +676,6 @@ window.SapViewer = (function() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  function formatNutrientName(key) {
-    const names = {
-      'Nitrogen': 'Total N',
-      'Nitrogen_NO3': 'NO₃-N',
-      'Nitrogen_NH4': 'NH₄-N',
-      'Phosphorus': 'P',
-      'Potassium': 'K',
-      'Calcium': 'Ca',
-      'Magnesium': 'Mg',
-      'Sulfur': 'S',
-      'Boron': 'B',
-      'Iron': 'Fe',
-      'Manganese': 'Mn',
-      'Copper': 'Cu',
-      'Zinc': 'Zn',
-      'Molybdenum': 'Mo',
-      'Chloride': 'Cl',
-      'Sodium': 'Na',
-      'Silica': 'Si',
-      'Aluminum': 'Al',
-      'Cobalt': 'Co',
-      'Nickel': 'Ni',
-      'Selenium': 'Se',
-      'Brix': 'Brix',
-      'Sugars': 'Sugars',
-      'EC': 'EC',
-      'pH': 'pH',
-      'N_Conversion_Efficiency': 'N Conv. Eff.'
-    };
-    return names[key] || key;
-  }
-
-  function formatRatioName(key) {
-    const names = {
-      'K_Ca': 'K:Ca',
-      'K_Mg': 'K:Mg',
-      'K_over_CaMg': 'K/(Ca+Mg)',
-      'NO3_NH4': 'NO₃:NH₄',
-      'Sugar_over_K': 'Sugar:K'
-    };
-    return names[key] || key;
-  }
-
   // ========== NOTES PERSISTENCE ==========
 
   function loadNotes() {
@@ -782,12 +739,38 @@ window.SapViewer = (function() {
     alert('Full trend view coming soon');
   }
 
+  function setSortMode(mode) {
+    sortMode = mode;
+    const site = sapSites.find(s => s.SiteId === selectedSiteId);
+    if (site) {
+      const sampleDates = buildSampleDates(site.samples);
+      renderContent(site, sampleDates);
+    }
+  }
+
+  function toggleGroup(groupKey) {
+    const rows = document.querySelectorAll(`.sap-group-${groupKey}-row`);
+    const toggle = document.getElementById(`toggle-${groupKey}`);
+
+    if (collapsedGroups.has(groupKey)) {
+      collapsedGroups.delete(groupKey);
+      rows.forEach(r => r.style.display = '');
+      if (toggle) toggle.textContent = '▼';
+    } else {
+      collapsedGroups.add(groupKey);
+      rows.forEach(r => r.style.display = 'none');
+      if (toggle) toggle.textContent = '▶';
+    }
+  }
+
   return {
     init,
     selectSite,
     selectDate,
     setViewMode,
     setDisplayMode,
+    setSortMode,
+    toggleGroup,
     toggleAllTrends,
     saveNote
   };
