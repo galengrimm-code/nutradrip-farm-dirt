@@ -27,6 +27,19 @@ window.SapViewer = (function() {
   let currentSampleDate = null; // Current sample date data for click handlers
 
   /**
+   * Parse growth stage to sortable number
+   * V3=3, V6=6, V10=10, VT=100, R1=101, R5=105
+   */
+  function parseGrowthStage(stage) {
+    if (!stage) return 999;
+    const s = stage.toUpperCase();
+    if (s === 'VT') return 100;
+    if (s.startsWith('V')) return parseInt(s.substring(1)) || 50;
+    if (s.startsWith('R')) return 100 + (parseInt(s.substring(1)) || 0);
+    return 999;
+  }
+
+  /**
    * Initialize the sap viewer
    */
   async function init() {
@@ -124,15 +137,24 @@ window.SapViewer = (function() {
    * Build sample date object from records (pairing new/old leaf)
    */
   function buildSampleDates(samples) {
-    // Group by date
+    // Group by date + growth stage (to handle cases where LabDate is just a year)
     const dateMap = new Map();
 
     samples.forEach(record => {
-      const date = record.LabDate || '';
-      if (!dateMap.has(date)) {
-        dateMap.set(date, {
-          sample_date: date,
-          growth_stage: record.GrowthStage || '',
+      const rawDate = record.LabDate || '';
+      const growthStage = record.GrowthStage || '';
+
+      // Create a unique key: if LabDate looks like just a year (4 digits), use GrowthStage as key
+      const isJustYear = /^\d{4}$/.test(String(rawDate));
+      const groupKey = isJustYear ? growthStage : rawDate;
+
+      // For display, use actual date if available, otherwise use growth stage
+      const displayDate = isJustYear ? growthStage : rawDate;
+
+      if (!dateMap.has(groupKey)) {
+        dateMap.set(groupKey, {
+          sample_date: displayDate,
+          growth_stage: growthStage,
           plant_type: record.PlantType || 'Corn',
           variety: record.Variety || '',
           new_leaf: null,
@@ -160,9 +182,20 @@ window.SapViewer = (function() {
       }
     });
 
-    // Convert to array and sort by date ascending (earliest first)
+    // Convert to array and sort
     const result = Array.from(dateMap.values());
-    result.sort((a, b) => new Date(a.sample_date) - new Date(b.sample_date));
+
+    // Sort by growth stage order if sample_date looks like a growth stage, otherwise by date
+    result.sort((a, b) => {
+      const aIsStage = /^[VR]\d+$|^VT$/i.test(a.sample_date);
+      const bIsStage = /^[VR]\d+$|^VT$/i.test(b.sample_date);
+
+      if (aIsStage && bIsStage) {
+        return parseGrowthStage(a.sample_date) - parseGrowthStage(b.sample_date);
+      }
+      return new Date(a.sample_date) - new Date(b.sample_date);
+    });
+
     return result;
   }
 
