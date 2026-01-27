@@ -1140,28 +1140,21 @@ window.SapViewer = (function() {
    * Expand a chart to full-screen modal
    */
   function expandChart(chartKey) {
-    console.log('expandChart called:', chartKey, 'cache:', chartDataCache);
     const { displayDates, chartGroups, crop } = chartDataCache;
-    if (!displayDates || !chartGroups) {
-      console.log('No cache data');
-      return;
-    }
+    if (!displayDates || !chartGroups) return;
 
     const group = chartGroups.find(g => g.key === chartKey);
-    console.log('Found group:', group?.key);
     if (!group) return;
 
     try {
-      // Large chart dimensions
-      const chartWidth = 800;
-      const chartHeight = 400;
+      // Large chart dimensions for expanded view
+      const chartWidth = 1000;
+      const chartHeight = 500;
       const padding = { top: 30, right: 40, bottom: 50, left: 70 };
       const plotWidth = chartWidth - padding.left - padding.right;
       const plotHeight = chartHeight - padding.top - padding.bottom;
 
-      console.log('Rendering chart SVG...');
       const chartSvg = renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight);
-      console.log('Chart SVG length:', chartSvg?.length);
 
       const ratioLegend = group.ratio ? `
         <span class="sap-metric-legend" style="color: ${group.ratio.color};">
@@ -1197,9 +1190,7 @@ window.SapViewer = (function() {
       const existing = document.querySelector('.sap-chart-modal');
       if (existing) existing.remove();
 
-      console.log('Inserting modal into DOM...');
       document.body.insertAdjacentHTML('beforeend', modalHtml);
-      console.log('Modal inserted, checking:', document.querySelector('.sap-chart-modal'));
     } catch (err) {
       console.error('Error rendering expanded chart:', err);
     }
@@ -1795,9 +1786,7 @@ window.SapViewer = (function() {
     document.addEventListener('click', (e) => {
       // Chart panel click (for expand)
       const chartPanel = e.target.closest('.sap-chart-expandable[data-chart-key]');
-      console.log('Click detected, chartPanel:', chartPanel, 'target:', e.target.className);
       if (chartPanel) {
-        console.log('Expanding chart:', chartPanel.dataset.chartKey);
         expandChart(chartPanel.dataset.chartKey);
         return;
       }
