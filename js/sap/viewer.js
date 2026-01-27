@@ -146,15 +146,14 @@ window.SapViewer = (function() {
 
       // Create a unique key: if LabDate looks like just a year (4 digits), use GrowthStage as key
       const isJustYear = /^\d{4}$/.test(String(rawDate));
-      const groupKey = isJustYear ? growthStage : rawDate;
-
-      // For display, use actual date if available, otherwise use growth stage
-      const displayDate = isJustYear ? growthStage : rawDate;
+      const groupKey = isJustYear ? growthStage : `${rawDate}_${growthStage}`;
 
       if (!dateMap.has(groupKey)) {
         dateMap.set(groupKey, {
-          sample_date: displayDate,
+          sample_date: groupKey,
+          raw_date: rawDate,  // Keep original date for display
           growth_stage: growthStage,
+          is_date_only_year: isJustYear,
           plant_type: record.PlantType || 'Corn',
           variety: record.Variety || '',
           new_leaf: null,
@@ -162,7 +161,7 @@ window.SapViewer = (function() {
         });
       }
 
-      const sampleDate = dateMap.get(date);
+      const sampleDate = dateMap.get(groupKey);
       const leafAge = (record.LeafAge || '').toLowerCase();
 
       // Build nutrient object from record
@@ -182,18 +181,14 @@ window.SapViewer = (function() {
       }
     });
 
-    // Convert to array and sort
+    // Convert to array and sort by growth stage order
     const result = Array.from(dateMap.values());
-
-    // Sort by growth stage order if sample_date looks like a growth stage, otherwise by date
     result.sort((a, b) => {
-      const aIsStage = /^[VR]\d+$|^VT$/i.test(a.sample_date);
-      const bIsStage = /^[VR]\d+$|^VT$/i.test(b.sample_date);
-
-      if (aIsStage && bIsStage) {
-        return parseGrowthStage(a.sample_date) - parseGrowthStage(b.sample_date);
-      }
-      return new Date(a.sample_date) - new Date(b.sample_date);
+      // Primary sort by growth stage
+      const stageDiff = parseGrowthStage(a.growth_stage) - parseGrowthStage(b.growth_stage);
+      if (stageDiff !== 0) return stageDiff;
+      // Secondary sort by date if stages are equal
+      return new Date(a.raw_date) - new Date(b.raw_date);
     });
 
     return result;
@@ -564,10 +559,19 @@ window.SapViewer = (function() {
 
     let html = '';
     sampleDates.forEach(sd => {
-      const dateStr = formatDate(sd.sample_date);
-      const stage = sd.growth_stage ? ` (${sd.growth_stage})` : '';
       const selected = sd.sample_date === selectedDate ? 'selected' : '';
-      html += `<option value="${sd.sample_date}" ${selected}>${dateStr}${stage}</option>`;
+      let displayText;
+
+      if (sd.is_date_only_year) {
+        // Date is just a year, show only growth stage
+        displayText = sd.growth_stage || 'Unknown';
+      } else {
+        // Full date available, show "date (stage)"
+        const dateStr = formatDate(sd.raw_date);
+        displayText = sd.growth_stage ? `${dateStr} (${sd.growth_stage})` : dateStr;
+      }
+
+      html += `<option value="${sd.sample_date}" ${selected}>${displayText}</option>`;
     });
     container.innerHTML = html || '<option value="">No samples</option>';
   }
