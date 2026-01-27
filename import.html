@@ -7730,25 +7730,44 @@
       // Show count
       document.getElementById('inSeasonPreviewCount').textContent = `${pendingInSeasonImport.length} records`;
 
+      // Count matched vs unmatched
+      const unmatchedCount = pendingInSeasonImport.filter(r => unmatchedSiteIds.has(r.SiteId)).length;
+      const matchedCount = pendingInSeasonImport.length - unmatchedCount;
+
       // Show warnings for unmatched Site IDs
       const warningsDiv = document.getElementById('inSeasonSiteIdWarnings');
       if (unmatchedSiteIds.size > 0) {
         warningsDiv.innerHTML = `
           <div style="padding: 0.75rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem;">
-            <strong style="color: #92400e;">⚠️ ${unmatchedSiteIds.size} Site IDs not found in Sample Sites:</strong>
+            <strong style="color: #92400e;">⚠️ ${unmatchedCount} records (${unmatchedSiteIds.size} Site IDs) not found in Sample Sites:</strong>
             <div style="font-size: 0.8rem; color: #78350f; margin-top: 0.5rem;">
               ${Array.from(unmatchedSiteIds).slice(0, 10).join(', ')}${unmatchedSiteIds.size > 10 ? '...' : ''}
             </div>
-            <p style="font-size: 0.75rem; color: #92400e; margin: 0.5rem 0 0 0;">These records will be imported but won't be linked to sample site locations.</p>
+            <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #fcd34d;">
+              <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                <input type="radio" name="unmatchedAction" value="import" checked style="accent-color: #f59e0b;">
+                <span style="font-size: 0.85rem; color: #92400e;"><strong>Import all</strong> (${pendingInSeasonImport.length} records) - unmatched will have no location data</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="radio" name="unmatchedAction" value="discard" style="accent-color: #f59e0b;">
+                <span style="font-size: 0.85rem; color: #92400e;"><strong>Discard unmatched</strong> - only import ${matchedCount} matched records</span>
+              </label>
+            </div>
+            <p style="font-size: 0.7rem; color: #78350f; margin: 0.75rem 0 0 0; font-style: italic;">
+              💡 Tip: If you create sample sites with these IDs later, use "Re-link" to connect the data.
+            </p>
           </div>
         `;
       } else {
         warningsDiv.innerHTML = `
           <div style="padding: 0.75rem; background: #dcfce7; border: 1px solid #22c55e; border-radius: 0.375rem;">
-            <strong style="color: #166534;">✓ All Site IDs matched successfully!</strong>
+            <strong style="color: #166534;">✓ All ${pendingInSeasonImport.length} Site IDs matched successfully!</strong>
           </div>
         `;
       }
+
+      // Store unmatched set for import filtering
+      window.inSeasonUnmatchedSiteIds = unmatchedSiteIds;
 
       // Show detected dates feedback
       const detectedDateEl = document.getElementById('inSeasonDetectedDate');
@@ -7788,6 +7807,23 @@
         return;
       }
 
+      // Check if user wants to discard unmatched records
+      const discardUnmatched = document.querySelector('input[name="unmatchedAction"][value="discard"]')?.checked;
+      const unmatchedSiteIds = window.inSeasonUnmatchedSiteIds || new Set();
+
+      // Filter records based on user choice
+      let recordsToImport = pendingInSeasonImport;
+      let discarded = 0;
+      if (discardUnmatched && unmatchedSiteIds.size > 0) {
+        recordsToImport = pendingInSeasonImport.filter(r => !unmatchedSiteIds.has(r.SiteId));
+        discarded = pendingInSeasonImport.length - recordsToImport.length;
+      }
+
+      if (recordsToImport.length === 0) {
+        showStatus('No records to import after filtering', false);
+        return;
+      }
+
       // Load existing data
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
 
@@ -7795,7 +7831,7 @@
       const existingKeys = new Set(inSeasonData.map(r => `${r.SiteId}-${r.Type}-${r.Year}-${r.LabDate}`));
 
       let imported = 0, skipped = 0;
-      pendingInSeasonImport.forEach(rec => {
+      recordsToImport.forEach(rec => {
         const key = `${rec.SiteId}-${rec.Type}-${rec.Year}-${rec.LabDate}`;
         if (existingKeys.has(key)) {
           skipped++;
@@ -7823,7 +7859,10 @@
       pendingInSeasonImport = null;
 
       const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
-      showStatus(`✓ Imported ${imported} ${schema.name} analysis records${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
+      let statusMsg = `✓ Imported ${imported} ${schema.name} analysis records`;
+      if (skipped > 0) statusMsg += ` (${skipped} duplicates skipped)`;
+      if (discarded > 0) statusMsg += ` (${discarded} unmatched discarded)`;
+      showStatus(statusMsg, true);
     }
 
     // Ensure InSeasonAnalysis tab exists in Google Sheets
