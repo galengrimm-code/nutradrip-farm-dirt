@@ -7797,8 +7797,8 @@
 
       warningsDiv.innerHTML = html;
 
-      // Store unmatched set for import filtering
-      window.inSeasonUnmatchedSiteIds = unmatchedSiteIds;
+      // Store matched set for import filtering (more reliable than filtering by unmatched)
+      window.inSeasonMatchedSiteIds = matchedSiteIds;
 
       // Show detected dates feedback
       const detectedDateEl = document.getElementById('inSeasonDetectedDate');
@@ -7840,14 +7840,16 @@
 
       // Check if user wants to discard unmatched records
       const discardUnmatched = document.querySelector('input[name="unmatchedAction"][value="discard"]')?.checked;
-      const unmatchedSiteIds = window.inSeasonUnmatchedSiteIds || new Set();
+      const matchedSiteIds = window.inSeasonMatchedSiteIds || new Set();
 
       // Filter records based on user choice
       let recordsToImport = pendingInSeasonImport;
       let discarded = 0;
-      if (discardUnmatched && unmatchedSiteIds.size > 0) {
-        recordsToImport = pendingInSeasonImport.filter(r => !unmatchedSiteIds.has(r.SiteId));
+      if (discardUnmatched && matchedSiteIds.size > 0) {
+        // Keep only records whose SiteId is in the matched set
+        recordsToImport = pendingInSeasonImport.filter(r => matchedSiteIds.has(r.SiteId));
         discarded = pendingInSeasonImport.length - recordsToImport.length;
+        console.log(`Discard unmatched: keeping ${recordsToImport.length} of ${pendingInSeasonImport.length} records (${discarded} discarded)`);
       }
 
       if (recordsToImport.length === 0) {
