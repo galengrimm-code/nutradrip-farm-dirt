@@ -394,15 +394,6 @@
         </div>
       </div>
 
-      <!-- Required Fields Row -->
-      <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
-        <div class="form-group" style="margin-bottom: 0;">
-          <label>Lab Date <span style="color: #dc2626;">*</span></label>
-          <input type="date" id="inSeasonLabDate" style="width: 160px; padding: 0.5rem; border: 2px solid #dc2626; background: #fef2f2; border-radius: 0.375rem;">
-          <small style="display: block; color: #64748b; font-size: 0.7rem; margin-top: 0.25rem;">Year will be derived from this date</small>
-        </div>
-      </div>
-
       <!-- CSV File Upload -->
       <div class="form-group">
         <label>Lab Results CSV</label>
@@ -1304,6 +1295,13 @@
                   <span id="inSeasonPreviewField" class="shp-preview-values"></span>
                 </div>
               </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Date Sampled <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="inSeasonMapDateSampled" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('DateSampled')"></select>
+                  <span id="inSeasonPreviewDateSampled" class="shp-preview-values"></span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1318,9 +1316,20 @@
         <!-- Step 2: Preview -->
         <div id="inSeasonMappingStep2" style="display: none; padding: 1rem;">
           <div style="margin-bottom: 1rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 0.375rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
               <span style="font-weight: 600; color: #a21caf;">Preview: First 5 rows of mapped data</span>
               <span id="inSeasonPreviewCount" style="font-size: 0.85rem; color: #d946ef;"></span>
+            </div>
+          </div>
+          <!-- Lab Date Override -->
+          <div id="inSeasonDateOverride" style="margin-bottom: 1rem; padding: 0.75rem; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 0.375rem;">
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <div>
+                <label style="font-size: 0.8rem; font-weight: 600; color: #92400e;">Lab Date Override</label>
+                <p style="margin: 0; font-size: 0.7rem; color: #a16207;">Use if CSV date column not found or to set a single date for all records</p>
+              </div>
+              <input type="date" id="inSeasonLabDateOverride" style="padding: 0.4rem; border: 1px solid #fcd34d; border-radius: 0.375rem;" onchange="generateInSeasonPreview()">
+              <span id="inSeasonDetectedDate" style="font-size: 0.75rem; color: #65a30d;"></span>
             </div>
           </div>
           <div id="inSeasonSiteIdWarnings" style="margin-bottom: 1rem;"></div>
@@ -7293,6 +7302,26 @@
     // Site ID aliases for auto-detection (includes NAL format)
     const SITE_ID_ALIASES = ['SiteID', 'Site ID', 'Site_ID', 'SITEID', 'site_id', 'SampleSiteID', 'Sample Site ID', 'Location ID', 'LocationID', 'client_sample_id', 'Client Sample ID', 'Client_Sample_ID'];
     const FIELD_ALIASES = ['Field', 'FieldName', 'Field Name', 'field', 'FIELD', 'Field_Name', 'sample_location', 'Sample Location', 'Sample_Location'];
+    const DATE_SAMPLED_ALIASES = ['date_sampled', 'Date Sampled', 'Date_Sampled', 'DateSampled', 'Sample Date', 'SampleDate', 'Lab Date', 'LabDate', 'Analysis Date', 'date', 'Date'];
+
+    // Parse various date formats to YYYY-MM-DD
+    function parseLabDate(dateStr) {
+      if (!dateStr) return '';
+      // Already in YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+      // MM-DD-YYYY or MM/DD/YYYY format
+      const mdyMatch = dateStr.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (mdyMatch) {
+        const [, m, d, y] = mdyMatch;
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      // Try native Date parsing as fallback
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
+      return '';
+    }
 
     // State variables for in-season import
     let inSeasonData = [];
@@ -7332,10 +7361,9 @@
     // Check if ready to open mapping modal
     function checkInSeasonReady() {
       const file = document.getElementById('inSeasonFile').files[0];
-      const labDate = document.getElementById('inSeasonLabDate').value;
       const btn = document.getElementById('openInSeasonMappingBtn');
 
-      btn.disabled = !(file && selectedInSeasonType && labDate);
+      btn.disabled = !(file && selectedInSeasonType);
     }
 
     // File change handler
@@ -7381,11 +7409,6 @@
 
           checkInSeasonReady();
         });
-      }
-
-      const labDateInput = document.getElementById('inSeasonLabDate');
-      if (labDateInput) {
-        labDateInput.addEventListener('change', checkInSeasonReady);
       }
     });
 
@@ -7468,6 +7491,12 @@
       fieldSelect.innerHTML = options;
       autoSelectColumn(fieldSelect, FIELD_ALIASES);
       updateInSeasonPreview('Field');
+
+      // Date Sampled dropdown
+      const dateSelect = document.getElementById('inSeasonMapDateSampled');
+      dateSelect.innerHTML = options;
+      autoSelectColumn(dateSelect, DATE_SAMPLED_ALIASES);
+      updateInSeasonPreview('DateSampled');
 
       // Nutrient fields
       const nutrientContainer = document.getElementById('inSeasonNutrientMappings');
@@ -7576,9 +7605,11 @@
     // Generate preview table
     function generateInSeasonPreview() {
       const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
-      const labDate = document.getElementById('inSeasonLabDate').value || '';
-      // Derive year from lab date
-      const year = labDate ? new Date(labDate).getFullYear().toString() : '';
+
+      // Get date mapping and override
+      const dateSampledCol = document.getElementById('inSeasonMapDateSampled')?.value;
+      const dateOverride = document.getElementById('inSeasonLabDateOverride')?.value || '';
+      const dateColIndex = dateSampledCol && dateSampledCol !== '(skip)' ? inSeasonCsvHeaders.indexOf(dateSampledCol) : -1;
 
       // Get mappings
       const mappings = {
@@ -7593,8 +7624,26 @@
       // Build preview data
       pendingInSeasonImport = [];
       let unmatchedSiteIds = new Set();
+      let detectedDates = new Set();
 
       inSeasonCsvRows.forEach((row, idx) => {
+        // Get date from CSV column or use override
+        let labDate = '';
+        if (dateColIndex !== -1 && row[dateColIndex]) {
+          // Parse date from CSV (handle various formats)
+          const rawDate = row[dateColIndex];
+          const parsed = parseLabDate(rawDate);
+          labDate = parsed || rawDate;
+          if (parsed) detectedDates.add(parsed);
+        }
+        // Use override if no CSV date or override is set
+        if (dateOverride) {
+          labDate = dateOverride;
+        }
+
+        // Derive year from lab date
+        const year = labDate ? new Date(labDate).getFullYear().toString() : '';
+
         const record = {
           AnalysisID: `${selectedInSeasonType}_${Date.now()}_${idx}`,
           Type: selectedInSeasonType,
@@ -7653,8 +7702,25 @@
         `;
       }
 
+      // Show detected dates feedback
+      const detectedDateEl = document.getElementById('inSeasonDetectedDate');
+      if (detectedDateEl) {
+        if (dateOverride) {
+          detectedDateEl.textContent = `Using override date for all records`;
+          detectedDateEl.style.color = '#0369a1';
+        } else if (detectedDates.size > 0) {
+          detectedDateEl.textContent = `Detected ${detectedDates.size} unique date(s) from CSV`;
+          detectedDateEl.style.color = '#65a30d';
+        } else if (dateColIndex === -1) {
+          detectedDateEl.textContent = 'No date column mapped - use override or map a date column';
+          detectedDateEl.style.color = '#dc2626';
+        } else {
+          detectedDateEl.textContent = '';
+        }
+      }
+
       // Build preview table
-      const previewCols = ['SiteId', 'Field', 'Year', ...schema.columns.slice(0, 5)];
+      const previewCols = ['SiteId', 'Field', 'LabDate', 'Year', ...schema.columns.slice(0, 4)];
       const thead = document.getElementById('inSeasonPreviewHead');
       const tbody = document.getElementById('inSeasonPreviewBody');
 
