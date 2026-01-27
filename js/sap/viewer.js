@@ -664,7 +664,12 @@ window.SapViewer = (function() {
             ${sampleDate.growth_stage ? `<span>Stage: ${sampleDate.growth_stage}</span>` : ''}
           </div>
         </div>
-        <div class="sap-ruleset-badge">Ruleset v1</div>
+        <div class="sap-header-actions">
+          <button class="sap-report-btn" onclick="SapViewer.generateReport()">
+            <span>📄</span> Generate Report
+          </button>
+          <div class="sap-ruleset-badge">Ruleset v1</div>
+        </div>
       </div>
     `;
   }
@@ -2054,6 +2059,261 @@ window.SapViewer = (function() {
     }
   }
 
+  /**
+   * Generate a printable report for the current sample
+   */
+  function generateReport() {
+    if (!currentEvaluation || !currentSampleDate) {
+      alert('Please select a sample first');
+      return;
+    }
+
+    const site = sapSites.find(s => s.SiteId === selectedSiteId);
+    if (!site) return;
+
+    const sampleDate = currentSampleDate;
+    const evaluation = currentEvaluation;
+    const crop = site.PlantType || 'corn';
+
+    // Build report HTML
+    let html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sap Analysis Report - ${site.SiteId}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; color: #1e293b; padding: 20px; max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    h2 { font-size: 14px; margin: 16px 0 8px 0; padding-bottom: 4px; border-bottom: 2px solid #e2e8f0; }
+    h3 { font-size: 12px; margin: 12px 0 6px 0; color: #475569; }
+    .header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #1e293b; }
+    .meta { color: #64748b; font-size: 10px; }
+    .meta span { margin-right: 12px; }
+    .date { float: right; font-size: 10px; color: #64748b; }
+
+    /* Status Cards */
+    .cards { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .card { flex: 1; min-width: 180px; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .card-title { font-size: 10px; color: #64748b; margin-bottom: 4px; }
+    .card-status { font-weight: 700; font-size: 13px; }
+    .card-reason { font-size: 9px; color: #64748b; margin-top: 2px; }
+    .status-ok { color: #16a34a; }
+    .status-watch { color: #d97706; }
+    .status-action { color: #dc2626; }
+    .card-ok { background: #f0fdf4; border-color: #86efac; }
+    .card-watch { background: #fffbeb; border-color: #fcd34d; }
+    .card-action { background: #fef2f2; border-color: #fca5a5; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+    th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; color: #475569; font-size: 9px; text-transform: uppercase; }
+    .group-row td { background: #f1f5f9; font-weight: 600; color: #475569; }
+    .num { text-align: right; font-family: 'SF Mono', Monaco, monospace; }
+    .center { text-align: center; }
+
+    /* Status chips */
+    .chip { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 600; }
+    .chip-ok { background: #dcfce7; color: #16a34a; }
+    .chip-watch { background: #fef3c7; color: #d97706; }
+    .chip-action { background: #fee2e2; color: #dc2626; }
+
+    /* Signal tags */
+    .signal { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 700; color: white; text-transform: uppercase; }
+
+    /* Row emphasis */
+    .row-action { background: #fef2f2; }
+    .row-watch { background: #fffbeb; }
+
+    /* Print styles */
+    @media print {
+      body { padding: 0; font-size: 10px; }
+      .no-print { display: none; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+    }
+
+    .print-btn { position: fixed; top: 10px; right: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .print-btn:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">Print Report</button>
+
+  <div class="header">
+    <span class="date">Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</span>
+    <h1>Sap Analysis Report</h1>
+    <div class="meta">
+      <span><strong>Site:</strong> ${site.SiteId}</span>
+      ${site.Field ? `<span><strong>Field:</strong> ${site.Field}</span>` : ''}
+      ${crop ? `<span><strong>Crop:</strong> ${crop}</span>` : ''}
+      ${sampleDate.variety ? `<span><strong>Variety:</strong> ${sampleDate.variety}</span>` : ''}
+      ${sampleDate.growth_stage ? `<span><strong>Stage:</strong> ${sampleDate.growth_stage}</span>` : ''}
+      <span><strong>Sample Date:</strong> ${sampleDate.sample_date || sampleDate.lab_date || 'N/A'}</span>
+    </div>
+  </div>
+`;
+
+    // System Status Cards
+    html += `<h2>System Status Summary</h2><div class="cards">`;
+    const systems = [
+      { key: 'N', label: 'Nitrogen System' },
+      { key: 'CATIONS', label: 'Cation Balance' },
+      { key: 'MICROS', label: 'Micronutrients' },
+      { key: 'SUGARS', label: 'Sugars/Energy' }
+    ];
+    systems.forEach(sys => {
+      const status = evaluation.system_status[sys.key] || { status: 'OK', reason: 'No data' };
+      const statusLower = (status.status || 'ok').toLowerCase();
+      html += `
+        <div class="card card-${statusLower}">
+          <div class="card-title">${sys.label}</div>
+          <div class="card-status status-${statusLower}">${status.status || 'OK'}</div>
+          <div class="card-reason">${status.reason || ''}</div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+
+    // Raw Data Table
+    html += `<h2>Raw Values - Leaf Comparison</h2>`;
+    html += generateReportTable(sampleDate, evaluation, 'raw');
+
+    // Ratios Table
+    html += `<h2>Calculated Ratios</h2>`;
+    html += generateReportTable(sampleDate, evaluation, 'ratios');
+
+    // Status Priority Table
+    html += `<h2>Status Priority - Issues First</h2>`;
+    html += generateReportStatusTable(sampleDate, evaluation);
+
+    html += `
+</body>
+</html>`;
+
+    // Open in new window
+    const reportWindow = window.open('', '_blank');
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+  }
+
+  /**
+   * Generate a report table for raw or ratio data
+   */
+  function generateReportTable(sampleDate, evaluation, mode) {
+    const groups = SapLogic.buildTableRows(mode, sampleDate, evaluation);
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 25%;">Nutrient</th>
+            <th class="num" style="width: 15%;">New Leaf</th>
+            <th class="center" style="width: 12%;">Status</th>
+            <th class="num" style="width: 15%;">Old Leaf</th>
+            <th class="center" style="width: 12%;">Status</th>
+            <th class="center" style="width: 21%;">Signal</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    groups.forEach(group => {
+      html += `<tr class="group-row"><td colspan="6">${group.name}</td></tr>`;
+
+      group.rows.forEach(row => {
+        const newChip = getStatusChip(row.newStatus?.status);
+        const oldChip = getStatusChip(row.oldStatus?.status);
+        const signal = row.leafSignal || {};
+
+        html += `
+          <tr>
+            <td style="padding-left: 16px;">${row.label}</td>
+            <td class="num">${SapLogic.formatValue(row.newVal, row.key)}</td>
+            <td class="center">${newChip}</td>
+            <td class="num">${SapLogic.formatValue(row.oldVal, row.key)}</td>
+            <td class="center">${oldChip}</td>
+            <td class="center">${signal.signal ? `<span class="signal" style="background: ${signal.color};">${signal.signal}</span>` : '—'}</td>
+          </tr>
+        `;
+      });
+    });
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  /**
+   * Generate status priority table (sorted by Action > Watch > OK)
+   */
+  function generateReportStatusTable(sampleDate, evaluation) {
+    const groups = SapLogic.buildTableRows('raw', sampleDate, evaluation);
+
+    // Flatten and sort by status priority
+    let allRows = [];
+    groups.forEach(g => g.rows.forEach(r => allRows.push(r)));
+
+    const priorityMap = { 'Action': 0, 'Watch': 1, 'OK': 2, 'Unknown': 3 };
+    allRows.sort((a, b) => {
+      const aPriority = priorityMap[a.newStatus?.status] ?? 3;
+      const bPriority = priorityMap[b.newStatus?.status] ?? 3;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return (b.newStatus?.severity || 0) - (a.newStatus?.severity || 0);
+    });
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 20%;">Nutrient</th>
+            <th class="center" style="width: 15%;">Status</th>
+            <th style="width: 15%;">Reason</th>
+            <th style="width: 30%;">Signal / Explanation</th>
+            <th class="center" style="width: 12%;">Old Status</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    allRows.forEach(row => {
+      const status = row.newStatus?.status || 'Unknown';
+      const statusLower = status.toLowerCase();
+      const rowClass = status === 'Action' ? 'row-action' : (status === 'Watch' ? 'row-watch' : '');
+      const newChip = getStatusChip(status);
+      const oldChip = getStatusChip(row.oldStatus?.status);
+      const signal = row.leafSignal || {};
+      const explanation = signal.description || (status === 'OK' ? 'Balanced' : 'No movement issue');
+
+      html += `
+        <tr class="${rowClass}">
+          <td>${row.label}</td>
+          <td class="center">${newChip}</td>
+          <td>${row.newStatus?.reason || ''}</td>
+          <td>
+            ${signal.signal ? `<span class="signal" style="background: ${signal.color};">${signal.signal}</span> ` : ''}
+            ${explanation}
+          </td>
+          <td class="center">${oldChip}</td>
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  /**
+   * Get status chip HTML for reports
+   */
+  function getStatusChip(status) {
+    const s = (status || 'Unknown').toLowerCase();
+    if (s === 'action') return '<span class="chip chip-action">Action</span>';
+    if (s === 'watch') return '<span class="chip chip-watch">Watch</span>';
+    if (s === 'ok') return '<span class="chip chip-ok">OK</span>';
+    return '<span class="chip">—</span>';
+  }
+
   return {
     init,
     selectSite,
@@ -2074,6 +2334,8 @@ window.SapViewer = (function() {
     scrollToMetric,
     // Chart expand functions
     expandChart,
-    closeChartModal
+    closeChartModal,
+    // Report generation
+    generateReport
   };
 })();
