@@ -750,7 +750,7 @@ window.SapViewer = (function() {
           <table class="sap-comparison-table">
             <thead>
               <tr>
-                <th>Nutrient</th>
+                <th class="sap-col-nutrient">Nutrient</th>
                 ${viewMode !== 'old' ? '<th class="sap-col-new">New Leaf</th>' : ''}
                 ${viewMode !== 'old' ? '<th class="sap-col-status">Status</th>' : ''}
                 ${viewMode === 'both' ? '<th class="sap-col-delta">Delta / Signal</th>' : ''}
