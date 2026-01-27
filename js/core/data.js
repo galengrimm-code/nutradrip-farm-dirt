@@ -416,9 +416,15 @@ const SheetsAPI = {
         headers.forEach((header, idx) => {
           const value = row[idx];
           if (value === undefined || value === '') return;
-          // Try to parse as number for nutrient columns
-          const num = parseFloat(value);
-          record[header] = isNaN(num) ? value : num;
+          // Don't convert date-like strings or fields that should stay as strings
+          const stringFields = ['AnalysisID', 'SiteId', 'Type', 'Field', 'Client', 'Farm', 'GrowthStage', 'PlantType', 'Variety', 'LeafAge', 'LabDate', 'Year'];
+          if (stringFields.includes(header) || /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            record[header] = value;
+          } else {
+            // Try to parse as number for nutrient columns
+            const num = parseFloat(value);
+            record[header] = isNaN(num) ? value : num;
+          }
         });
         if (Object.keys(record).length > 0) {
           records.push(record);

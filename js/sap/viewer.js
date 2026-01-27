@@ -140,15 +140,9 @@ window.SapViewer = (function() {
     // Group by date + growth stage (to handle cases where LabDate is just a year)
     const dateMap = new Map();
 
-    // Log first sample's keys to debug what date fields are available
-    if (samples.length > 0) {
-      console.log('Sample record keys:', Object.keys(samples[0]));
-      console.log('Sample LabDate:', samples[0].LabDate, 'DateSampled:', samples[0].DateSampled, 'SampleDate:', samples[0].SampleDate);
-    }
-
     samples.forEach(record => {
-      // Look for actual date in multiple possible fields
-      const rawDate = record.DateSampled || record.SampleDate || record.date_sampled || record.LabDate || '';
+      // Get date from LabDate field
+      const rawDate = record.LabDate || '';
       const growthStage = record.GrowthStage || '';
 
       // Create a unique key: if LabDate looks like just a year (4 digits), use GrowthStage as key
@@ -1146,21 +1140,11 @@ window.SapViewer = (function() {
    * Expand a chart to full-screen modal
    */
   function expandChart(chartKey) {
-    console.log('expandChart called with key:', chartKey);
-    console.log('chartDataCache:', chartDataCache);
-
     const { displayDates, chartGroups, crop } = chartDataCache;
-    if (!displayDates || !chartGroups) {
-      console.log('No chart data cached');
-      return;
-    }
+    if (!displayDates || !chartGroups) return;
 
     const group = chartGroups.find(g => g.key === chartKey);
-    console.log('Found group:', group);
-    if (!group) {
-      console.log('Group not found for key:', chartKey);
-      return;
-    }
+    if (!group) return;
 
     try {
       // Large chart dimensions
@@ -1178,7 +1162,6 @@ window.SapViewer = (function() {
       ` : '';
 
       const chartSvg = renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight);
-      console.log('Chart SVG generated, length:', chartSvg?.length);
 
       const modalHtml = `
         <div class="sap-modal sap-chart-modal" onclick="if(event.target === this) SapViewer.closeChartModal()">
@@ -1208,7 +1191,6 @@ window.SapViewer = (function() {
       if (existing) existing.remove();
 
       document.body.insertAdjacentHTML('beforeend', modalHtml);
-      console.log('Modal inserted into DOM');
     } catch (err) {
       console.error('Error rendering expanded chart:', err);
     }
@@ -1805,9 +1787,7 @@ window.SapViewer = (function() {
       // Chart panel click (for expand)
       const chartPanel = e.target.closest('.sap-chart-expandable[data-chart-key]');
       if (chartPanel) {
-        const chartKey = chartPanel.dataset.chartKey;
-        console.log('Chart panel clicked, key:', chartKey);
-        expandChart(chartKey);
+        expandChart(chartPanel.dataset.chartKey);
         return;
       }
 
