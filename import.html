@@ -7968,11 +7968,32 @@
         spreadsheetId: CONFIG.SHEET_ID,
         range: 'InSeasonAnalysis!A1:BZ1'
       });
-      const headers = headersRes.result.values?.[0] || [];
+      let headers = headersRes.result.values?.[0] || [];
+      console.log('InSeasonAnalysis sheet headers:', headers);
 
       if (headers.length === 0) {
         console.error('No headers found in InSeasonAnalysis tab');
         return;
+      }
+
+      // Ensure required columns exist (add if missing)
+      const requiredCols = ['Lat', 'Lng', 'Client', 'Farm', 'GrowthStage', 'PlantType', 'Variety', 'LeafAge'];
+      let headersModified = false;
+      for (const col of requiredCols) {
+        if (!headers.includes(col)) {
+          headers.push(col);
+          headersModified = true;
+          console.log(`Added missing column: ${col}`);
+        }
+      }
+      if (headersModified) {
+        await gapi.client.sheets.spreadsheets.values.update({
+          spreadsheetId: CONFIG.SHEET_ID,
+          range: 'InSeasonAnalysis!A1:BZ1',
+          valueInputOption: 'RAW',
+          resource: { values: [headers] }
+        });
+        console.log('Updated InSeasonAnalysis headers with missing columns');
       }
 
       // Build rows
@@ -7984,6 +8005,12 @@
           return val;
         });
       });
+
+      // Debug: check first record for Lat/Lng
+      if (inSeasonData.length > 0) {
+        const first = inSeasonData[0];
+        console.log('First record Lat/Lng:', first.Lat, first.Lng, 'Client:', first.Client, 'Farm:', first.Farm);
+      }
 
       // Clear and update
       try {
