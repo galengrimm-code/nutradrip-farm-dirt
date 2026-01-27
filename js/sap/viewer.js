@@ -178,6 +178,12 @@ window.SapViewer = (function() {
   function buildAggregateByGrowthStage() {
     // Get all SAP records
     const sapData = inSeasonData.filter(r => r.Type === 'Sap' || r.Type === 'SAP');
+    console.log('Aggregate: inSeasonData count:', inSeasonData.length);
+    console.log('Aggregate: sapData count:', sapData.length);
+    if (sapData.length > 0) {
+      console.log('Aggregate: Sample record:', sapData[0]);
+      console.log('Aggregate: Growth stages found:', [...new Set(sapData.map(r => r.GrowthStage))]);
+    }
 
     // Group by growth stage and leaf age
     const stageMap = new Map();
@@ -285,8 +291,10 @@ window.SapViewer = (function() {
     if (!container) return;
 
     const aggregateData = buildAggregateByGrowthStage();
+    console.log('Aggregate view: aggregateData:', aggregateData);
 
     if (aggregateData.length === 0) {
+      console.log('Aggregate view: No data, showing empty state');
       renderEmptyState();
       return;
     }
