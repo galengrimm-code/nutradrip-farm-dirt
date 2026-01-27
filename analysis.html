@@ -185,6 +185,38 @@
     /* Status chips and signals */
     .sap-status-chip { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 1rem; font-size: 0.7rem; font-weight: 600; border: 1px solid; }
 
+    /* STATUS MODE - table layout and styling */
+    .sap-comparison-table.status-mode { table-layout: fixed; }
+    .sap-comparison-table.status-mode .sap-col-nutrient { width: 18%; }
+    .sap-comparison-table.status-mode .sap-col-status-main { width: 22%; text-align: left; }
+    .sap-comparison-table.status-mode .sap-col-signal { width: 45%; text-align: left; }
+    .sap-comparison-table.status-mode .sap-col-status-secondary { width: 15%; text-align: center; }
+
+    /* Status mode row backgrounds */
+    .sap-row-action { background: #fef2f2 !important; }
+    .sap-row-action:hover { background: #fee2e2 !important; }
+    .sap-row-watch { background: #fffbeb !important; }
+    .sap-row-watch:hover { background: #fef3c7 !important; }
+    .sap-row-ok { background: #f8fafc; }
+    .sap-row-ok:hover { background: #f1f5f9 !important; }
+
+    /* Status primary display (larger chip + reason) */
+    .sap-status-primary { display: flex; flex-direction: column; gap: 0.25rem; cursor: pointer; }
+    .sap-status-chip-lg { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; font-weight: 700; border: 1px solid; }
+    .sap-status-reason { font-size: 0.7rem; color: #64748b; padding-left: 0.25rem; }
+
+    /* Signal content column */
+    .sap-signal-content { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex-wrap: wrap; }
+    .sap-signal-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 0.25rem; font-size: 0.65rem; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
+    .sap-signal-explanation { font-size: 0.8rem; color: #475569; }
+
+    /* De-emphasis for OK rows in status mode */
+    .sap-comparison-table.status-mode .sap-row-ok .sap-col-nutrient { color: #94a3b8; }
+    .sap-comparison-table.status-mode .sap-row-ok .sap-signal-explanation { color: #94a3b8; }
+
+    /* Clickable rows in status mode */
+    .sap-comparison-table.status-mode tbody tr:not(.sap-group-row) { cursor: pointer; transition: background 0.15s; }
+
     .sap-trend-section { background: white; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .sap-trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; }
     .sap-trend-header h4 { margin: 0; font-size: 1rem; color: #1e293b; }

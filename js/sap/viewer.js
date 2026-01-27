@@ -712,14 +712,42 @@ window.SapViewer = (function() {
   }
 
   function renderComparisonTable(sampleDate, evaluation) {
-    // Build rows using unified row model
-    const groups = SapLogic.buildTableRows(displayMode, sampleDate, evaluation);
+    // Build rows using unified row model (use 'raw' for status mode - we handle display differently)
+    const rowsDisplayMode = displayMode === 'status' ? 'raw' : displayMode;
+    const groups = SapLogic.buildTableRows(rowsDisplayMode, sampleDate, evaluation);
 
     // Apply search filter
     const filterLower = searchFilter.toLowerCase();
 
-    // Determine column count
-    const colCount = viewMode === 'both' ? 6 : 4;
+    // Determine column count - status mode uses different layout
+    const isStatusMode = displayMode === 'status';
+    let colCount;
+    if (isStatusMode) {
+      // Status mode: Nutrient + (Status Main if not old) + Signal + (Status Secondary if not new)
+      colCount = viewMode === 'both' ? 4 : 3;
+    } else {
+      colCount = viewMode === 'both' ? 6 : 4;
+    }
+
+    // Build header row based on mode
+    let headerRow;
+    if (isStatusMode) {
+      headerRow = `
+        <th class="sap-col-nutrient">Nutrient</th>
+        ${viewMode !== 'old' ? '<th class="sap-col-status-main">New Leaf Status</th>' : ''}
+        <th class="sap-col-signal">Signal / Explanation</th>
+        ${viewMode !== 'new' ? '<th class="sap-col-status-secondary">Old Leaf</th>' : ''}
+      `;
+    } else {
+      headerRow = `
+        <th class="sap-col-nutrient">Nutrient</th>
+        ${viewMode !== 'old' ? '<th class="sap-col-new">New Leaf</th>' : ''}
+        ${viewMode !== 'old' ? '<th class="sap-col-status">Status</th>' : ''}
+        ${viewMode === 'both' ? '<th class="sap-col-delta">Delta / Signal</th>' : ''}
+        ${viewMode !== 'new' ? '<th class="sap-col-old">Old Leaf</th>' : ''}
+        ${viewMode !== 'new' ? '<th class="sap-col-status">Status</th>' : ''}
+      `;
+    }
 
     let html = `
       <div class="sap-comparison-section">
@@ -745,22 +773,40 @@ window.SapViewer = (function() {
           </div>
         </div>
         <div class="sap-comparison-table-wrapper">
-          <table class="sap-comparison-table">
+          <table class="sap-comparison-table ${isStatusMode ? 'status-mode' : ''}">
             <thead>
-              <tr>
-                <th class="sap-col-nutrient">Nutrient</th>
-                ${viewMode !== 'old' ? '<th class="sap-col-new">New Leaf</th>' : ''}
-                ${viewMode !== 'old' ? '<th class="sap-col-status">Status</th>' : ''}
-                ${viewMode === 'both' ? '<th class="sap-col-delta">Delta / Signal</th>' : ''}
-                ${viewMode !== 'new' ? '<th class="sap-col-old">Old Leaf</th>' : ''}
-                ${viewMode !== 'new' ? '<th class="sap-col-status">Status</th>' : ''}
-              </tr>
+              <tr>${headerRow}</tr>
             </thead>
             <tbody>
     `;
 
-    // If sorting by severity, flatten all rows and sort
-    if (sortMode === 'severity') {
+    // Helper to get row status class for visual emphasis
+    function getRowStatusClass(row) {
+      const status = row.newStatus?.status || 'Unknown';
+      if (status === 'Action') return 'sap-row-action';
+      if (status === 'Watch') return 'sap-row-watch';
+      return 'sap-row-ok';
+    }
+
+    // Helper to sort by status priority (Action=0, Watch=1, OK=2) then severity
+    function sortByStatusPriority(rows) {
+      const priorityMap = { 'Action': 0, 'Watch': 1, 'OK': 2, 'Unknown': 3 };
+      return [...rows].sort((a, b) => {
+        const aPriority = priorityMap[a.newStatus?.status] ?? 3;
+        const bPriority = priorityMap[b.newStatus?.status] ?? 3;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        // Then by severity (higher first)
+        const aSeverity = a.newStatus?.severity || 0;
+        const bSeverity = b.newStatus?.severity || 0;
+        return bSeverity - aSeverity;
+      });
+    }
+
+    // Status mode always sorts by status priority
+    const effectiveSortMode = isStatusMode ? 'status' : sortMode;
+
+    // If sorting by severity or status priority, flatten all rows and sort
+    if (effectiveSortMode === 'severity' || effectiveSortMode === 'status') {
       let allRows = [];
       groups.forEach(g => {
         g.rows.forEach(r => {
@@ -769,22 +815,30 @@ window.SapViewer = (function() {
           }
         });
       });
-      allRows = SapLogic.sortRowsBySeverity(allRows);
+
+      // Sort by status priority for status mode, severity for severity mode
+      allRows = effectiveSortMode === 'status' ? sortByStatusPriority(allRows) : SapLogic.sortRowsBySeverity(allRows);
 
       allRows.forEach(row => {
-        html += `<tr data-metric-row="${row.key}">`;
-        html += renderTableRow(row, colCount);
+        const rowClass = isStatusMode ? getRowStatusClass(row) : '';
+        html += `<tr class="${rowClass}" data-metric-row="${row.key}">`;
+        html += renderTableRow(row, colCount, isStatusMode);
         html += `</tr>`;
       });
     } else {
       // Render by group with collapsible headers
       groups.forEach(group => {
         // Filter rows in this group
-        const filteredRows = group.rows.filter(r =>
+        let filteredRows = group.rows.filter(r =>
           !filterLower || r.label.toLowerCase().includes(filterLower) || r.key.toLowerCase().includes(filterLower)
         );
 
         if (filteredRows.length === 0) return;
+
+        // In status mode within groups, still sort by priority
+        if (isStatusMode) {
+          filteredRows = sortByStatusPriority(filteredRows);
+        }
 
         // Group header row (collapsible)
         html += `
@@ -799,8 +853,9 @@ window.SapViewer = (function() {
 
         // Data rows
         filteredRows.forEach(row => {
-          html += `<tr class="sap-group-${group.group}-row" data-metric-row="${row.key}">`;
-          html += renderTableRow(row, colCount);
+          const rowClass = isStatusMode ? getRowStatusClass(row) : '';
+          html += `<tr class="sap-group-${group.group}-row ${rowClass}" data-metric-row="${row.key}">`;
+          html += renderTableRow(row, colCount, isStatusMode);
           html += `</tr>`;
         });
       });
@@ -817,13 +872,63 @@ window.SapViewer = (function() {
   }
 
   // Render a single table row
-  function renderTableRow(row, colCount) {
+  function renderTableRow(row, colCount, isStatusMode = false) {
     const newColors = SapLogic.getStatusColors(row.newStatus?.status);
     const oldColors = SapLogic.getStatusColors(row.oldStatus?.status);
     const deltaColor = SapLogic.getDeltaColor(row.delta?.deltaPct);
     const signal = row.leafSignal || { signal: '', color: '#94a3b8' };
 
     let html = '';
+
+    // STATUS MODE: Focus on status, signal, and explanation - no raw values
+    if (isStatusMode) {
+      // Nutrient column
+      html += `<td class="sap-col-nutrient" data-metric="${row.key}">${row.label}</td>`;
+
+      // New Leaf Status - primary focus with reason
+      if (viewMode !== 'old') {
+        const statusReason = row.newStatus?.reason || '';
+        const directionIcon = row.newStatus?.direction === 'low' ? '↓' : (row.newStatus?.direction === 'high' ? '↑' : '');
+        html += `<td class="sap-col-status-main">
+          <div class="sap-status-primary clickable" data-metric="${row.key}" data-leaf="new">
+            <span class="sap-status-chip-lg"
+                  style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border};">
+              ${directionIcon} ${row.newStatus?.status || '—'}
+            </span>
+            <span class="sap-status-reason">${statusReason}</span>
+          </div>
+        </td>`;
+      }
+
+      // Signal / Explanation column
+      const signalText = signal.signal || '';
+      const signalDesc = signal.description || '';
+      const fallbackText = signalText ? '' : (row.newStatus?.status === 'OK' ? 'Balanced' : 'No movement issue');
+
+      html += `<td class="sap-col-signal">
+        <div class="sap-signal-content clickable" data-metric="${row.key}" data-signal="${signalText}">
+          ${signalText ? `<span class="sap-signal-tag" style="background: ${signal.color};">${signalText}</span>` : ''}
+          <span class="sap-signal-explanation">${signalDesc || fallbackText}</span>
+        </div>
+      </td>`;
+
+      // Old Leaf Status - secondary
+      if (viewMode !== 'new') {
+        const oldReason = row.oldStatus?.reason || '';
+        html += `<td class="sap-col-status-secondary">
+          <span class="sap-status-chip clickable"
+                data-metric="${row.key}"
+                data-leaf="old"
+                style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border}; opacity: 0.8;">
+            ${row.oldStatus?.status || '—'}
+          </span>
+        </td>`;
+      }
+
+      return html;
+    }
+
+    // NORMAL MODE: Show raw values, status chips, and delta
     html += `<td class="sap-col-nutrient" data-metric="${row.key}">${row.label}</td>`;
 
     if (viewMode !== 'old') {
@@ -1796,17 +1901,38 @@ window.SapViewer = (function() {
         return;
       }
 
-      // Status chip click
+      // Status chip click (normal mode)
       const statusChip = e.target.closest('.sap-status-chip.clickable[data-metric]');
       if (statusChip) {
         openExplainModal(statusChip.dataset.metric, statusChip.dataset.leaf);
         return;
       }
 
-      // Signal chip click
+      // Status primary click (status mode - larger clickable area)
+      const statusPrimary = e.target.closest('.sap-status-primary.clickable[data-metric]');
+      if (statusPrimary) {
+        openExplainModal(statusPrimary.dataset.metric, statusPrimary.dataset.leaf || 'new');
+        return;
+      }
+
+      // Signal chip click (normal mode)
       const signalChip = e.target.closest('.sap-signal-chip.clickable[data-metric]');
       if (signalChip) {
         openSignalModal(signalChip.dataset.metric);
+        return;
+      }
+
+      // Signal content click (status mode - larger clickable area)
+      const signalContent = e.target.closest('.sap-signal-content.clickable[data-metric]');
+      if (signalContent) {
+        openSignalModal(signalContent.dataset.metric);
+        return;
+      }
+
+      // Table row click in status mode (entire row is clickable)
+      const tableRow = e.target.closest('tr[data-metric-row]');
+      if (tableRow && displayMode === 'status') {
+        openExplainModal(tableRow.dataset.metricRow, 'new');
         return;
       }
     });
