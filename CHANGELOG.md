@@ -4,6 +4,40 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.183] - January 27, 2026
+
+### Sap Analysis Viewer - Status Mode & Reports
+
+- **Status Mode**: New display mode for Leaf Comparison table
+  - Transforms table into prioritized "what needs attention" view
+  - Rows sorted by status priority: Action → Watch → OK, then by severity
+  - Hides raw numeric values and percent deltas
+  - Shows primary status chip with direction arrow (↑/↓) and reason text
+  - Displays signal tags (SUPPLY LOW, NEW LIMIT, REMOB, EXCESS, etc.) with explanations
+  - Action rows have red background, Watch yellow, OK minimal/greyed
+  - Entire row clickable to open explanation modal
+
+- **Generate Report**: New printable report feature
+  - Opens in new browser window with print-optimized layout
+  - Includes site info header with sample date and metadata
+  - System status summary cards (Nitrogen, Cations, Micros, Sugars/Energy)
+  - Raw values table with all nutrients grouped by category
+  - Calculated ratios table (K:Ca, K:Mg, NO₃:NH₄, Ca:Mg, etc.)
+  - Status priority table sorted Action → Watch → OK with signals and explanations
+  - Print button for easy PDF export
+  - No graphs or season trends (data-focused report)
+
+- **UI Fixes**
+  - Fixed drawer/modal overlay covering content - z-index layering corrected
+  - Fixed table column alignment in Leaf Comparison table
+
+### Code Stats
+- **Nutradrip-farm-dirt**: 28,273 lines across 15 files
+- **Sap Viewer module**: 3,099 lines (viewer.js + logic.js)
+- **Farm-dirt (main app)**: 25,161 lines
+
+---
+
 ## [v1.0.182] - January 26, 2026
 
 ### Sample Site Management
@@ -482,6 +516,7 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.0.183 | Jan 27, 2026 | Sap Viewer Status Mode, Generate Report, overlay fixes |
 | v1.0.182 | Jan 26, 2026 | Lab form templates, hard delete, location-scoped rename, longer auth sessions |
 | v1.0.75 | Jan 24, 2026 | OM agronomic recommendations, Sheets sync fix, Sample Site modal |
 | v1.0.74 | Jan 23, 2026 | Field Trends insights (P:Zn, OM, Zn), Methodology page, pH default |

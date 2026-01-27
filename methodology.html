@@ -292,6 +292,7 @@
         <a href="#yield">Yield Correlation</a>
         <a href="#spatial">Map & Spatial</a>
         <a href="#color">Color Scales</a>
+        <a href="#sap">Sap Analysis</a>
       </div>
     </div>
 
@@ -1044,6 +1045,155 @@ position = (clampedValue - lowerBound) / (upperBound - lowerBound)
           <div class="used-in">
             <span>Comparison View</span>
             <span>Change Maps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAP ANALYSIS -->
+    <div class="section" id="sap">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🧪</span> Sap Analysis</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Leaf Signal Patterns</h3>
+          <h4>What it measures</h4>
+          <p>Compares nutrient status between new (young, actively growing) and old (mature, source) leaves to identify plant physiological patterns.</p>
+
+          <h4>Pattern Logic</h4>
+          <div class="formula">
+newLow = new leaf status is "low" (below optimal)
+newHigh = new leaf status is "high" (above optimal)
+oldLow = old leaf status is "low"
+oldHigh = old leaf status is "high"
+
+<span class="comment">// Pattern interpretation</span>
+if (newLow AND oldLow):
+  signal = "SUPPLY LOW"
+  <span class="comment">// Whole-plant deficiency - check root uptake</span>
+
+if (newHigh AND oldHigh):
+  signal = "EXCESS"
+  <span class="comment">// Accumulation in both - reduce inputs or dilution issue</span>
+
+if (newLow AND oldOK):
+  signal = "NEW LIMIT"
+  <span class="comment">// Transport to new growth limited - check mobility</span>
+
+if (newOK AND oldLow):
+  signal = "REMOB"
+  <span class="comment">// Remobilizing from old leaves - normal or stress response</span>
+
+if (newHigh AND oldOK):
+  signal = "NEW BUILD"
+  <span class="comment">// Accumulating in new growth</span>
+
+if (newOK AND oldHigh):
+  signal = "OLD BUILD"
+  <span class="comment">// Stored in old tissue</span>
+          </div>
+
+          <h4>Signal Interpretation</h4>
+          <table class="threshold-table">
+            <tr><th>Signal</th><th>Meaning</th><th>Action</th></tr>
+            <tr><td style="background:#dc2626;color:white;">SUPPLY LOW</td><td>Both leaves deficient</td><td>Root uptake issue, check soil availability</td></tr>
+            <tr><td style="background:#7c3aed;color:white;">EXCESS</td><td>Both leaves high</td><td>Reduce inputs, possible luxury consumption</td></tr>
+            <tr><td style="background:#f59e0b;color:white;">NEW LIMIT</td><td>New low, old OK</td><td>Mobility issue, check transport (immobile nutrients)</td></tr>
+            <tr><td style="background:#0891b2;color:white;">REMOB</td><td>New OK, old low</td><td>Plant pulling from storage, may indicate stress</td></tr>
+            <tr><td style="background:#8b5cf6;color:white;">NEW BUILD</td><td>New high, old OK</td><td>Accumulating in growing points</td></tr>
+            <tr><td style="background:#6366f1;color:white;">OLD BUILD</td><td>New OK, old high</td><td>Stored in mature leaves</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why it matters:</strong> A nutrient can be "low" in new leaves but "OK" in old leaves - this tells a different story than both being low. The pattern reveals whether the issue is supply (root uptake), transport (mobility), or demand (growth stage).</p>
+          </div>
+
+          <div class="used-in">
+            <span>Sap Viewer</span>
+            <span>Status Mode</span>
+            <span>Reports</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Sap Ratio Calculations</h3>
+          <h4>Calculated Ratios</h4>
+          <div class="formula">
+K:Ca Ratio = Potassium / Calcium
+K:Mg Ratio = Potassium / Magnesium
+K/(Ca+Mg) = Potassium / (Calcium + Magnesium)
+NO₃:NH₄ Ratio = Nitrate-N / Ammonium-N
+Ca:Mg Ratio = Calcium / Magnesium
+Sugar:K Ratio = (Sugars × 1000) / Potassium
+          </div>
+
+          <h4>Ratio Thresholds (Corn)</h4>
+          <table class="threshold-table">
+            <tr><th>Ratio</th><th>Optimal Range</th><th>Why It Matters</th></tr>
+            <tr><td>K:Ca</td><td>1.5 - 3.0</td><td>Cation balance affects cell structure</td></tr>
+            <tr><td>K:Mg</td><td>4.0 - 8.0</td><td>Impacts photosynthesis efficiency</td></tr>
+            <tr><td>K/(Ca+Mg)</td><td>0.8 - 1.5</td><td>Overall cation balance indicator</td></tr>
+            <tr><td>NO₃:NH₄</td><td>1.0 - 4.0</td><td>Nitrogen form preference varies by growth stage</td></tr>
+            <tr><td>Ca:Mg</td><td>2.0 - 5.0</td><td>Cell wall integrity and enzyme function</td></tr>
+          </table>
+
+          <div class="used-in">
+            <span>Sap Viewer Ratios Mode</span>
+            <span>Reports</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Status Evaluation</h3>
+          <h4>How status is determined</h4>
+          <div class="formula">
+<span class="comment">// Compare value against 4-zone threshold</span>
+threshold = { low, optimal_low, optimal_high, high }
+
+if (value < low):
+  status = "Action"
+  severity = ((low - value) / low) × 100
+  direction = "low"
+
+if (value >= low AND value < optimal_low):
+  status = "Watch"
+  severity = ((optimal_low - value) / (optimal_low - low)) × 50
+  direction = "low"
+
+if (value >= optimal_low AND value <= optimal_high):
+  status = "OK"
+  severity = 0
+  direction = null
+
+if (value > optimal_high AND value <= high):
+  status = "Watch"
+  severity = ((value - optimal_high) / (high - optimal_high)) × 50
+  direction = "high"
+
+if (value > high):
+  status = "Action"
+  severity = ((value - high) / high) × 100
+  direction = "high"
+          </div>
+
+          <h4>Status Priority (for sorting)</h4>
+          <table class="threshold-table">
+            <tr><th>Status</th><th>Priority</th><th>Color</th></tr>
+            <tr><td>Action</td><td>1 (highest)</td><td style="background:#fef2f2;color:#dc2626;">Red background</td></tr>
+            <tr><td>Watch</td><td>2</td><td style="background:#fffbeb;color:#d97706;">Yellow background</td></tr>
+            <tr><td>OK</td><td>3 (lowest)</td><td style="background:#f0fdf4;color:#16a34a;">Green/minimal</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Severity score:</strong> Ranges 0-100 and indicates how far outside the optimal range the value is. Used to sort nutrients within the same status level (e.g., which "Action" item is most severe).</p>
+          </div>
+
+          <div class="used-in">
+            <span>Sap Viewer</span>
+            <span>Status Mode Sorting</span>
+            <span>System Cards</span>
           </div>
         </div>
       </div>
