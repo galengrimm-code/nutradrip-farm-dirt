@@ -7714,7 +7714,7 @@
 
         // Link to sample site
         if (record.SiteId) {
-          const site = sampleSitesData.find(s => s.SiteID === record.SiteId);
+          const site = sampleSitesData.find(s => s.SiteID?.toLowerCase() === record.SiteId?.toLowerCase());
           if (site) {
             record.Field = record.Field || site.Field || '';
             record.Lat = site.Lat;
