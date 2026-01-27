@@ -260,9 +260,9 @@
     /* Drawer styles */
     .sap-drawer { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1000; pointer-events: none; }
     .sap-drawer.open { pointer-events: auto; }
-    .sap-drawer-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s; }
+    .sap-drawer-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s; z-index: 1; }
     .sap-drawer.open .sap-drawer-overlay { opacity: 1; }
-    .sap-drawer-content { position: absolute; top: 0; right: 0; bottom: 0; width: 400px; max-width: 90vw; background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.15); transform: translateX(100%); transition: transform 0.3s ease; display: flex; flex-direction: column; }
+    .sap-drawer-content { position: absolute; top: 0; right: 0; bottom: 0; width: 400px; max-width: 90vw; background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.15); transform: translateX(100%); transition: transform 0.3s ease; display: flex; flex-direction: column; z-index: 2; }
     .sap-drawer.open .sap-drawer-content { transform: translateX(0); }
     .sap-drawer-header { padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
     .sap-drawer-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
@@ -281,9 +281,9 @@
     /* Modal styles */
     .sap-modal { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1001; pointer-events: none; display: flex; align-items: center; justify-content: center; }
     .sap-modal.open { pointer-events: auto; }
-    .sap-modal-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.2s; }
+    .sap-modal-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.2s; z-index: 1; }
     .sap-modal.open .sap-modal-overlay { opacity: 1; }
-    .sap-modal-content { position: relative; z-index: 1; background: white; border-radius: 0.75rem; box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-width: 500px; width: 90vw; max-height: 85vh; overflow: hidden; transform: scale(0.95); opacity: 0; transition: all 0.2s ease; }
+    .sap-modal-content { position: relative; z-index: 2; background: white; border-radius: 0.75rem; box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-width: 500px; width: 90vw; max-height: 85vh; overflow: hidden; transform: scale(0.95); opacity: 0; transition: all 0.2s ease; }
     .sap-modal.open .sap-modal-content { transform: scale(1); opacity: 1; }
     .sap-modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
     .sap-modal-header h3 { margin: 0; font-size: 1rem; color: #1e293b; }
