@@ -900,7 +900,7 @@ window.SapViewer = (function() {
       { key: 'nitrogen', label: 'Nitrogen', metrics: ['Nitrogen_NO3', 'Nitrogen_NH4'], colors: ['#8b5cf6', '#ec4899'] },
       { key: 'micros', label: 'Micronutrients', metrics: ['Boron', 'Zinc', 'Iron', 'Manganese'], colors: ['#06b6d4', '#f97316', '#64748b', '#a855f7'] },
       { key: 'energy', label: 'Energy', metrics: ['Brix', 'Sugars'], colors: ['#10b981', '#84cc16'] },
-      { key: 'stress', label: 'Stress Indicators', metrics: ['EC', 'pH'], colors: ['#ef4444', '#6366f1'], collapsible: true }
+      { key: 'stress', label: 'Stress Indicators', metrics: ['EC', 'pH'], colors: ['#ef4444', '#6366f1'] }
     ];
 
     const displayDates = sampleDates.slice(0, 12);
