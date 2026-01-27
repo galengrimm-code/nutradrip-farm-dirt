@@ -19,9 +19,12 @@ window.SapViewer = (function() {
   let viewMode = 'both'; // 'both', 'new', 'old'
   let displayMode = 'raw'; // 'raw', 'ratios', 'status'
   let sortMode = 'group'; // 'group', 'severity'
+  let trendViewMode = 'graph'; // 'table', 'graph'
   let searchFilter = '';
   let notes = {}; // { siteId-date: 'note text' }
   let collapsedGroups = new Set(); // Track collapsed groups
+  let currentEvaluation = null; // Current evaluation result for click handlers
+  let currentSampleDate = null; // Current sample date data for click handlers
 
   /**
    * Initialize the sap viewer
@@ -36,10 +39,11 @@ window.SapViewer = (function() {
     // Setup UI
     renderSiteSelector();
     setupEventListeners();
+    setupGlobalClickHandler();
 
-    // Auto-select first site if available
+    // Show aggregate view by default (no site selected)
     if (sapSites.length > 0) {
-      selectSite(sapSites[0].SiteId);
+      renderAggregateView();
     } else {
       renderEmptyState();
     }
@@ -168,9 +172,267 @@ window.SapViewer = (function() {
   }
 
   /**
+   * Build aggregate data by growth stage across all sites
+   * Returns array of sample date objects with averaged nutrient values
+   */
+  function buildAggregateByGrowthStage() {
+    // Get all SAP records
+    const sapData = inSeasonData.filter(r => r.Type === 'Sap' || r.Type === 'SAP');
+
+    // Group by growth stage and leaf age
+    const stageMap = new Map();
+
+    sapData.forEach(record => {
+      const stage = record.GrowthStage || 'Unknown';
+      const leafAge = (record.LeafAge || '').toLowerCase();
+      const leafKey = (leafAge === 'old' || leafAge === 'old leaf') ? 'old_leaf' : 'new_leaf';
+
+      if (!stageMap.has(stage)) {
+        stageMap.set(stage, {
+          growth_stage: stage,
+          plant_type: record.PlantType || 'Corn',
+          new_leaf_values: [],
+          old_leaf_values: [],
+          sites: new Set()
+        });
+      }
+
+      const stageData = stageMap.get(stage);
+      const nutrients = extractNutrients(record);
+
+      if (leafKey === 'new_leaf') {
+        stageData.new_leaf_values.push(nutrients);
+      } else {
+        stageData.old_leaf_values.push(nutrients);
+      }
+
+      if (record.SiteId) {
+        stageData.sites.add(record.SiteId);
+      }
+    });
+
+    // Average the values for each growth stage
+    const result = [];
+
+    // Sort stages in typical growth order
+    const stageOrder = ['V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12', 'VT', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'Unknown'];
+    const sortedStages = Array.from(stageMap.keys()).sort((a, b) => {
+      const aIdx = stageOrder.indexOf(a);
+      const bIdx = stageOrder.indexOf(b);
+      if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+
+    sortedStages.forEach(stage => {
+      const data = stageMap.get(stage);
+
+      // Average nutrients for new leaf
+      const newLeafAvg = averageNutrients(data.new_leaf_values);
+      const oldLeafAvg = averageNutrients(data.old_leaf_values);
+
+      result.push({
+        sample_date: `Stage: ${stage}`,
+        growth_stage: stage,
+        plant_type: data.plant_type,
+        variety: '',
+        new_leaf: Object.keys(newLeafAvg).length > 0 ? newLeafAvg : null,
+        old_leaf: Object.keys(oldLeafAvg).length > 0 ? oldLeafAvg : null,
+        site_count: data.sites.size,
+        new_sample_count: data.new_leaf_values.length,
+        old_sample_count: data.old_leaf_values.length
+      });
+    });
+
+    return result;
+  }
+
+  /**
+   * Average an array of nutrient objects
+   */
+  function averageNutrients(nutrientArrays) {
+    if (!nutrientArrays || nutrientArrays.length === 0) return {};
+
+    const sums = {};
+    const counts = {};
+
+    nutrientArrays.forEach(nutrients => {
+      Object.entries(nutrients).forEach(([key, val]) => {
+        if (typeof val === 'number' && !isNaN(val)) {
+          sums[key] = (sums[key] || 0) + val;
+          counts[key] = (counts[key] || 0) + 1;
+        }
+      });
+    });
+
+    const result = {};
+    Object.keys(sums).forEach(key => {
+      result[key] = sums[key] / counts[key];
+    });
+
+    return result;
+  }
+
+  /**
+   * Render the aggregate view (all sites averaged by growth stage)
+   */
+  function renderAggregateView() {
+    selectedSiteId = null;
+    selectedDate = null;
+
+    const container = document.getElementById('sapViewerContent');
+    if (!container) return;
+
+    const aggregateData = buildAggregateByGrowthStage();
+
+    if (aggregateData.length === 0) {
+      renderEmptyState();
+      return;
+    }
+
+    // Update date selector to show growth stages
+    const dateContainer = document.getElementById('sapDateSelect');
+    if (dateContainer) {
+      let html = '';
+      aggregateData.forEach((sd, idx) => {
+        const selected = idx === 0 ? 'selected' : '';
+        const sampleInfo = `(${sd.site_count} sites, ${sd.new_sample_count + sd.old_sample_count} samples)`;
+        html += `<option value="${sd.growth_stage}" ${selected}>${sd.growth_stage} ${sampleInfo}</option>`;
+      });
+      dateContainer.innerHTML = html || '<option value="">No data</option>';
+    }
+
+    // Select first stage by default
+    const selectedStage = aggregateData[0];
+
+    // Render content for aggregate view
+    renderAggregateContent(aggregateData, selectedStage);
+  }
+
+  /**
+   * Render content for aggregate view
+   */
+  function renderAggregateContent(aggregateData, selectedStage) {
+    const container = document.getElementById('sapViewerContent');
+    if (!container) return;
+
+    // Evaluate status for selected stage
+    const evaluation = SapLogic.evaluateStatus(selectedStage, {
+      crop: selectedStage.plant_type || 'corn',
+      growth_stage: selectedStage.growth_stage
+    });
+
+    // Store for click handlers
+    currentEvaluation = evaluation;
+    currentSampleDate = selectedStage;
+
+    let html = '';
+
+    // Aggregate header
+    html += `
+      <div class="sap-site-header">
+        <div class="sap-site-info">
+          <h3>All Sites Average</h3>
+          <div class="sap-site-meta">
+            <span>Growth Stage: ${selectedStage.growth_stage}</span>
+            <span>${selectedStage.site_count} site(s)</span>
+            <span>New: ${selectedStage.new_sample_count} samples</span>
+            <span>Old: ${selectedStage.old_sample_count} samples</span>
+          </div>
+        </div>
+        <div class="sap-ruleset-badge">Ruleset v1</div>
+      </div>
+    `;
+
+    // Summary cards
+    html += renderSummaryCards(evaluation.system_status);
+
+    // Comparison table (use same function as single site)
+    html += renderComparisonTable(selectedStage, evaluation);
+
+    // Aggregate trend table (showing all stages)
+    html += renderAggregateTrendTable(aggregateData);
+
+    container.innerHTML = html;
+  }
+
+  /**
+   * Render trend table for aggregate view (all growth stages)
+   */
+  function renderAggregateTrendTable(aggregateData) {
+    const ruleset = window.SapRulesets?.v1 || {};
+
+    // Use same nutrients as regular trend
+    const trendNutrients = ['Nitrogen', 'Potassium', 'Calcium', 'Phosphorus', 'Brix'];
+
+    let html = `
+      <div class="sap-trend-section">
+        <div class="sap-trend-header">
+          <h4>Growth Stage Averages</h4>
+          <span class="sap-trend-note">New leaf (top) / Old leaf (bottom)</span>
+        </div>
+        <div class="sap-trend-table-wrapper">
+          <table class="sap-trend-table">
+            <thead>
+              <tr>
+                <th>Nutrient</th>
+                ${aggregateData.map(sd => `<th>${sd.growth_stage}<br><span style="font-size: 0.7rem; color: #6b7280;">(n=${sd.site_count})</span></th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    trendNutrients.forEach(nutrient => {
+      // New leaf row
+      html += `<tr class="sap-trend-row-new">`;
+      html += `<td class="sap-trend-nutrient">${nutrient}</td>`;
+
+      aggregateData.forEach(sd => {
+        const val = sd.new_leaf?.[nutrient];
+        const thresh = ruleset.getThreshold?.('corn', 'new_leaf', nutrient);
+        const status = val !== undefined ? SapLogic.getStatus(val, thresh) : null;
+        const colors = status ? SapLogic.getStatusColors(status) : { bg: 'transparent', text: '#94a3b8' };
+        const display = val !== undefined ? formatValue(val, nutrient) : '-';
+        html += `<td style="background: ${colors.bg}; color: ${colors.text}; font-weight: 500;">${display}</td>`;
+      });
+      html += '</tr>';
+
+      // Old leaf row
+      html += `<tr class="sap-trend-row-old">`;
+      html += `<td class="sap-trend-nutrient" style="color: #6b7280; font-style: italic;"></td>`;
+
+      aggregateData.forEach(sd => {
+        const val = sd.old_leaf?.[nutrient];
+        const thresh = ruleset.getThreshold?.('corn', 'old_leaf', nutrient);
+        const status = val !== undefined ? SapLogic.getStatus(val, thresh) : null;
+        const colors = status ? SapLogic.getStatusColors(status) : { bg: 'transparent', text: '#94a3b8' };
+        const display = val !== undefined ? formatValue(val, nutrient) : '-';
+        html += `<td style="background: ${colors.bg}; color: ${colors.text}; opacity: 0.8;">${display}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    return html;
+  }
+
+  /**
    * Select a site and render its data
    */
   function selectSite(siteId) {
+    // If no siteId, show aggregate view
+    if (!siteId) {
+      renderAggregateView();
+      return;
+    }
+
     selectedSiteId = siteId;
     const site = sapSites.find(s => s.SiteId === siteId);
 
@@ -201,6 +463,17 @@ window.SapViewer = (function() {
    */
   function selectDate(date) {
     selectedDate = date;
+
+    // If no site selected, we're in aggregate mode - date is actually growth stage
+    if (!selectedSiteId) {
+      const aggregateData = buildAggregateByGrowthStage();
+      const selectedStage = aggregateData.find(sd => sd.growth_stage === date) || aggregateData[0];
+      if (selectedStage) {
+        renderAggregateContent(aggregateData, selectedStage);
+      }
+      return;
+    }
+
     const site = sapSites.find(s => s.SiteId === selectedSiteId);
     if (site) {
       const sampleDates = buildSampleDates(site.samples);
@@ -214,7 +487,7 @@ window.SapViewer = (function() {
     const container = document.getElementById('sapSiteSelect');
     if (!container) return;
 
-    let html = '<option value="">Select a site...</option>';
+    let html = '<option value="">All Sites (Avg by Stage)</option>';
     sapSites.forEach(site => {
       const label = site.Field ? `${site.SiteId} (${site.Field})` : site.SiteId;
       html += `<option value="${site.SiteId}">${label}</option>`;
@@ -265,6 +538,10 @@ window.SapViewer = (function() {
       crop: site.PlantType || 'corn',
       growth_stage: sampleDate.growth_stage
     });
+
+    // Store for click handlers
+    currentEvaluation = evaluation;
+    currentSampleDate = sampleDate;
 
     // Build HTML
     let html = '';
@@ -325,11 +602,16 @@ window.SapViewer = (function() {
     let html = '<div class="sap-summary-cards">';
 
     systems.forEach(sys => {
-      const status = systemStatus[sys.key] || { status: 'OK', reason: '', confidence: 'Low' };
+      const status = systemStatus[sys.key] || { status: 'OK', reason: '', confidence: 'Low', issues: [] };
       const colors = SapLogic.getStatusColors(status.status);
+      const issueCount = status.issues?.length || 0;
+      const hasIssues = issueCount > 0;
+      const clickStyle = hasIssues ? 'cursor: pointer;' : '';
 
       html += `
-        <div class="sap-summary-card" style="border-color: ${colors.border}; background: ${colors.bg};">
+        <div class="sap-summary-card ${hasIssues ? 'clickable' : ''}"
+             data-system="${sys.key}"
+             style="border-color: ${colors.border}; background: ${colors.bg}; ${clickStyle}">
           <div class="sap-card-header">
             <span class="sap-card-icon">${sys.icon}</span>
             <span class="sap-card-title">${sys.label}</span>
@@ -339,7 +621,10 @@ window.SapViewer = (function() {
             <span class="sap-status-text" style="color: ${colors.text};">${status.status}</span>
           </div>
           <div class="sap-card-reason">${status.reason || 'All values in range'}</div>
-          <div class="sap-card-confidence">Confidence: ${status.confidence}</div>
+          <div class="sap-card-confidence">
+            Confidence: ${status.confidence}
+            ${hasIssues ? `<span class="sap-card-more">(click for details)</span>` : ''}
+          </div>
         </div>
       `;
     });
@@ -409,7 +694,9 @@ window.SapViewer = (function() {
       allRows = SapLogic.sortRowsBySeverity(allRows);
 
       allRows.forEach(row => {
+        html += `<tr data-metric-row="${row.key}">`;
         html += renderTableRow(row, colCount);
+        html += `</tr>`;
       });
     } else {
       // Render by group with collapsible headers
@@ -434,7 +721,7 @@ window.SapViewer = (function() {
 
         // Data rows
         filteredRows.forEach(row => {
-          html += `<tr class="sap-group-${group.group}-row">`;
+          html += `<tr class="sap-group-${group.group}-row" data-metric-row="${row.key}">`;
           html += renderTableRow(row, colCount);
           html += `</tr>`;
         });
@@ -459,11 +746,19 @@ window.SapViewer = (function() {
     const signal = row.leafSignal || { signal: '', color: '#94a3b8' };
 
     let html = '';
-    html += `<td class="sap-nutrient-name">${row.label}</td>`;
+    html += `<td class="sap-nutrient-name" data-metric="${row.key}">${row.label}</td>`;
 
     if (viewMode !== 'old') {
       html += `<td class="sap-value">${SapLogic.formatValue(row.newVal, row.key)}</td>`;
-      html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border};">${row.newStatus?.status || '—'}</span></td>`;
+      html += `<td class="sap-status">
+        <span class="sap-status-chip clickable"
+              data-metric="${row.key}"
+              data-leaf="new"
+              data-status="${row.newStatus?.status || 'Unknown'}"
+              style="background: ${newColors.bg}; color: ${newColors.text}; border-color: ${newColors.border}; cursor: pointer;">
+          ${row.newStatus?.status || '—'}
+        </span>
+      </td>`;
     }
 
     if (viewMode === 'both') {
@@ -474,7 +769,11 @@ window.SapViewer = (function() {
 
       // Show leaf signal chip if there's a pattern
       const signalHtml = signal.signal
-        ? `<div class="sap-signal-chip" style="background: ${signal.color}; color: white;" title="${signal.description}">${signal.signal}</div>`
+        ? `<div class="sap-signal-chip clickable"
+               data-metric="${row.key}"
+               data-signal="${signal.signal}"
+               style="background: ${signal.color}; color: white; cursor: pointer;"
+               title="${signal.description}">${signal.signal}</div>`
         : '';
 
       html += `<td class="sap-delta">
@@ -485,46 +784,80 @@ window.SapViewer = (function() {
 
     if (viewMode !== 'new') {
       html += `<td class="sap-value">${SapLogic.formatValue(row.oldVal, row.key)}</td>`;
-      html += `<td class="sap-status"><span class="sap-status-chip" style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border};">${row.oldStatus?.status || '—'}</span></td>`;
+      html += `<td class="sap-status">
+        <span class="sap-status-chip clickable"
+              data-metric="${row.key}"
+              data-leaf="old"
+              data-status="${row.oldStatus?.status || 'Unknown'}"
+              style="background: ${oldColors.bg}; color: ${oldColors.text}; border-color: ${oldColors.border}; cursor: pointer;">
+          ${row.oldStatus?.status || '—'}
+        </span>
+      </td>`;
     }
 
     return html;
   }
 
   function renderTrendTable(sampleDates, crop) {
-    const keyMetrics = ['Potassium', 'Calcium', 'Magnesium', 'Boron', 'Zinc', 'Brix', 'Nitrogen_NO3', 'Nitrogen_NH4'];
-    const displayDates = sampleDates.slice(0, 8); // Limit to 8 dates for table width
+    // Chart groupings by system
+    const chartGroups = [
+      { key: 'cations', label: 'Cations', metrics: ['Potassium', 'Calcium', 'Magnesium'], colors: ['#3b82f6', '#22c55e', '#f59e0b'] },
+      { key: 'nitrogen', label: 'Nitrogen', metrics: ['Nitrogen_NO3', 'Nitrogen_NH4'], colors: ['#8b5cf6', '#ec4899'] },
+      { key: 'micros', label: 'Micronutrients', metrics: ['Boron', 'Zinc'], colors: ['#06b6d4', '#f97316'] },
+      { key: 'energy', label: 'Energy', metrics: ['Brix', 'Sugars'], colors: ['#10b981', '#84cc16'] }
+    ];
+
+    const displayDates = sampleDates.slice(0, 12);
 
     let html = `
       <div class="sap-trend-section">
         <div class="sap-trend-header">
           <h4>Season Trends</h4>
-          <button class="sap-expand-btn" onclick="SapViewer.toggleAllTrends()">Show all nutrients</button>
+          <div class="sap-trend-controls">
+            <div class="sap-view-toggle">
+              <button class="sap-toggle-btn ${trendViewMode === 'graph' ? 'active' : ''}" onclick="SapViewer.setTrendViewMode('graph')">Graph</button>
+              <button class="sap-toggle-btn ${trendViewMode === 'table' ? 'active' : ''}" onclick="SapViewer.setTrendViewMode('table')">Table</button>
+            </div>
+          </div>
         </div>
-        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem;">New leaf (top) / Old leaf (bottom)</div>
-        <div class="sap-trend-table-wrapper">
-          <table class="sap-trend-table">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                ${displayDates.map(sd => `<th class="sap-trend-date">${formatDateShort(sd.sample_date)}<br><span class="sap-stage">${sd.growth_stage || ''}</span></th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
     `;
 
-    keyMetrics.forEach(metric => {
-      const trendNew = SapLogic.evaluateTrend(sampleDates, metric, 'new_leaf');
-      const trendOld = SapLogic.evaluateTrend(sampleDates, metric, 'old_leaf');
+    if (trendViewMode === 'graph') {
+      html += renderTrendGraphs(displayDates, chartGroups, crop);
+    } else {
+      html += renderTrendTableView(displayDates, chartGroups, crop);
+    }
 
+    html += `</div>`;
+    return html;
+  }
+
+  /**
+   * Render the table view of trends
+   */
+  function renderTrendTableView(displayDates, chartGroups, crop) {
+    const allMetrics = chartGroups.flatMap(g => g.metrics);
+
+    let html = `
+      <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem;">New leaf (top) / Old leaf (bottom)</div>
+      <div class="sap-trend-table-wrapper">
+        <table class="sap-trend-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              ${displayDates.map(sd => `<th class="sap-trend-date">${formatDateShort(sd.sample_date)}<br><span class="sap-stage">${sd.growth_stage || ''}</span></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    allMetrics.forEach(metric => {
       html += `<tr>`;
       html += `<td class="sap-trend-metric">${SapLogic.formatNutrientName(metric)}</td>`;
 
       displayDates.forEach(sd => {
         const newVal = sd.new_leaf?.[metric];
         const oldVal = sd.old_leaf?.[metric];
-
-        // Evaluate status for coloring
         const evaluation = SapLogic.evaluateStatus(sd, { crop });
         const newStatus = evaluation.per_nutrient_status.new_leaf?.[metric] || {};
         const oldStatus = evaluation.per_nutrient_status.old_leaf?.[metric] || {};
@@ -551,13 +884,169 @@ window.SapViewer = (function() {
     });
 
     html += `
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
       </div>
     `;
-
     return html;
+  }
+
+  /**
+   * Render graph view of trends using SVG
+   */
+  function renderTrendGraphs(displayDates, chartGroups, crop) {
+    const chartWidth = 280;
+    const chartHeight = 140;
+    const padding = { top: 20, right: 20, bottom: 30, left: 45 };
+    const plotWidth = chartWidth - padding.left - padding.right;
+    const plotHeight = chartHeight - padding.top - padding.bottom;
+
+    let html = `
+      <div class="sap-trend-legend">
+        <span class="sap-legend-item"><span class="sap-legend-line solid"></span> New Leaf</span>
+        <span class="sap-legend-item"><span class="sap-legend-line dashed"></span> Old Leaf</span>
+      </div>
+      <div class="sap-chart-grid">
+    `;
+
+    chartGroups.forEach(group => {
+      html += `
+        <div class="sap-chart-panel">
+          <div class="sap-chart-title">${group.label}</div>
+          <div class="sap-chart-container">
+            ${renderSingleChart(displayDates, group.metrics, group.colors, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
+          </div>
+          <div class="sap-chart-legend">
+            ${group.metrics.map((m, i) => `
+              <span class="sap-metric-legend" style="color: ${group.colors[i]};">
+                <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
+                ${SapLogic.formatNutrientName(m)}
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    return html;
+  }
+
+  /**
+   * Render a single SVG chart for a group of metrics
+   */
+  function renderSingleChart(displayDates, metrics, colors, crop, width, height, padding, plotWidth, plotHeight) {
+    if (displayDates.length < 2) {
+      return `<div class="sap-chart-empty">Need at least 2 dates for trend</div>`;
+    }
+
+    // Collect all values to determine scale
+    let allValues = [];
+    metrics.forEach(metric => {
+      displayDates.forEach(sd => {
+        const newVal = parseFloat(sd.new_leaf?.[metric]);
+        const oldVal = parseFloat(sd.old_leaf?.[metric]);
+        if (!isNaN(newVal)) allValues.push(newVal);
+        if (!isNaN(oldVal)) allValues.push(oldVal);
+      });
+    });
+
+    if (allValues.length === 0) {
+      return `<div class="sap-chart-empty">No data</div>`;
+    }
+
+    const minVal = Math.min(...allValues);
+    const maxVal = Math.max(...allValues);
+    const range = maxVal - minVal || 1;
+    const yMin = Math.max(0, minVal - range * 0.1);
+    const yMax = maxVal + range * 0.1;
+    const yRange = yMax - yMin || 1;
+
+    // Helper to convert value to Y coordinate
+    const toY = (val) => padding.top + plotHeight - ((val - yMin) / yRange * plotHeight);
+    const toX = (i) => padding.left + (i / (displayDates.length - 1)) * plotWidth;
+
+    // Build SVG
+    let svg = `<svg width="${width}" height="${height}" class="sap-trend-svg">`;
+
+    // Grid lines
+    const gridLines = 4;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = padding.top + (i / gridLines) * plotHeight;
+      const val = yMax - (i / gridLines) * yRange;
+      svg += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
+      svg += `<text x="${padding.left - 5}" y="${y + 3}" text-anchor="end" font-size="9" fill="#94a3b8">${formatChartValue(val)}</text>`;
+    }
+
+    // X-axis labels (dates)
+    displayDates.forEach((sd, i) => {
+      const x = toX(i);
+      const label = sd.growth_stage || formatDateShort(sd.sample_date);
+      svg += `<text x="${x}" y="${height - 5}" text-anchor="middle" font-size="8" fill="#64748b">${label}</text>`;
+    });
+
+    // Draw lines for each metric
+    metrics.forEach((metric, mi) => {
+      const color = colors[mi];
+
+      // New leaf line (solid)
+      let newPoints = [];
+      displayDates.forEach((sd, i) => {
+        const val = parseFloat(sd.new_leaf?.[metric]);
+        if (!isNaN(val)) {
+          newPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage });
+        }
+      });
+      if (newPoints.length > 1) {
+        const pathD = newPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+        svg += `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" class="sap-chart-line"/>`;
+        // Data points
+        newPoints.forEach(p => {
+          svg += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" class="sap-chart-point"
+                   data-metric="${metric}" data-leaf="new" data-val="${p.val}" data-date="${p.date}" data-stage="${p.stage || ''}"/>`;
+        });
+      }
+
+      // Old leaf line (dashed)
+      let oldPoints = [];
+      displayDates.forEach((sd, i) => {
+        const val = parseFloat(sd.old_leaf?.[metric]);
+        if (!isNaN(val)) {
+          oldPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage });
+        }
+      });
+      if (oldPoints.length > 1) {
+        const pathD = oldPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+        svg += `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,3" class="sap-chart-line" opacity="0.7"/>`;
+        // Data points
+        oldPoints.forEach(p => {
+          svg += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="white" stroke="${color}" stroke-width="1.5" class="sap-chart-point"
+                   data-metric="${metric}" data-leaf="old" data-val="${p.val}" data-date="${p.date}" data-stage="${p.stage || ''}"/>`;
+        });
+      }
+    });
+
+    svg += `</svg>`;
+    return svg;
+  }
+
+  /**
+   * Format chart axis value
+   */
+  function formatChartValue(val) {
+    if (val >= 1000) return (val / 1000).toFixed(1) + 'k';
+    if (val >= 100) return Math.round(val).toString();
+    if (val >= 10) return val.toFixed(1);
+    if (val >= 1) return val.toFixed(1);
+    return val.toFixed(2);
+  }
+
+  /**
+   * Set trend view mode (table or graph)
+   */
+  function setTrendViewMode(mode) {
+    trendViewMode = mode;
+    reRender();
   }
 
   function renderTimeline(sampleDates, crop) {
@@ -650,12 +1139,7 @@ window.SapViewer = (function() {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         searchFilter = e.target.value;
-        // Re-render comparison table only
-        const site = sapSites.find(s => s.SiteId === selectedSiteId);
-        if (site) {
-          const sampleDates = buildSampleDates(site.samples);
-          renderContent(site, sampleDates);
-        }
+        reRender();
       });
     }
   }
@@ -714,19 +1198,362 @@ window.SapViewer = (function() {
     }
   }
 
+  // ========== DRAWER & MODAL FUNCTIONS ==========
+
+  /**
+   * Open system issues drawer
+   */
+  function openSystemDrawer(systemKey) {
+    if (!currentEvaluation) return;
+
+    const systemStatus = currentEvaluation.system_status[systemKey];
+    if (!systemStatus || !systemStatus.issues || systemStatus.issues.length === 0) return;
+
+    const systemNames = {
+      N: 'Nitrogen System',
+      CATIONS: 'Cation Balance',
+      MICROS: 'Micronutrients',
+      SUGARS: 'Sugars/Energy'
+    };
+
+    // Remove existing drawer if any
+    closeDrawer();
+
+    const drawer = document.createElement('div');
+    drawer.id = 'sapSystemDrawer';
+    drawer.className = 'sap-drawer';
+    drawer.innerHTML = `
+      <div class="sap-drawer-content">
+        <div class="sap-drawer-header">
+          <h3>${systemNames[systemKey] || systemKey} Issues</h3>
+          <button class="sap-drawer-close" onclick="SapViewer.closeDrawer()">&times;</button>
+        </div>
+        <div class="sap-drawer-body">
+          ${systemStatus.issues.map(issue => `
+            <div class="sap-issue-item" data-metric="${issue.metricId}" onclick="SapViewer.scrollToMetric('${issue.metricId}')">
+              <div class="sap-issue-header">
+                <span class="sap-issue-label">${issue.label}</span>
+                <span class="sap-status-chip" style="background: ${SapLogic.getStatusColors(issue.status).bg}; color: ${SapLogic.getStatusColors(issue.status).text}; border-color: ${SapLogic.getStatusColors(issue.status).border};">
+                  ${issue.status}
+                </span>
+              </div>
+              <div class="sap-issue-details">
+                <div class="sap-issue-values">
+                  <span>New: ${issue.values?.new !== null ? SapLogic.formatValue(issue.values.new, issue.metricId) : '—'}</span>
+                  <span>Old: ${issue.values?.old !== null ? SapLogic.formatValue(issue.values.old, issue.metricId) : '—'}</span>
+                </div>
+                <div class="sap-issue-reason">${issue.reason}</div>
+                ${issue.threshold ? `
+                  <div class="sap-issue-threshold">
+                    Threshold: ${issue.direction === 'low' ? 'min ' + issue.threshold.low : 'max ' + issue.threshold.high}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="sap-drawer-overlay" onclick="SapViewer.closeDrawer()"></div>
+    `;
+
+    document.body.appendChild(drawer);
+    setTimeout(() => drawer.classList.add('open'), 10);
+  }
+
+  /**
+   * Close the drawer
+   */
+  function closeDrawer() {
+    const drawer = document.getElementById('sapSystemDrawer');
+    if (drawer) {
+      drawer.classList.remove('open');
+      setTimeout(() => drawer.remove(), 300);
+    }
+  }
+
+  /**
+   * Open explanation modal for a metric/leaf
+   */
+  function openExplainModal(metricId, leaf) {
+    if (!currentEvaluation || !currentSampleDate) return;
+
+    const explanation = SapLogic.getExplanation(currentEvaluation, metricId, leaf, currentSampleDate);
+
+    // Remove existing modal if any
+    closeModal();
+
+    const modal = document.createElement('div');
+    modal.id = 'sapExplainModal';
+    modal.className = 'sap-modal';
+    modal.innerHTML = `
+      <div class="sap-modal-content">
+        <div class="sap-modal-header">
+          <h3>${explanation.metricLabel} (${leaf} leaf)</h3>
+          <button class="sap-modal-close" onclick="SapViewer.closeModal()">&times;</button>
+        </div>
+        <div class="sap-modal-body">
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Value:</span>
+            <span class="sap-explain-value">${explanation.value !== null ? SapLogic.formatValue(explanation.value, metricId) : '—'}</span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Status:</span>
+            <span class="sap-status-chip" style="background: ${SapLogic.getStatusColors(explanation.status.status).bg}; color: ${SapLogic.getStatusColors(explanation.status.status).text};">
+              ${explanation.status.status}
+            </span>
+            <span class="sap-explain-severity">(Severity: ${explanation.status.severity})</span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Reason:</span>
+            <span class="sap-explain-value">${explanation.status.reason}</span>
+          </div>
+          ${explanation.threshold ? `
+            <div class="sap-explain-row">
+              <span class="sap-explain-label">Thresholds:</span>
+              <span class="sap-explain-value">
+                Action &lt; ${explanation.threshold.low} |
+                Watch &lt; ${explanation.threshold.optimal_low} |
+                Optimal: ${explanation.threshold.optimal_low} - ${explanation.threshold.optimal_high} |
+                Watch &gt; ${explanation.threshold.optimal_high} |
+                Action &gt; ${explanation.threshold.high}
+              </span>
+            </div>
+          ` : ''}
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Both Leaves:</span>
+            <span class="sap-explain-value">
+              New: ${explanation.values?.new !== null ? SapLogic.formatValue(explanation.values.new, metricId) : '—'} |
+              Old: ${explanation.values?.old !== null ? SapLogic.formatValue(explanation.values.old, metricId) : '—'}
+            </span>
+          </div>
+          ${explanation.signal?.signal ? `
+            <div class="sap-explain-row">
+              <span class="sap-explain-label">Pattern:</span>
+              <span class="sap-signal-chip" style="background: ${explanation.signal.color}; color: white;">${explanation.signal.signal}</span>
+              <span class="sap-explain-value">${explanation.signal.description}</span>
+            </div>
+          ` : ''}
+          <div class="sap-explain-footer">
+            <span class="sap-explain-ruleset">Ruleset: ${explanation.rulesetVersion}</span>
+            ${explanation.isRatio ? '<span class="sap-explain-ratio">Calculated Ratio</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <div class="sap-modal-overlay" onclick="SapViewer.closeModal()"></div>
+    `;
+
+    document.body.appendChild(modal);
+    setTimeout(() => modal.classList.add('open'), 10);
+  }
+
+  /**
+   * Open signal explanation modal
+   */
+  function openSignalModal(metricId) {
+    if (!currentEvaluation || !currentSampleDate) return;
+
+    const signalExplanation = SapLogic.getSignalExplanation(currentEvaluation, metricId, currentSampleDate);
+
+    // Remove existing modal if any
+    closeModal();
+
+    const delta = signalExplanation.delta;
+    const deltaPctStr = delta?.deltaPct !== null && delta?.deltaPct !== undefined
+      ? `${delta.deltaPct >= 0 ? '+' : ''}${delta.deltaPct.toFixed(1)}%`
+      : '—';
+
+    const modal = document.createElement('div');
+    modal.id = 'sapExplainModal';
+    modal.className = 'sap-modal';
+    modal.innerHTML = `
+      <div class="sap-modal-content">
+        <div class="sap-modal-header">
+          <h3>${signalExplanation.metricLabel} - Leaf Pattern</h3>
+          <button class="sap-modal-close" onclick="SapViewer.closeModal()">&times;</button>
+        </div>
+        <div class="sap-modal-body">
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Signal:</span>
+            ${signalExplanation.signal?.signal ? `
+              <span class="sap-signal-chip" style="background: ${signalExplanation.signal.color}; color: white;">${signalExplanation.signal.signal}</span>
+            ` : '<span class="sap-explain-value">No pattern</span>'}
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Interpretation:</span>
+            <span class="sap-explain-value">${signalExplanation.interpretation}</span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Delta (New - Old):</span>
+            <span class="sap-explain-value" style="color: ${SapLogic.getDeltaColor(delta?.deltaPct)};">${deltaPctStr}</span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Values:</span>
+            <span class="sap-explain-value">
+              New: ${signalExplanation.values?.new !== null ? SapLogic.formatValue(signalExplanation.values.new, metricId) : '—'} |
+              Old: ${signalExplanation.values?.old !== null ? SapLogic.formatValue(signalExplanation.values.old, metricId) : '—'}
+            </span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">New Leaf Status:</span>
+            <span class="sap-status-chip" style="background: ${SapLogic.getStatusColors(signalExplanation.newStatus?.status).bg}; color: ${SapLogic.getStatusColors(signalExplanation.newStatus?.status).text};">
+              ${signalExplanation.newStatus?.status || '—'}
+            </span>
+            <span class="sap-explain-value">${signalExplanation.newStatus?.reason || ''}</span>
+          </div>
+          <div class="sap-explain-row">
+            <span class="sap-explain-label">Old Leaf Status:</span>
+            <span class="sap-status-chip" style="background: ${SapLogic.getStatusColors(signalExplanation.oldStatus?.status).bg}; color: ${SapLogic.getStatusColors(signalExplanation.oldStatus?.status).text};">
+              ${signalExplanation.oldStatus?.status || '—'}
+            </span>
+            <span class="sap-explain-value">${signalExplanation.oldStatus?.reason || ''}</span>
+          </div>
+        </div>
+      </div>
+      <div class="sap-modal-overlay" onclick="SapViewer.closeModal()"></div>
+    `;
+
+    document.body.appendChild(modal);
+    setTimeout(() => modal.classList.add('open'), 10);
+  }
+
+  /**
+   * Close any open modal
+   */
+  function closeModal() {
+    const modal = document.getElementById('sapExplainModal');
+    if (modal) {
+      modal.classList.remove('open');
+      setTimeout(() => modal.remove(), 300);
+    }
+  }
+
+  /**
+   * Scroll to and highlight a metric row in the comparison table
+   */
+  function scrollToMetric(metricId) {
+    closeDrawer();
+
+    // Find the row with this metric
+    const row = document.querySelector(`tr[data-metric-row="${metricId}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('sap-row-highlight');
+      setTimeout(() => row.classList.remove('sap-row-highlight'), 2000);
+    }
+  }
+
+  /**
+   * Setup global click handler using event delegation
+   */
+  function setupGlobalClickHandler() {
+    document.addEventListener('click', (e) => {
+      // System card click
+      const card = e.target.closest('.sap-summary-card[data-system]');
+      if (card && card.classList.contains('clickable')) {
+        openSystemDrawer(card.dataset.system);
+        return;
+      }
+
+      // Status chip click
+      const statusChip = e.target.closest('.sap-status-chip.clickable[data-metric]');
+      if (statusChip) {
+        openExplainModal(statusChip.dataset.metric, statusChip.dataset.leaf);
+        return;
+      }
+
+      // Signal chip click
+      const signalChip = e.target.closest('.sap-signal-chip.clickable[data-metric]');
+      if (signalChip) {
+        openSignalModal(signalChip.dataset.metric);
+        return;
+      }
+    });
+
+    // Chart point hover for tooltips
+    document.addEventListener('mouseover', (e) => {
+      const point = e.target.closest('.sap-chart-point');
+      if (point) {
+        showChartTooltip(point, e);
+      }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+      const point = e.target.closest('.sap-chart-point');
+      if (point) {
+        hideChartTooltip();
+      }
+    });
+  }
+
+  /**
+   * Show tooltip for chart data point
+   */
+  function showChartTooltip(point, event) {
+    hideChartTooltip(); // Remove any existing tooltip
+
+    const metric = point.dataset.metric;
+    const leaf = point.dataset.leaf;
+    const val = parseFloat(point.dataset.val);
+    const date = point.dataset.date;
+    const stage = point.dataset.stage;
+
+    const tooltip = document.createElement('div');
+    tooltip.id = 'sapChartTooltip';
+    tooltip.className = 'sap-chart-tooltip';
+    tooltip.innerHTML = `
+      <div class="sap-tooltip-metric">${SapLogic.formatNutrientName(metric)}</div>
+      <div class="sap-tooltip-values">
+        <span class="sap-tooltip-leaf">${leaf === 'new' ? 'New' : 'Old'} Leaf:</span>
+        <span>${SapLogic.formatValue(val, metric)}</span>
+      </div>
+      <div style="margin-top: 0.25rem; color: #94a3b8;">
+        ${stage ? stage + ' - ' : ''}${formatDateShort(date)}
+      </div>
+    `;
+
+    document.body.appendChild(tooltip);
+
+    // Position tooltip near the point
+    const rect = point.getBoundingClientRect();
+    tooltip.style.left = `${rect.left + rect.width / 2}px`;
+    tooltip.style.top = `${rect.top}px`;
+  }
+
+  /**
+   * Hide chart tooltip
+   */
+  function hideChartTooltip() {
+    const tooltip = document.getElementById('sapChartTooltip');
+    if (tooltip) {
+      tooltip.remove();
+    }
+  }
+
   // ========== PUBLIC API ==========
 
   function setViewMode(mode) {
     viewMode = mode;
-    const site = sapSites.find(s => s.SiteId === selectedSiteId);
-    if (site) {
-      const sampleDates = buildSampleDates(site.samples);
-      renderContent(site, sampleDates);
-    }
+    reRender();
   }
 
   function setDisplayMode(mode) {
     displayMode = mode;
+    reRender();
+  }
+
+  function reRender() {
+    // Aggregate mode
+    if (!selectedSiteId) {
+      const aggregateData = buildAggregateByGrowthStage();
+      const stage = selectedDate || aggregateData[0]?.growth_stage;
+      const selectedStage = aggregateData.find(sd => sd.growth_stage === stage) || aggregateData[0];
+      if (selectedStage) {
+        renderAggregateContent(aggregateData, selectedStage);
+      }
+      return;
+    }
+
+    // Single site mode
     const site = sapSites.find(s => s.SiteId === selectedSiteId);
     if (site) {
       const sampleDates = buildSampleDates(site.samples);
@@ -741,11 +1568,7 @@ window.SapViewer = (function() {
 
   function setSortMode(mode) {
     sortMode = mode;
-    const site = sapSites.find(s => s.SiteId === selectedSiteId);
-    if (site) {
-      const sampleDates = buildSampleDates(site.samples);
-      renderContent(site, sampleDates);
-    }
+    reRender();
   }
 
   function toggleGroup(groupKey) {
@@ -770,8 +1593,16 @@ window.SapViewer = (function() {
     setViewMode,
     setDisplayMode,
     setSortMode,
+    setTrendViewMode,
     toggleGroup,
     toggleAllTrends,
-    saveNote
+    saveNote,
+    // Drawer/Modal functions
+    openSystemDrawer,
+    closeDrawer,
+    openExplainModal,
+    openSignalModal,
+    closeModal,
+    scrollToMetric
   };
 })();

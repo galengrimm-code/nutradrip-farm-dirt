@@ -255,15 +255,93 @@ window.SapLogic = (function() {
     });
 
     // Build system status summaries with weighted scoring
-    result.system_status = buildSystemStatus(result, rules, crop);
+    result.system_status = buildSystemStatus(result, rules, crop, sampleDate);
 
     return result;
   }
 
   /**
+   * Get explanation for a metric/leaf combination (for modal display)
+   */
+  function getExplanation(evaluation, metricId, leaf, sampleDate) {
+    const rules = getRuleset();
+    const tissue = leaf === 'new' ? 'new_leaf' : 'old_leaf';
+    const status = evaluation.per_nutrient_status[tissue]?.[metricId];
+    const signal = evaluation.leafSignals?.[metricId];
+    const delta = evaluation.deltas?.[metricId];
+
+    // Get value and threshold
+    const isRatio = RATIO_DEFS.some(r => r.id === metricId);
+    const value = isRatio
+      ? evaluation.derived?.[tissue]?.[metricId]
+      : parseFloat(sampleDate?.[tissue]?.[metricId]);
+    const threshold = isRatio
+      ? (rules.getRatioThreshold ? rules.getRatioThreshold(metricId) : null)
+      : (rules.getThreshold ? rules.getThreshold('corn', tissue, metricId) : null);
+
+    // Get both values for comparison
+    const newVal = isRatio
+      ? evaluation.derived?.new_leaf?.[metricId]
+      : parseFloat(sampleDate?.new_leaf?.[metricId]);
+    const oldVal = isRatio
+      ? evaluation.derived?.old_leaf?.[metricId]
+      : parseFloat(sampleDate?.old_leaf?.[metricId]);
+
+    return {
+      metricId,
+      metricLabel: formatNutrientName(metricId),
+      leaf,
+      value: isNaN(value) ? null : value,
+      values: {
+        new: isNaN(newVal) ? null : newVal,
+        old: isNaN(oldVal) ? null : oldVal
+      },
+      status: status || { status: 'Unknown', severity: 0, reason: 'No data' },
+      threshold,
+      delta,
+      signal,
+      isRatio,
+      rulesetVersion: rules.version || 'v1'
+    };
+  }
+
+  /**
+   * Get signal explanation for delta/signal display
+   */
+  function getSignalExplanation(evaluation, metricId, sampleDate) {
+    const signal = evaluation.leafSignals?.[metricId];
+    const delta = evaluation.deltas?.[metricId];
+    const newStatus = evaluation.per_nutrient_status.new_leaf?.[metricId];
+    const oldStatus = evaluation.per_nutrient_status.old_leaf?.[metricId];
+
+    // Get values
+    const isRatio = RATIO_DEFS.some(r => r.id === metricId);
+    const newVal = isRatio
+      ? evaluation.derived?.new_leaf?.[metricId]
+      : parseFloat(sampleDate?.new_leaf?.[metricId]);
+    const oldVal = isRatio
+      ? evaluation.derived?.old_leaf?.[metricId]
+      : parseFloat(sampleDate?.old_leaf?.[metricId]);
+
+    return {
+      metricId,
+      metricLabel: formatNutrientName(metricId),
+      signal: signal || { signal: '', description: '' },
+      delta,
+      values: {
+        new: isNaN(newVal) ? null : newVal,
+        old: isNaN(oldVal) ? null : oldVal
+      },
+      newStatus,
+      oldStatus,
+      interpretation: signal?.description || 'No pattern detected'
+    };
+  }
+
+  /**
    * Build system-level status summaries with weighted scoring
    */
-  function buildSystemStatus(evaluationResult, rules, crop) {
+  function buildSystemStatus(evaluationResult, rules, crop, sampleDate) {
     const systemGroups = rules.systemGroups || {
       N: ['Nitrogen', 'Nitrogen_NO3', 'Nitrogen_NH4', 'NO3_NH4'],
       CATIONS: ['Potassium', 'Calcium', 'Magnesium', 'K_over_CaMg', 'K_Ca', 'K_Mg', 'Ca_Mg'],
@@ -280,25 +358,52 @@ window.SapLogic = (function() {
       let agreementCount = 0;
 
       nutrients.forEach(nutrient => {
+        const newStatus = evaluationResult.per_nutrient_status.new_leaf?.[nutrient];
+        const oldStatus = evaluationResult.per_nutrient_status.old_leaf?.[nutrient];
+
+        // Get actual values
+        const isRatio = RATIO_DEFS.some(r => r.id === nutrient);
+        const newVal = isRatio
+          ? evaluationResult.derived?.new_leaf?.[nutrient]
+          : parseFloat(sampleDate?.new_leaf?.[nutrient]);
+        const oldVal = isRatio
+          ? evaluationResult.derived?.old_leaf?.[nutrient]
+          : parseFloat(sampleDate?.old_leaf?.[nutrient]);
+
+        // Get thresholds
+        const threshold = isRatio
+          ? (rules.getRatioThreshold ? rules.getRatioThreshold(nutrient) : null)
+          : (rules.getThreshold ? rules.getThreshold(crop, 'new_leaf', nutrient) : null);
+
         // Check both tissues
         ['new_leaf', 'old_leaf'].forEach(tissue => {
           const status = evaluationResult.per_nutrient_status[tissue]?.[nutrient];
           if (status && status.status !== 'OK' && status.status !== 'Unknown') {
+            const leafLabel = tissue === 'new_leaf' ? 'new' : 'old';
+            const val = tissue === 'new_leaf' ? newVal : oldVal;
+
             issues.push({
-              nutrient,
-              tissue,
+              id: `${nutrient}_${leafLabel}_${status.direction || 'issue'}`,
+              metricId: nutrient,
+              system,
+              leaf: leafLabel,
               status: status.status,
               severity: status.severity,
-              reason: status.reason,
-              direction: status.direction
+              label: `${formatNutrientName(nutrient)} ${status.reason.toLowerCase()} (${leafLabel} leaf)`,
+              values: {
+                new: isNaN(newVal) ? null : newVal,
+                old: isNaN(oldVal) ? null : oldVal
+              },
+              reason: `${leafLabel === 'new' ? 'New' : 'Old'} leaf ${formatNutrientName(nutrient)} is ${status.reason.toLowerCase()}`,
+              direction: status.direction,
+              threshold: threshold,
+              isRatio
             });
             maxSeverity = Math.max(maxSeverity, status.severity);
           }
         });
 
         // Check if both tissues agree on an issue
-        const newStatus = evaluationResult.per_nutrient_status.new_leaf?.[nutrient];
-        const oldStatus = evaluationResult.per_nutrient_status.old_leaf?.[nutrient];
         if (newStatus && oldStatus && newStatus.status !== 'OK' && newStatus.status === oldStatus.status) {
           agreementCount++;
         }
@@ -332,8 +437,8 @@ window.SapLogic = (function() {
       } else {
         issues.sort((a, b) => b.severity - a.severity);
         const top = issues[0];
-        const nutrientLabel = formatNutrientName(top.nutrient);
-        reason = `${nutrientLabel} ${top.reason.toLowerCase()}`;
+        const nutrientLabel = formatNutrientName(top.metricId);
+        reason = `${nutrientLabel} ${top.direction === 'low' ? 'low' : 'high'}`;
         if (issues.length > 1) {
           reason += ` (+${issues.length - 1} more)`;
         }
@@ -646,6 +751,8 @@ window.SapLogic = (function() {
     formatValue,
     formatNutrientName,
     groupNutrients,
+    getExplanation,
+    getSignalExplanation,
     SYSTEM_IMPORTANCE
   };
 })();

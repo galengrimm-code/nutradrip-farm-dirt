@@ -7779,7 +7779,7 @@
               </label>
               <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                 <input type="radio" name="unmatchedAction" value="discard" style="accent-color: #f59e0b;">
-                <span style="font-size: 0.85rem; color: #92400e;"><strong>Discard unmatched</strong> - only import ${matchedCount} matched records</span>
+                <span style="font-size: 0.85rem; color: #92400e;"><strong>Discard unmatched</strong> - only keep records with matching sample sites (also removes existing unmatched)</span>
               </label>
             </div>
             <p style="font-size: 0.7rem; color: #78350f; margin: 0.75rem 0 0 0; font-style: italic;">
@@ -7860,6 +7860,34 @@
       // Load existing data
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
 
+      // If discarding unmatched, also clean up existing unmatched records from previous imports
+      let removedExisting = 0;
+      console.log('discardUnmatched:', discardUnmatched);
+      console.log('sampleSitesData count:', sampleSitesData?.length);
+      console.log('inSeasonData count before cleanup:', inSeasonData.length);
+
+      if (discardUnmatched) {
+        // Build a set of all valid sample site IDs for lookup
+        const allValidSiteIds = new Set(sampleSitesData.map(s => s.SiteID?.toLowerCase()).filter(Boolean));
+        console.log('Valid sample site IDs:', Array.from(allValidSiteIds).slice(0, 10), '... total:', allValidSiteIds.size);
+
+        // Log some existing record SiteIds for comparison
+        const existingSiteIds = new Set(inSeasonData.map(r => r.SiteId?.toLowerCase()).filter(Boolean));
+        console.log('Existing record SiteIds:', Array.from(existingSiteIds).slice(0, 10), '... total:', existingSiteIds.size);
+
+        const beforeCount = inSeasonData.length;
+        inSeasonData = inSeasonData.filter(r => {
+          const siteIdLower = r.SiteId?.toLowerCase();
+          const keep = siteIdLower && allValidSiteIds.has(siteIdLower);
+          if (!keep && r.SiteId) {
+            console.log('Removing record with unmatched SiteId:', r.SiteId);
+          }
+          return keep;
+        });
+        removedExisting = beforeCount - inSeasonData.length;
+        console.log(`Cleanup: ${beforeCount} -> ${inSeasonData.length} (removed ${removedExisting})`);
+      }
+
       // Check for duplicates using composite key (includes LeafAge for SAP old/new leaf pairs)
       const existingKeys = new Set(inSeasonData.map(r => `${r.SiteId}-${r.Type}-${r.Year}-${r.LabDate}-${r.LeafAge || ''}`));
 
@@ -7894,7 +7922,8 @@
       const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
       let statusMsg = `✓ Imported ${imported} ${schema.name} analysis records`;
       if (skipped > 0) statusMsg += ` (${skipped} duplicates skipped)`;
-      if (discarded > 0) statusMsg += ` (${discarded} unmatched discarded)`;
+      if (discarded > 0) statusMsg += ` (${discarded} unmatched from CSV discarded)`;
+      if (removedExisting > 0) statusMsg += ` (${removedExisting} existing unmatched removed)`;
       showStatus(statusMsg, true);
     }
 
