@@ -80,7 +80,7 @@ window.SapViewer = (function() {
         site.samples.sort((a, b) => {
           const dateA = new Date(a.LabDate || a.Year);
           const dateB = new Date(b.LabDate || b.Year);
-          return dateB - dateA; // Most recent first
+          return dateA - dateB; // Earliest first
         });
       });
 
@@ -134,9 +134,9 @@ window.SapViewer = (function() {
       }
     });
 
-    // Convert to array and sort by date descending
+    // Convert to array and sort by date ascending (earliest first)
     const result = Array.from(dateMap.values());
-    result.sort((a, b) => new Date(b.sample_date) - new Date(a.sample_date));
+    result.sort((a, b) => new Date(a.sample_date) - new Date(b.sample_date));
     return result;
   }
 
@@ -180,9 +180,9 @@ window.SapViewer = (function() {
     // Build sample dates
     const sampleDates = buildSampleDates(site.samples);
 
-    // Select most recent date
+    // Select most recent date (last in ascending-sorted array)
     if (sampleDates.length > 0) {
-      selectedDate = sampleDates[0].sample_date;
+      selectedDate = sampleDates[sampleDates.length - 1].sample_date;
     } else {
       selectedDate = null;
     }
@@ -251,8 +251,8 @@ window.SapViewer = (function() {
     const container = document.getElementById('sapViewerContent');
     if (!container) return;
 
-    // Find selected sample date
-    const sampleDate = sampleDates.find(sd => sd.sample_date === selectedDate) || sampleDates[0];
+    // Find selected sample date (fallback to most recent if not found)
+    const sampleDate = sampleDates.find(sd => sd.sample_date === selectedDate) || sampleDates[sampleDates.length - 1];
     if (!sampleDate) {
       renderEmptyState();
       return;
