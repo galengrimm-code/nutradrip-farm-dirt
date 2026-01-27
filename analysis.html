@@ -270,14 +270,14 @@
     .sap-legend-item { display: flex; align-items: center; gap: 0.5rem; }
     .sap-legend-line { display: inline-block; width: 24px; height: 2px; background: #64748b; }
     .sap-legend-line.dashed { background: repeating-linear-gradient(90deg, #64748b 0, #64748b 4px, transparent 4px, transparent 7px); }
-    .sap-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
-    .sap-chart-panel { background: white; border-radius: 0.5rem; padding: 0.75rem; border: 1px solid #e2e8f0; }
-    .sap-chart-title { font-weight: 600; font-size: 0.9rem; color: #1e293b; margin-bottom: 0.5rem; text-align: center; }
+    .sap-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1rem; }
+    .sap-chart-panel { background: white; border-radius: 0.5rem; padding: 1rem; border: 1px solid #e2e8f0; }
+    .sap-chart-title { font-weight: 600; font-size: 0.95rem; color: #1e293b; margin-bottom: 0.75rem; text-align: center; }
     .sap-chart-container { display: flex; justify-content: center; position: relative; }
-    .sap-chart-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: 0.5rem; font-size: 0.75rem; }
+    .sap-chart-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: 0.75rem; font-size: 0.8rem; }
     .sap-metric-legend { display: flex; align-items: center; gap: 0.25rem; }
-    .sap-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .sap-chart-empty { display: flex; align-items: center; justify-content: center; height: 140px; color: #94a3b8; font-size: 0.85rem; }
+    .sap-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .sap-chart-empty { display: flex; align-items: center; justify-content: center; height: 180px; color: #94a3b8; font-size: 0.85rem; }
     .sap-trend-svg { overflow: visible; }
     .sap-chart-point { cursor: pointer; transition: r 0.15s; }
     .sap-chart-point:hover { r: 6; }
@@ -308,6 +308,17 @@
     .sap-trend-flat { color: #94a3b8; }
     .sap-row-muted { opacity: 0.5; }
     .sap-row-muted:hover { opacity: 0.8; }
+
+    /* Expandable charts */
+    .sap-chart-expandable { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+    .sap-chart-panel.sap-chart-expandable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .sap-chart-container.sap-chart-expandable:hover { opacity: 0.9; }
+
+    /* Chart expand modal */
+    .sap-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .sap-chart-modal-content { background: white; border-radius: 0.75rem; padding: 1.5rem; max-width: 900px; width: 100%; max-height: 90vh; overflow: auto; position: relative; }
+    .sap-expanded-chart { display: flex; justify-content: center; margin: 1rem 0; overflow-x: auto; }
+    .sap-expanded-legend { justify-content: center; padding: 1rem 0; border-top: 1px solid #e2e8f0; margin-top: 1rem; flex-wrap: wrap; }
 
     @media (max-width: 639px) {
       .sap-summary-cards { grid-template-columns: 1fr 1fr; }

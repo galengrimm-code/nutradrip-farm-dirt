@@ -1032,20 +1032,28 @@ window.SapViewer = (function() {
     return html;
   }
 
+  // Store chart data for expand functionality
+  let chartDataCache = {};
+
   /**
    * Render graph view of trends using SVG
    */
   function renderTrendGraphs(displayDates, chartGroups, crop) {
-    const chartWidth = 280;
-    const chartHeight = 140;
-    const padding = { top: 20, right: 20, bottom: 30, left: 45 };
+    // 30% larger than before (was 280x140)
+    const chartWidth = 360;
+    const chartHeight = 180;
+    const padding = { top: 20, right: 25, bottom: 35, left: 50 };
     const plotWidth = chartWidth - padding.left - padding.right;
     const plotHeight = chartHeight - padding.top - padding.bottom;
+
+    // Cache chart data for expand
+    chartDataCache = { displayDates, chartGroups, crop };
 
     let html = `
       <div class="sap-trend-legend">
         <span class="sap-legend-item"><span class="sap-legend-line solid"></span> New Leaf</span>
         <span class="sap-legend-item"><span class="sap-legend-line dashed"></span> Old Leaf</span>
+        <span class="sap-legend-item" style="margin-left: auto; color: #64748b; font-size: 0.75rem;">Click chart to expand</span>
       </div>
       <div class="sap-chart-grid">
     `;
@@ -1054,7 +1062,7 @@ window.SapViewer = (function() {
     const mainGroups = chartGroups.filter(g => !g.collapsible);
     const collapsibleGroups = chartGroups.filter(g => g.collapsible);
 
-    mainGroups.forEach(group => {
+    mainGroups.forEach((group, idx) => {
       const ratioLegend = group.ratio ? `
         <span class="sap-metric-legend" style="color: ${group.ratio.color};">
           <span class="sap-legend-line-mini" style="border-color: ${group.ratio.color};"></span>
@@ -1063,7 +1071,7 @@ window.SapViewer = (function() {
       ` : '';
 
       html += `
-        <div class="sap-chart-panel">
+        <div class="sap-chart-panel sap-chart-expandable" data-chart-key="${group.key}" onclick="SapViewer.expandChart('${group.key}')">
           <div class="sap-chart-title">${group.label}</div>
           <div class="sap-chart-container">
             ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
@@ -1085,7 +1093,7 @@ window.SapViewer = (function() {
     if (collapsibleGroups.length > 0) {
       html += `
         <div class="sap-chart-panel sap-chart-collapsible">
-          <div class="sap-chart-title sap-chart-title-collapsible" onclick="this.parentElement.classList.toggle('collapsed')">
+          <div class="sap-chart-title sap-chart-title-collapsible" onclick="event.stopPropagation(); this.parentElement.classList.toggle('collapsed')">
             ${collapsibleGroups.map(g => g.label).join(' / ')}
             <span class="sap-collapse-icon">▼</span>
           </div>
@@ -1093,7 +1101,7 @@ window.SapViewer = (function() {
       `;
       collapsibleGroups.forEach(group => {
         html += `
-          <div class="sap-chart-container">
+          <div class="sap-chart-container sap-chart-expandable" data-chart-key="${group.key}" onclick="event.stopPropagation(); SapViewer.expandChart('${group.key}')">
             ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
           </div>
           <div class="sap-chart-legend">
@@ -1111,6 +1119,68 @@ window.SapViewer = (function() {
 
     html += `</div>`;
     return html;
+  }
+
+  /**
+   * Expand a chart to full-screen modal
+   */
+  function expandChart(chartKey) {
+    const { displayDates, chartGroups, crop } = chartDataCache;
+    if (!displayDates || !chartGroups) return;
+
+    const group = chartGroups.find(g => g.key === chartKey);
+    if (!group) return;
+
+    // Large chart dimensions
+    const chartWidth = 800;
+    const chartHeight = 400;
+    const padding = { top: 30, right: 40, bottom: 50, left: 70 };
+    const plotWidth = chartWidth - padding.left - padding.right;
+    const plotHeight = chartHeight - padding.top - padding.bottom;
+
+    const ratioLegend = group.ratio ? `
+      <span class="sap-metric-legend" style="color: ${group.ratio.color};">
+        <span class="sap-legend-line-mini" style="border-color: ${group.ratio.color};"></span>
+        ${group.ratio.label}
+      </span>
+    ` : '';
+
+    const modalHtml = `
+      <div class="sap-modal sap-chart-modal" onclick="if(event.target === this) SapViewer.closeChartModal()">
+        <div class="sap-modal-content sap-chart-modal-content">
+          <button class="sap-modal-close" onclick="SapViewer.closeChartModal()">&times;</button>
+          <h3 class="sap-modal-title">${group.label}</h3>
+          <div class="sap-expanded-chart">
+            ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
+          </div>
+          <div class="sap-chart-legend sap-expanded-legend">
+            <span class="sap-legend-item"><span class="sap-legend-line solid"></span> New Leaf</span>
+            <span class="sap-legend-item"><span class="sap-legend-line dashed"></span> Old Leaf</span>
+            ${group.metrics.map((m, i) => `
+              <span class="sap-metric-legend" style="color: ${group.colors[i]};">
+                <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
+                ${SapLogic.formatNutrientName(m)}
+              </span>
+            `).join('')}
+            ${ratioLegend}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Remove existing modal if any
+    const existing = document.querySelector('.sap-chart-modal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  }
+
+  /**
+   * Close the expanded chart modal
+   */
+  function closeChartModal() {
+    const modal = document.querySelector('.sap-chart-modal');
+    if (modal) modal.remove();
   }
 
   /**
@@ -1849,6 +1919,9 @@ window.SapViewer = (function() {
     openExplainModal,
     openSignalModal,
     closeModal,
-    scrollToMetric
+    scrollToMetric,
+    // Chart expand functions
+    expandChart,
+    closeChartModal
   };
 })();
