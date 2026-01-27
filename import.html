@@ -8006,10 +8006,12 @@
         });
       });
 
-      // Debug: check first record for Lat/Lng
-      if (inSeasonData.length > 0) {
-        const first = inSeasonData[0];
-        console.log('First record Lat/Lng:', first.Lat, first.Lng, 'Client:', first.Client, 'Farm:', first.Farm);
+      // Debug: check records for Lat/Lng
+      const withCoords = inSeasonData.filter(r => r.Lat && r.Lng);
+      const withoutCoords = inSeasonData.filter(r => !r.Lat || !r.Lng);
+      console.log(`Records with Lat/Lng: ${withCoords.length}, without: ${withoutCoords.length}`);
+      if (withCoords.length > 0) {
+        console.log('Sample record with coords:', withCoords[0].SiteId, withCoords[0].Lat, withCoords[0].Lng);
       }
 
       // Clear and update
