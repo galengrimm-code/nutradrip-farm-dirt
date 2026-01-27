@@ -67,26 +67,24 @@ window.SapViewer = (function() {
    */
   async function loadData() {
     try {
-      // Try IndexedDB first
-      inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
-      console.log('SapViewer: IndexedDB returned', inSeasonData.length, 'records');
-      console.log('SapViewer: SheetsAPI.isSignedIn =', DataCore.SheetsAPI?.isSignedIn);
-
-      // If empty and signed in, try loading from Google Sheets
-      if (inSeasonData.length === 0 && DataCore.SheetsAPI?.isSignedIn) {
-        console.log('SapViewer: IndexedDB empty, trying Google Sheets...');
+      // If signed in, always load fresh from Sheets (source of truth)
+      if (DataCore.SheetsAPI?.isSignedIn) {
+        console.log('SapViewer: Loading from Google Sheets (signed in)...');
         try {
           inSeasonData = await DataCore.SheetsAPI.getInSeasonAnalysis() || [];
-          // Cache to IndexedDB for future use
+          console.log('SapViewer: Loaded', inSeasonData.length, 'records from Sheets');
+          // Cache to IndexedDB
           if (inSeasonData.length > 0) {
             await DataCore.saveInSeasonToIndexedDB(inSeasonData);
-            console.log('SapViewer: Cached', inSeasonData.length, 'records to IndexedDB');
           }
         } catch (sheetsErr) {
-          console.error('SapViewer: Sheets load failed:', sheetsErr);
+          console.error('SapViewer: Sheets load failed, falling back to IndexedDB:', sheetsErr);
+          inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
         }
-      } else if (inSeasonData.length === 0) {
-        console.log('SapViewer: IndexedDB empty but not signed in - cannot load from Sheets');
+      } else {
+        // Not signed in - use IndexedDB cache
+        inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
+        console.log('SapViewer: Loaded', inSeasonData.length, 'records from IndexedDB (not signed in)');
       }
 
       // Filter to SAP type only
