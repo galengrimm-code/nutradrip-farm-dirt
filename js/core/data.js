@@ -24,7 +24,7 @@ const DataConfig = window.DataConfig = {
 
 // ========== INDEXEDDB ==========
 const DB_NAME = 'SoilAppDB';
-const DB_VERSION = 2; // v2: Added yield object store
+const DB_VERSION = 3; // v3: Added inSeasonAnalysis object store
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -37,6 +37,7 @@ function openDB() {
       if (!db.objectStoreNames.contains('samples')) db.createObjectStore('samples', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('inSeasonAnalysis')) db.createObjectStore('inSeasonAnalysis', { keyPath: 'id' });
     };
   });
 }
@@ -106,6 +107,41 @@ async function saveYieldToIndexedDB(yieldData) {
     return true;
   } catch (e) {
     console.error('IndexedDB yield save error:', e);
+    return false;
+  }
+}
+
+async function loadInSeasonFromIndexedDB() {
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('inSeasonAnalysis')) {
+      db.close();
+      return [];
+    }
+    const tx = db.transaction(['inSeasonAnalysis'], 'readonly');
+    const data = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('inSeasonAnalysis').get('all');
+      req.onsuccess = () => resolve(req.result?.data || []);
+      req.onerror = reject;
+    });
+    db.close();
+    return data;
+  } catch (e) { return []; }
+}
+
+async function saveInSeasonToIndexedDB(inSeasonData) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(['inSeasonAnalysis'], 'readwrite');
+    tx.objectStore('inSeasonAnalysis').put({ id: 'all', data: inSeasonData });
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    });
+    db.close();
+    return true;
+  } catch (e) {
+    console.error('IndexedDB in-season save error:', e);
     return false;
   }
 }
@@ -542,6 +578,8 @@ window.DataCore = {
   saveToIndexedDB,
   loadYieldFromIndexedDB,
   saveYieldToIndexedDB,
+  loadInSeasonFromIndexedDB,
+  saveInSeasonToIndexedDB,
 
   // Client/Farm data
   generateId,

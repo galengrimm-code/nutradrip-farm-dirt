@@ -106,6 +106,12 @@
     .shp-preview-values { font-size: 0.7rem; color: #059669; font-style: italic; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .shp-step-tab.active { border-bottom: 3px solid #3b82f6; color: #1d4ed8; }
     .shp-unmapped-chip { background: #fef3c7; border: 1px solid #fde047; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; color: #854d0e; }
+    /* In-Season Analysis */
+    .in-season-type-card:hover { border-color: #c026d3 !important; }
+    .in-season-step-tab.active { border-bottom: 3px solid #d946ef; color: #a21caf; }
+    @media (max-width: 600px) {
+      .import-section.in-season > div:first-of-type { grid-template-columns: repeat(2, 1fr) !important; }
+    }
   </style>
 </head>
 <body>
@@ -359,6 +365,66 @@
       </div>
 
       <div id="yieldStatus" style="margin-top: 0.75rem;"></div>
+    </div>
+
+    <!-- In-Season Analysis Import Section -->
+    <div class="import-section in-season" style="background: linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%); border-color: #d946ef; grid-column: 1 / -1;">
+      <h3 style="color: #a21caf;">🔬 Import In-Season Analysis</h3>
+      <p style="color: #86198f; font-size: 0.875rem; margin-bottom: 1rem;">
+        Import lab results for Tissue, Sap, In-Season Soil, or Water samples. Links to existing sample sites by Site ID.
+      </p>
+
+      <!-- Sample Type Selection -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
+        <div id="inSeasonTypeTIS" class="in-season-type-card" onclick="selectInSeasonType('TIS')" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+          <div style="font-size: 1.5rem;">🌿</div>
+          <div style="font-weight: 600; color: #166534; font-size: 0.875rem;">Tissue</div>
+        </div>
+        <div id="inSeasonTypeSAP" class="in-season-type-card" onclick="selectInSeasonType('SAP')" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+          <div style="font-size: 1.5rem;">🧪</div>
+          <div style="font-weight: 600; color: #b45309; font-size: 0.875rem;">Sap</div>
+        </div>
+        <div id="inSeasonTypeISS" class="in-season-type-card" onclick="selectInSeasonType('ISS')" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+          <div style="font-size: 1.5rem;">🌱</div>
+          <div style="font-weight: 600; color: #7c3aed; font-size: 0.875rem;">In-Season Soil</div>
+        </div>
+        <div id="inSeasonTypeWAT" class="in-season-type-card" onclick="selectInSeasonType('WAT')" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+          <div style="font-size: 1.5rem;">💧</div>
+          <div style="font-weight: 600; color: #0369a1; font-size: 0.875rem;">Water</div>
+        </div>
+      </div>
+
+      <!-- Required Fields Row -->
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Analysis Year <span style="color: #dc2626;">*</span></label>
+          <input type="text" id="inSeasonYear" placeholder="e.g., 2024" style="width: 120px; border: 2px solid #dc2626; background: #fef2f2;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Lab Date <span style="font-weight: 400; font-size: 0.75rem; color: #64748b;">(optional)</span></label>
+          <input type="date" id="inSeasonLabDate" style="width: 160px; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem;">
+        </div>
+      </div>
+
+      <!-- CSV File Upload -->
+      <div class="form-group">
+        <label>Lab Results CSV</label>
+        <input type="file" id="inSeasonFile" accept=".csv">
+        <small>CSV from lab with Site ID column to link results to sample sites</small>
+      </div>
+
+      <div id="inSeasonFileInfo" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #d946ef; border-radius: 0.375rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="inSeasonFileName" style="font-weight: 500; color: #a21caf;"></span>
+          <span id="inSeasonRowCount" style="font-size: 0.8rem; color: #64748b;"></span>
+        </div>
+      </div>
+
+      <button class="button" id="openInSeasonMappingBtn" style="background: #d946ef; color: white;" disabled onclick="openInSeasonMappingModal()">
+        📋 Map Columns & Preview
+      </button>
+
+      <div id="inSeasonStatus" style="margin-top: 0.75rem;"></div>
     </div>
 
     <!-- Section Header: Data Management -->
@@ -1192,6 +1258,92 @@
     </div>
   </div>
 
+  <!-- In-Season Analysis Mapping Modal -->
+  <div id="inSeasonMappingModal" class="modal-overlay">
+    <div class="modal" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%);">
+        <h3 id="inSeasonModalTitle">🔬 In-Season Analysis - Column Mapping</h3>
+        <button class="modal-close" onclick="closeInSeasonMappingModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0;">
+        <!-- Step Indicator -->
+        <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+          <div id="inSeasonStep1Tab" class="in-season-step-tab active" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 600; border-bottom: 3px solid #d946ef; color: #a21caf;">
+            1. Map Columns
+          </div>
+          <div id="inSeasonStep2Tab" class="in-season-step-tab" style="flex: 1; padding: 0.75rem; text-align: center; font-weight: 500; color: #94a3b8;">
+            2. Preview & Import
+          </div>
+        </div>
+
+        <!-- Step 1: Column Mapping -->
+        <div id="inSeasonMappingStep1" style="padding: 1rem;">
+          <!-- Instructions -->
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <span style="font-size: 1.1rem;">📋</span>
+              <strong style="color: #a21caf;">Map your CSV columns to standard fields:</strong>
+            </div>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #86198f;">
+              Site ID is required to link results to your sample sites. Select which CSV column contains each value.
+            </p>
+          </div>
+
+          <!-- Required Fields -->
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #991b1b; font-size: 0.9rem;">🔗 Required Fields</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 600; color: #dc2626;">Site ID * <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="inSeasonMapSiteId" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('SiteId')"></select>
+                  <span id="inSeasonPreviewSiteId" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Field Name <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="inSeasonMapField" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('Field')"></select>
+                  <span id="inSeasonPreviewField" class="shp-preview-values"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nutrient Fields (dynamic based on type) -->
+          <div id="inSeasonNutrientSection" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #166534; font-size: 0.9rem;">🧪 Analysis Results</h4>
+            <p style="margin: 0 0 0.75rem 0; font-size: 0.7rem; color: #166534;">Match lab result columns to standard fields.</p>
+            <div id="inSeasonNutrientMappings" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Preview -->
+        <div id="inSeasonMappingStep2" style="display: none; padding: 1rem;">
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 0.375rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-weight: 600; color: #a21caf;">Preview: First 5 rows of mapped data</span>
+              <span id="inSeasonPreviewCount" style="font-size: 0.85rem; color: #d946ef;"></span>
+            </div>
+          </div>
+          <div id="inSeasonSiteIdWarnings" style="margin-bottom: 1rem;"></div>
+          <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+            <table id="inSeasonPreviewTable" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+              <thead id="inSeasonPreviewHead" style="background: #fdf4ff;"></thead>
+              <tbody id="inSeasonPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
+        <button class="button" style="background: #94a3b8;" onclick="closeInSeasonMappingModal()">Cancel</button>
+        <button class="button" id="inSeasonBackBtn" style="display: none; background: #64748b;" onclick="inSeasonMappingBack()">← Back</button>
+        <button class="button" id="inSeasonNextBtn" style="background: #d946ef;" onclick="inSeasonMappingNext()">Preview →</button>
+        <button class="button success" id="inSeasonImportBtn" style="display: none;" onclick="inSeasonImportConfirm()">Import Records</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
@@ -1199,8 +1351,8 @@
   <script src="js/core/utils.js"></script>
   <script>
     // ========== APP VERSION ==========
-    const APP_VERSION = "v1.0.189";
-    const BUILD_DATE = "2026-01-26T16:35:07";
+    const APP_VERSION = "v1.0.190";
+    const BUILD_DATE = "2026-01-26T19:30:00";
 
     // Reference shared data config with import-specific additions
     const CONFIG = {
@@ -7015,6 +7167,608 @@
       // Sync to Sheets if signed in
       if (SheetsAPI.isSignedIn) {
         syncToSheets();
+      }
+    }
+
+    // ========== IN-SEASON ANALYSIS IMPORT ==========
+
+    // In-Season Analysis Schemas - different columns per sample type
+    const IN_SEASON_SCHEMAS = {
+      TIS: {
+        name: 'Tissue',
+        emoji: '🌿',
+        color: '#22c55e',
+        columns: ['N_pct', 'P_pct', 'K_pct', 'Ca_pct', 'Mg_pct', 'S_pct', 'Zn_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm'],
+        aliases: {
+          'N_pct': ['N%', 'N', 'Nitrogen', 'Total N', 'N (%)', 'TKN'],
+          'P_pct': ['P%', 'P', 'Phosphorus', 'P (%)', 'Total P'],
+          'K_pct': ['K%', 'K', 'Potassium', 'K (%)'],
+          'Ca_pct': ['Ca%', 'Ca', 'Calcium', 'Ca (%)'],
+          'Mg_pct': ['Mg%', 'Mg', 'Magnesium', 'Mg (%)'],
+          'S_pct': ['S%', 'S', 'Sulfur', 'S (%)'],
+          'Zn_ppm': ['Zn', 'Zinc', 'Zn (ppm)', 'Zn ppm'],
+          'Mn_ppm': ['Mn', 'Manganese', 'Mn (ppm)', 'Mn ppm'],
+          'Fe_ppm': ['Fe', 'Iron', 'Fe (ppm)', 'Fe ppm'],
+          'Cu_ppm': ['Cu', 'Copper', 'Cu (ppm)', 'Cu ppm'],
+          'B_ppm': ['B', 'Boron', 'B (ppm)', 'B ppm']
+        }
+      },
+      SAP: {
+        name: 'Sap',
+        emoji: '🧪',
+        color: '#f59e0b',
+        columns: ['pH', 'EC', 'NO3_N', 'NH4_N', 'P', 'K', 'Ca', 'Mg', 'S', 'Zn', 'Brix'],
+        aliases: {
+          'pH': ['pH', 'Sap pH', 'sap pH'],
+          'EC': ['EC', 'Electrical Conductivity', 'EC (mS/cm)', 'Conductivity'],
+          'NO3_N': ['NO3-N', 'NO3', 'Nitrate', 'Nitrate-N', 'NO3_N'],
+          'NH4_N': ['NH4-N', 'NH4', 'Ammonium', 'Ammonium-N', 'NH4_N'],
+          'P': ['P', 'Phosphorus'],
+          'K': ['K', 'Potassium'],
+          'Ca': ['Ca', 'Calcium'],
+          'Mg': ['Mg', 'Magnesium'],
+          'S': ['S', 'Sulfur'],
+          'Zn': ['Zn', 'Zinc'],
+          'Brix': ['Brix', '°Brix', 'Brix %', 'Sugar', 'Brix°']
+        }
+      },
+      ISS: {
+        name: 'In-Season Soil',
+        emoji: '🌱',
+        color: '#8b5cf6',
+        columns: ['pH', 'Nitrate_N', 'P', 'K', 'OM', 'CEC', 'Zn', 'Mn', 'Fe', 'Cu', 'B'],
+        aliases: {
+          'pH': ['pH', 'Soil pH'],
+          'Nitrate_N': ['Nitrate-N', 'NO3-N', 'Nitrate', 'N03-N', 'Nitrate_N'],
+          'P': ['P', 'Phosphorus', 'Bray P1', 'Mehlich P', 'P1'],
+          'K': ['K', 'Potassium'],
+          'OM': ['OM', 'Organic Matter', 'O.M.', 'OM%'],
+          'CEC': ['CEC', 'CEC (meq)', 'CEC meq'],
+          'Zn': ['Zn', 'Zinc'],
+          'Mn': ['Mn', 'Manganese'],
+          'Fe': ['Fe', 'Iron'],
+          'Cu': ['Cu', 'Copper'],
+          'B': ['B', 'Boron']
+        }
+      },
+      WAT: {
+        name: 'Water',
+        emoji: '💧',
+        color: '#3b82f6',
+        columns: ['pH', 'EC', 'TDS', 'Ca', 'Mg', 'Na', 'Cl', 'NO3', 'Hardness', 'Alkalinity', 'SAR'],
+        aliases: {
+          'pH': ['pH', 'Water pH'],
+          'EC': ['EC', 'Electrical Conductivity', 'EC (mS/cm)'],
+          'TDS': ['TDS', 'Total Dissolved Solids', 'TDS (ppm)'],
+          'Ca': ['Ca', 'Calcium'],
+          'Mg': ['Mg', 'Magnesium'],
+          'Na': ['Na', 'Sodium'],
+          'Cl': ['Cl', 'Chloride', 'Chlorine'],
+          'NO3': ['NO3', 'Nitrate', 'NO3-N'],
+          'Hardness': ['Hardness', 'Total Hardness', 'Hardness (ppm)'],
+          'Alkalinity': ['Alkalinity', 'Total Alkalinity', 'Alk'],
+          'SAR': ['SAR', 'Sodium Adsorption Ratio']
+        }
+      }
+    };
+
+    // Site ID aliases for auto-detection
+    const SITE_ID_ALIASES = ['SiteID', 'Site ID', 'Site_ID', 'SITEID', 'site_id', 'SampleSiteID', 'Sample Site ID', 'Location ID', 'LocationID'];
+    const FIELD_ALIASES = ['Field', 'FieldName', 'Field Name', 'field', 'FIELD', 'Field_Name'];
+
+    // State variables for in-season import
+    let inSeasonData = [];
+    let pendingInSeasonImport = null;
+    let selectedInSeasonType = null;
+    let inSeasonCsvHeaders = [];
+    let inSeasonCsvRows = [];
+    let sampleSitesData = []; // Will hold sample sites from Google Sheets
+
+    // Select in-season type
+    function selectInSeasonType(type) {
+      selectedInSeasonType = type;
+
+      // Update UI - highlight selected
+      ['TIS', 'SAP', 'ISS', 'WAT'].forEach(t => {
+        const card = document.getElementById(`inSeasonType${t}`);
+        if (t === type) {
+          card.style.borderColor = '#d946ef';
+          card.style.background = '#fdf4ff';
+        } else {
+          card.style.borderColor = '#e2e8f0';
+          card.style.background = 'white';
+        }
+      });
+
+      // Update modal title
+      const schema = IN_SEASON_SCHEMAS[type];
+      const title = document.getElementById('inSeasonModalTitle');
+      if (title) {
+        title.textContent = `${schema.emoji} ${schema.name} Analysis - Column Mapping`;
+      }
+
+      // Enable button if file is loaded
+      checkInSeasonReady();
+    }
+
+    // Check if ready to open mapping modal
+    function checkInSeasonReady() {
+      const file = document.getElementById('inSeasonFile').files[0];
+      const year = document.getElementById('inSeasonYear').value.trim();
+      const btn = document.getElementById('openInSeasonMappingBtn');
+
+      btn.disabled = !(file && selectedInSeasonType && year);
+    }
+
+    // File change handler
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('inSeasonFile');
+      if (fileInput) {
+        fileInput.addEventListener('change', async function(e) {
+          const file = e.target.files[0];
+          if (!file) {
+            document.getElementById('inSeasonFileInfo').style.display = 'none';
+            return;
+          }
+
+          // Parse CSV
+          const text = await file.text();
+          const lines = text.trim().split(/\r?\n/);
+          if (lines.length < 2) {
+            showStatus('CSV file must have headers and at least one data row', false);
+            return;
+          }
+
+          // Detect delimiter
+          const firstLine = lines[0];
+          let delimiter = ',';
+          if (firstLine.split(';').length > firstLine.split(',').length) delimiter = ';';
+          if (firstLine.split('\t').length > firstLine.split(delimiter).length) delimiter = '\t';
+
+          // Remove BOM if present
+          const cleanLine = firstLine.replace(/^\uFEFF/, '');
+          inSeasonCsvHeaders = cleanLine.split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+
+          inSeasonCsvRows = [];
+          for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+            inSeasonCsvRows.push(values);
+          }
+
+          // Show file info
+          document.getElementById('inSeasonFileInfo').style.display = 'block';
+          document.getElementById('inSeasonFileName').textContent = file.name;
+          document.getElementById('inSeasonRowCount').textContent = `${inSeasonCsvRows.length} rows, ${inSeasonCsvHeaders.length} columns`;
+
+          checkInSeasonReady();
+        });
+      }
+
+      const yearInput = document.getElementById('inSeasonYear');
+      if (yearInput) {
+        yearInput.addEventListener('input', checkInSeasonReady);
+      }
+    });
+
+    // Open mapping modal
+    async function openInSeasonMappingModal() {
+      if (!selectedInSeasonType) {
+        showStatus('Please select a sample type first', false);
+        return;
+      }
+
+      // Load sample sites if not already loaded
+      if (sampleSitesData.length === 0) {
+        await loadSampleSitesData();
+      }
+
+      // Populate dropdowns
+      populateInSeasonMappingDropdowns();
+
+      // Show modal
+      document.getElementById('inSeasonMappingModal').classList.add('active');
+      document.getElementById('inSeasonMappingStep1').style.display = 'block';
+      document.getElementById('inSeasonMappingStep2').style.display = 'none';
+      document.getElementById('inSeasonStep1Tab').classList.add('active');
+      document.getElementById('inSeasonStep2Tab').classList.remove('active');
+      document.getElementById('inSeasonStep1Tab').style.borderBottom = '3px solid #d946ef';
+      document.getElementById('inSeasonStep1Tab').style.color = '#a21caf';
+      document.getElementById('inSeasonStep2Tab').style.borderBottom = '3px solid transparent';
+      document.getElementById('inSeasonStep2Tab').style.color = '#94a3b8';
+      document.getElementById('inSeasonNextBtn').style.display = '';
+      document.getElementById('inSeasonBackBtn').style.display = 'none';
+      document.getElementById('inSeasonImportBtn').style.display = 'none';
+    }
+
+    // Load sample sites from Google Sheets
+    async function loadSampleSitesData() {
+      if (!SheetsAPI.isSignedIn || !CONFIG.SHEET_ID) {
+        console.log('Not signed in or no sheet ID - sample site linking will be limited');
+        return;
+      }
+
+      try {
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: CONFIG.SHEET_ID,
+          range: 'SampleSites!A1:J1000'
+        });
+        const rows = response.result.values || [];
+        if (rows.length < 2) return;
+
+        const headers = rows[0];
+        sampleSitesData = [];
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const site = {};
+          headers.forEach((h, idx) => {
+            site[h] = row[idx] || '';
+          });
+          if (site.SiteID) {
+            sampleSitesData.push(site);
+          }
+        }
+        console.log(`Loaded ${sampleSitesData.length} sample sites for linking`);
+      } catch (e) {
+        console.warn('Could not load sample sites:', e);
+      }
+    }
+
+    // Populate mapping dropdowns
+    function populateInSeasonMappingDropdowns() {
+      const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
+      const options = ['(skip)', ...inSeasonCsvHeaders].map(h => `<option value="${h}">${h}</option>`).join('');
+
+      // Site ID dropdown
+      const siteIdSelect = document.getElementById('inSeasonMapSiteId');
+      siteIdSelect.innerHTML = options;
+      autoSelectColumn(siteIdSelect, SITE_ID_ALIASES);
+      updateInSeasonPreview('SiteId');
+
+      // Field dropdown
+      const fieldSelect = document.getElementById('inSeasonMapField');
+      fieldSelect.innerHTML = options;
+      autoSelectColumn(fieldSelect, FIELD_ALIASES);
+      updateInSeasonPreview('Field');
+
+      // Nutrient fields
+      const nutrientContainer = document.getElementById('inSeasonNutrientMappings');
+      nutrientContainer.innerHTML = '';
+
+      schema.columns.forEach(col => {
+        const aliases = schema.aliases[col] || [col];
+        const div = document.createElement('div');
+        div.className = 'csv-mapping-field';
+        div.innerHTML = `
+          <label style="font-size: 0.8rem; font-weight: 500;">${col} <span style="font-weight: 400; color: #64748b;">←</span></label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="inSeasonMap${col}" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('${col}')">${options}</select>
+            <span id="inSeasonPreview${col}" class="shp-preview-values"></span>
+          </div>
+        `;
+        nutrientContainer.appendChild(div);
+
+        // Auto-select based on aliases
+        const select = document.getElementById(`inSeasonMap${col}`);
+        autoSelectColumn(select, aliases);
+        updateInSeasonPreview(col);
+      });
+    }
+
+    // Auto-select column based on aliases
+    function autoSelectColumn(select, aliases) {
+      const lowerAliases = aliases.map(a => a.toLowerCase());
+      for (const opt of select.options) {
+        if (lowerAliases.includes(opt.value.toLowerCase())) {
+          select.value = opt.value;
+          return;
+        }
+      }
+    }
+
+    // Update preview value for a field
+    function updateInSeasonPreview(fieldName) {
+      const select = document.getElementById(`inSeasonMap${fieldName}`);
+      const preview = document.getElementById(`inSeasonPreview${fieldName}`);
+      if (!select || !preview) return;
+
+      const colName = select.value;
+      if (colName === '(skip)' || !colName) {
+        preview.textContent = '';
+        return;
+      }
+
+      const colIndex = inSeasonCsvHeaders.indexOf(colName);
+      if (colIndex === -1) {
+        preview.textContent = '';
+        return;
+      }
+
+      // Show first few values
+      const values = inSeasonCsvRows.slice(0, 3).map(row => row[colIndex] || '').filter(v => v);
+      preview.textContent = values.join(', ');
+    }
+
+    // Close modal
+    function closeInSeasonMappingModal() {
+      document.getElementById('inSeasonMappingModal').classList.remove('active');
+    }
+
+    // Go to preview step
+    function inSeasonMappingNext() {
+      // Validate Site ID is mapped
+      const siteIdCol = document.getElementById('inSeasonMapSiteId').value;
+      if (siteIdCol === '(skip)' || !siteIdCol) {
+        showStatus('Site ID is required to link results to sample sites', false);
+        return;
+      }
+
+      // Generate preview
+      generateInSeasonPreview();
+
+      // Switch to step 2
+      document.getElementById('inSeasonMappingStep1').style.display = 'none';
+      document.getElementById('inSeasonMappingStep2').style.display = 'block';
+      document.getElementById('inSeasonStep1Tab').classList.remove('active');
+      document.getElementById('inSeasonStep2Tab').classList.add('active');
+      document.getElementById('inSeasonStep1Tab').style.borderBottom = '3px solid transparent';
+      document.getElementById('inSeasonStep1Tab').style.color = '#94a3b8';
+      document.getElementById('inSeasonStep2Tab').style.borderBottom = '3px solid #d946ef';
+      document.getElementById('inSeasonStep2Tab').style.color = '#a21caf';
+      document.getElementById('inSeasonNextBtn').style.display = 'none';
+      document.getElementById('inSeasonBackBtn').style.display = '';
+      document.getElementById('inSeasonImportBtn').style.display = '';
+    }
+
+    // Go back to mapping step
+    function inSeasonMappingBack() {
+      document.getElementById('inSeasonMappingStep1').style.display = 'block';
+      document.getElementById('inSeasonMappingStep2').style.display = 'none';
+      document.getElementById('inSeasonStep1Tab').classList.add('active');
+      document.getElementById('inSeasonStep2Tab').classList.remove('active');
+      document.getElementById('inSeasonStep1Tab').style.borderBottom = '3px solid #d946ef';
+      document.getElementById('inSeasonStep1Tab').style.color = '#a21caf';
+      document.getElementById('inSeasonStep2Tab').style.borderBottom = '3px solid transparent';
+      document.getElementById('inSeasonStep2Tab').style.color = '#94a3b8';
+      document.getElementById('inSeasonNextBtn').style.display = '';
+      document.getElementById('inSeasonBackBtn').style.display = 'none';
+      document.getElementById('inSeasonImportBtn').style.display = 'none';
+    }
+
+    // Generate preview table
+    function generateInSeasonPreview() {
+      const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
+      const year = document.getElementById('inSeasonYear').value.trim();
+      const labDate = document.getElementById('inSeasonLabDate').value || '';
+
+      // Get mappings
+      const mappings = {
+        SiteId: document.getElementById('inSeasonMapSiteId').value,
+        Field: document.getElementById('inSeasonMapField').value
+      };
+      schema.columns.forEach(col => {
+        const select = document.getElementById(`inSeasonMap${col}`);
+        if (select) mappings[col] = select.value;
+      });
+
+      // Build preview data
+      pendingInSeasonImport = [];
+      let unmatchedSiteIds = new Set();
+
+      inSeasonCsvRows.forEach((row, idx) => {
+        const record = {
+          AnalysisID: `${selectedInSeasonType}_${Date.now()}_${idx}`,
+          Type: selectedInSeasonType,
+          Year: year,
+          LabDate: labDate
+        };
+
+        // Map values
+        Object.entries(mappings).forEach(([field, csvCol]) => {
+          if (csvCol && csvCol !== '(skip)') {
+            const colIndex = inSeasonCsvHeaders.indexOf(csvCol);
+            if (colIndex !== -1) {
+              const value = row[colIndex] || '';
+              record[field] = field === 'SiteId' || field === 'Field' ? value : parseFloat(value) || value;
+            }
+          }
+        });
+
+        // Link to sample site
+        if (record.SiteId) {
+          const site = sampleSitesData.find(s => s.SiteID === record.SiteId);
+          if (site) {
+            record.Field = record.Field || site.Field || '';
+            record.Lat = site.Lat;
+            record.Lng = site.Lng;
+            record.Client = site.Client;
+            record.Farm = site.Farm;
+          } else {
+            unmatchedSiteIds.add(record.SiteId);
+          }
+        }
+
+        pendingInSeasonImport.push(record);
+      });
+
+      // Show count
+      document.getElementById('inSeasonPreviewCount').textContent = `${pendingInSeasonImport.length} records`;
+
+      // Show warnings for unmatched Site IDs
+      const warningsDiv = document.getElementById('inSeasonSiteIdWarnings');
+      if (unmatchedSiteIds.size > 0) {
+        warningsDiv.innerHTML = `
+          <div style="padding: 0.75rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem;">
+            <strong style="color: #92400e;">⚠️ ${unmatchedSiteIds.size} Site IDs not found in Sample Sites:</strong>
+            <div style="font-size: 0.8rem; color: #78350f; margin-top: 0.5rem;">
+              ${Array.from(unmatchedSiteIds).slice(0, 10).join(', ')}${unmatchedSiteIds.size > 10 ? '...' : ''}
+            </div>
+            <p style="font-size: 0.75rem; color: #92400e; margin: 0.5rem 0 0 0;">These records will be imported but won't be linked to sample site locations.</p>
+          </div>
+        `;
+      } else {
+        warningsDiv.innerHTML = `
+          <div style="padding: 0.75rem; background: #dcfce7; border: 1px solid #22c55e; border-radius: 0.375rem;">
+            <strong style="color: #166534;">✓ All Site IDs matched successfully!</strong>
+          </div>
+        `;
+      }
+
+      // Build preview table
+      const previewCols = ['SiteId', 'Field', 'Year', ...schema.columns.slice(0, 5)];
+      const thead = document.getElementById('inSeasonPreviewHead');
+      const tbody = document.getElementById('inSeasonPreviewBody');
+
+      thead.innerHTML = `<tr>${previewCols.map(c => `<th style="padding: 0.5rem; text-align: left; border-bottom: 2px solid #e9d5ff;">${c}</th>`).join('')}</tr>`;
+
+      tbody.innerHTML = pendingInSeasonImport.slice(0, 5).map(rec => `
+        <tr>
+          ${previewCols.map(c => `<td style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">${rec[c] ?? ''}</td>`).join('')}
+        </tr>
+      `).join('');
+    }
+
+    // Confirm import
+    async function inSeasonImportConfirm() {
+      if (!pendingInSeasonImport || pendingInSeasonImport.length === 0) {
+        showStatus('No records to import', false);
+        return;
+      }
+
+      // Load existing data
+      inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
+
+      // Check for duplicates using composite key
+      const existingKeys = new Set(inSeasonData.map(r => `${r.SiteId}-${r.Type}-${r.Year}-${r.LabDate}`));
+
+      let imported = 0, skipped = 0;
+      pendingInSeasonImport.forEach(rec => {
+        const key = `${rec.SiteId}-${rec.Type}-${rec.Year}-${rec.LabDate}`;
+        if (existingKeys.has(key)) {
+          skipped++;
+        } else {
+          inSeasonData.push(rec);
+          existingKeys.add(key);
+          imported++;
+        }
+      });
+
+      // Save to IndexedDB
+      await DataCore.saveInSeasonToIndexedDB(inSeasonData);
+
+      // Sync to Google Sheets
+      if (SheetsAPI.isSignedIn) {
+        await syncInSeasonToSheets();
+      }
+
+      closeInSeasonMappingModal();
+
+      // Reset form
+      document.getElementById('inSeasonFile').value = '';
+      document.getElementById('inSeasonFileInfo').style.display = 'none';
+      document.getElementById('openInSeasonMappingBtn').disabled = true;
+      pendingInSeasonImport = null;
+
+      const schema = IN_SEASON_SCHEMAS[selectedInSeasonType];
+      showStatus(`✓ Imported ${imported} ${schema.name} analysis records${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`, true);
+    }
+
+    // Ensure InSeasonAnalysis tab exists in Google Sheets
+    async function ensureInSeasonAnalysisTab() {
+      const tabName = 'InSeasonAnalysis';
+      try {
+        await gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: CONFIG.SHEET_ID,
+          range: `${tabName}!A1`
+        });
+        return true;
+      } catch (e) {
+        if (e.result?.error?.code === 400 || e.result?.error?.message?.includes('Unable to parse range')) {
+          try {
+            await gapi.client.sheets.spreadsheets.batchUpdate({
+              spreadsheetId: CONFIG.SHEET_ID,
+              resource: {
+                requests: [{ addSheet: { properties: { title: tabName } } }]
+              }
+            });
+
+            // Add headers
+            const headers = ['AnalysisID', 'SiteId', 'Type', 'Year', 'LabDate', 'Field', 'Lat', 'Lng', 'Client', 'Farm',
+              // Tissue columns
+              'N_pct', 'P_pct', 'K_pct', 'Ca_pct', 'Mg_pct', 'S_pct', 'Zn_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm',
+              // Sap columns
+              'EC', 'NO3_N', 'NH4_N', 'Brix',
+              // Soil columns
+              'pH', 'Nitrate_N', 'P', 'K', 'OM', 'CEC',
+              // Water columns
+              'TDS', 'Na', 'Cl', 'NO3', 'Hardness', 'Alkalinity', 'SAR', 'Ca', 'Mg', 'Zn', 'Mn', 'Fe', 'Cu', 'B', 'S'
+            ];
+
+            await gapi.client.sheets.spreadsheets.values.update({
+              spreadsheetId: CONFIG.SHEET_ID,
+              range: `${tabName}!A1:BZ1`,
+              valueInputOption: 'RAW',
+              resource: { values: [headers] }
+            });
+
+            console.log('Created InSeasonAnalysis tab with headers');
+            return true;
+          } catch (createError) {
+            console.error('Failed to create InSeasonAnalysis tab:', createError);
+            return false;
+          }
+        }
+        return false;
+      }
+    }
+
+    // Sync in-season data to Google Sheets
+    async function syncInSeasonToSheets() {
+      if (!SheetsAPI.isSignedIn || !CONFIG.SHEET_ID) return;
+
+      await ensureInSeasonAnalysisTab();
+
+      // Get headers
+      const headersRes = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: CONFIG.SHEET_ID,
+        range: 'InSeasonAnalysis!A1:BZ1'
+      });
+      const headers = headersRes.result.values?.[0] || [];
+
+      if (headers.length === 0) {
+        console.error('No headers found in InSeasonAnalysis tab');
+        return;
+      }
+
+      // Build rows
+      const rows = inSeasonData.map(rec => {
+        return headers.map(h => {
+          const val = rec[h];
+          if (val === undefined || val === null) return '';
+          if (typeof val === 'object') return JSON.stringify(val);
+          return val;
+        });
+      });
+
+      // Clear and update
+      try {
+        await gapi.client.sheets.spreadsheets.values.clear({
+          spreadsheetId: CONFIG.SHEET_ID,
+          range: 'InSeasonAnalysis!A2:BZ10000'
+        });
+
+        if (rows.length > 0) {
+          await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: CONFIG.SHEET_ID,
+            range: 'InSeasonAnalysis!A2',
+            valueInputOption: 'RAW',
+            resource: { values: rows }
+          });
+        }
+
+        console.log(`Synced ${rows.length} in-season analysis records to Google Sheets`);
+      } catch (e) {
+        console.error('Error syncing in-season data to Sheets:', e);
       }
     }
 
