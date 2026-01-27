@@ -868,10 +868,28 @@ window.SapViewer = (function() {
   function renderTrendTable(sampleDates, crop) {
     // Chart groupings by system
     const chartGroups = [
-      { key: 'cations', label: 'Cations', metrics: ['Potassium', 'Calcium', 'Magnesium'], colors: ['#3b82f6', '#22c55e', '#f59e0b'] },
+      {
+        key: 'cations',
+        label: 'Cations',
+        metrics: ['Potassium', 'Calcium', 'Magnesium'],
+        colors: ['#3b82f6', '#22c55e', '#f59e0b'],
+        // K/(Ca+Mg) ratio shown as secondary line
+        ratio: {
+          label: 'K/(Ca+Mg)',
+          calc: (data) => {
+            const k = parseFloat(data?.Potassium);
+            const ca = parseFloat(data?.Calcium);
+            const mg = parseFloat(data?.Magnesium);
+            if (isNaN(k) || isNaN(ca) || isNaN(mg) || (ca + mg) === 0) return null;
+            return k / (ca + mg);
+          },
+          color: '#94a3b8'
+        }
+      },
       { key: 'nitrogen', label: 'Nitrogen', metrics: ['Nitrogen_NO3', 'Nitrogen_NH4'], colors: ['#8b5cf6', '#ec4899'] },
-      { key: 'micros', label: 'Micronutrients', metrics: ['Boron', 'Zinc'], colors: ['#06b6d4', '#f97316'] },
-      { key: 'energy', label: 'Energy', metrics: ['Brix', 'Sugars'], colors: ['#10b981', '#84cc16'] }
+      { key: 'micros', label: 'Micronutrients', metrics: ['Boron', 'Zinc', 'Iron', 'Manganese'], colors: ['#06b6d4', '#f97316', '#64748b', '#a855f7'] },
+      { key: 'energy', label: 'Energy', metrics: ['Brix', 'Sugars'], colors: ['#10b981', '#84cc16'] },
+      { key: 'stress', label: 'Stress Indicators', metrics: ['EC', 'pH'], colors: ['#ef4444', '#6366f1'], collapsible: true }
     ];
 
     const displayDates = sampleDates.slice(0, 12);
@@ -905,22 +923,78 @@ window.SapViewer = (function() {
   function renderTrendTableView(displayDates, chartGroups, crop) {
     const allMetrics = chartGroups.flatMap(g => g.metrics);
 
+    // Pre-calculate status info for each metric to determine trend and if ever flagged
+    const metricInfo = {};
+    allMetrics.forEach(metric => {
+      let everFlagged = false;
+      let firstValue = null;
+      let lastValue = null;
+      let firstStatus = null;
+      let lastStatus = null;
+
+      displayDates.forEach((sd, i) => {
+        const newVal = sd.new_leaf?.[metric];
+        const evaluation = SapLogic.evaluateStatus(sd, { crop });
+        const newStatus = evaluation.per_nutrient_status.new_leaf?.[metric]?.status;
+        const oldStatus = evaluation.per_nutrient_status.old_leaf?.[metric]?.status;
+
+        if (newStatus === 'Watch' || newStatus === 'Action' || oldStatus === 'Watch' || oldStatus === 'Action') {
+          everFlagged = true;
+        }
+
+        if (newVal !== undefined) {
+          if (firstValue === null) {
+            firstValue = newVal;
+            firstStatus = newStatus;
+          }
+          lastValue = newVal;
+          lastStatus = newStatus;
+        }
+      });
+
+      // Calculate trend: compare first and last values/status
+      let trend = 'flat';
+      if (firstValue !== null && lastValue !== null && displayDates.length >= 2) {
+        const pctChange = (lastValue - firstValue) / (firstValue || 1);
+        // Also consider status improvement
+        const statusScore = { 'OK': 0, 'Watch': 1, 'Action': 2 };
+        const statusImproved = (statusScore[lastStatus] || 0) < (statusScore[firstStatus] || 0);
+        const statusWorsened = (statusScore[lastStatus] || 0) > (statusScore[firstStatus] || 0);
+
+        if (statusImproved || (Math.abs(pctChange) > 0.1 && lastStatus === 'OK' && firstStatus !== 'OK')) {
+          trend = 'improving';
+        } else if (statusWorsened || (Math.abs(pctChange) > 0.1 && lastStatus !== 'OK' && firstStatus === 'OK')) {
+          trend = 'worsening';
+        }
+      }
+
+      metricInfo[metric] = { everFlagged, trend };
+    });
+
     let html = `
-      <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem;">New leaf (top) / Old leaf (bottom)</div>
+      <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem;">New leaf (top) / Old leaf (bottom) • Trend: ↑ improving ↓ worsening</div>
       <div class="sap-trend-table-wrapper">
         <table class="sap-trend-table">
           <thead>
             <tr>
               <th>Metric</th>
-              ${displayDates.map(sd => `<th class="sap-trend-date">${formatDateShort(sd.sample_date)}<br><span class="sap-stage">${sd.growth_stage || ''}</span></th>`).join('')}
+              <th class="sap-trend-arrow-col">Trend</th>
+              ${displayDates.map(sd => `<th class="sap-trend-date">${sd.growth_stage || formatDateShort(sd.sample_date)}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
     `;
 
     allMetrics.forEach(metric => {
-      html += `<tr>`;
+      const info = metricInfo[metric];
+      const rowClass = info.everFlagged ? '' : 'sap-row-muted';
+      const trendArrow = info.trend === 'improving' ? '<span class="sap-trend-up">↑</span>' :
+                         info.trend === 'worsening' ? '<span class="sap-trend-down">↓</span>' :
+                         '<span class="sap-trend-flat">↔</span>';
+
+      html += `<tr class="${rowClass}">`;
       html += `<td class="sap-trend-metric">${SapLogic.formatNutrientName(metric)}</td>`;
+      html += `<td class="sap-trend-arrow">${trendArrow}</td>`;
 
       displayDates.forEach(sd => {
         const newVal = sd.new_leaf?.[metric];
@@ -976,12 +1050,51 @@ window.SapViewer = (function() {
       <div class="sap-chart-grid">
     `;
 
-    chartGroups.forEach(group => {
+    // Separate main and collapsible groups
+    const mainGroups = chartGroups.filter(g => !g.collapsible);
+    const collapsibleGroups = chartGroups.filter(g => g.collapsible);
+
+    mainGroups.forEach(group => {
+      const ratioLegend = group.ratio ? `
+        <span class="sap-metric-legend" style="color: ${group.ratio.color};">
+          <span class="sap-legend-line-mini" style="border-color: ${group.ratio.color};"></span>
+          ${group.ratio.label}
+        </span>
+      ` : '';
+
       html += `
         <div class="sap-chart-panel">
           <div class="sap-chart-title">${group.label}</div>
           <div class="sap-chart-container">
-            ${renderSingleChart(displayDates, group.metrics, group.colors, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
+            ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
+          </div>
+          <div class="sap-chart-legend">
+            ${group.metrics.map((m, i) => `
+              <span class="sap-metric-legend" style="color: ${group.colors[i]};">
+                <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
+                ${SapLogic.formatNutrientName(m)}
+              </span>
+            `).join('')}
+            ${ratioLegend}
+          </div>
+        </div>
+      `;
+    });
+
+    // Collapsible section for stress indicators
+    if (collapsibleGroups.length > 0) {
+      html += `
+        <div class="sap-chart-panel sap-chart-collapsible">
+          <div class="sap-chart-title sap-chart-title-collapsible" onclick="this.parentElement.classList.toggle('collapsed')">
+            ${collapsibleGroups.map(g => g.label).join(' / ')}
+            <span class="sap-collapse-icon">▼</span>
+          </div>
+          <div class="sap-collapsible-content">
+      `;
+      collapsibleGroups.forEach(group => {
+        html += `
+          <div class="sap-chart-container">
+            ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
           </div>
           <div class="sap-chart-legend">
             ${group.metrics.map((m, i) => `
@@ -991,9 +1104,10 @@ window.SapViewer = (function() {
               </span>
             `).join('')}
           </div>
-        </div>
-      `;
-    });
+        `;
+      });
+      html += `</div></div>`;
+    }
 
     html += `</div>`;
     return html;
@@ -1002,7 +1116,9 @@ window.SapViewer = (function() {
   /**
    * Render a single SVG chart for a group of metrics
    */
-  function renderSingleChart(displayDates, metrics, colors, crop, width, height, padding, plotWidth, plotHeight) {
+  function renderSingleChart(displayDates, group, crop, width, height, padding, plotWidth, plotHeight) {
+    const { metrics, colors, ratio } = group;
+
     if (displayDates.length < 2) {
       return `<div class="sap-chart-empty">Need at least 2 dates for trend</div>`;
     }
@@ -1029,12 +1145,56 @@ window.SapViewer = (function() {
     const yMax = maxVal + range * 0.1;
     const yRange = yMax - yMin || 1;
 
+    // Calculate ratio values if defined (for secondary axis)
+    let ratioValues = [];
+    let ratioMin = 0, ratioMax = 1, ratioRange = 1;
+    if (ratio) {
+      displayDates.forEach(sd => {
+        const newRatio = ratio.calc(sd.new_leaf);
+        const oldRatio = ratio.calc(sd.old_leaf);
+        if (newRatio !== null) ratioValues.push({ type: 'new', val: newRatio });
+        if (oldRatio !== null) ratioValues.push({ type: 'old', val: oldRatio });
+      });
+      if (ratioValues.length > 0) {
+        const vals = ratioValues.map(r => r.val);
+        ratioMin = Math.min(...vals) * 0.9;
+        ratioMax = Math.max(...vals) * 1.1;
+        ratioRange = ratioMax - ratioMin || 1;
+      }
+    }
+
     // Helper to convert value to Y coordinate
     const toY = (val) => padding.top + plotHeight - ((val - yMin) / yRange * plotHeight);
+    const toYRatio = (val) => padding.top + plotHeight - ((val - ratioMin) / ratioRange * plotHeight);
     const toX = (i) => padding.left + (i / (displayDates.length - 1)) * plotWidth;
+
+    // Evaluate status for each date to add background shading
+    const statusByDate = displayDates.map(sd => {
+      const evaluation = SapLogic.evaluateStatus(sd, { crop });
+      // Check if any metric in this group has non-OK status
+      let worstStatus = 'OK';
+      metrics.forEach(metric => {
+        const newStatus = evaluation.per_nutrient_status?.new_leaf?.[metric]?.status;
+        const oldStatus = evaluation.per_nutrient_status?.old_leaf?.[metric]?.status;
+        if (newStatus === 'Action' || oldStatus === 'Action') worstStatus = 'Action';
+        else if ((newStatus === 'Watch' || oldStatus === 'Watch') && worstStatus !== 'Action') worstStatus = 'Watch';
+      });
+      return worstStatus;
+    });
 
     // Build SVG
     let svg = `<svg width="${width}" height="${height}" class="sap-trend-svg">`;
+
+    // Status background shading (draw first, behind everything)
+    displayDates.forEach((sd, i) => {
+      const status = statusByDate[i];
+      if (status !== 'OK') {
+        const x1 = i === 0 ? padding.left : toX(i) - (plotWidth / (displayDates.length - 1)) / 2;
+        const x2 = i === displayDates.length - 1 ? width - padding.right : toX(i) + (plotWidth / (displayDates.length - 1)) / 2;
+        const fillColor = status === 'Action' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)';
+        svg += `<rect x="${x1}" y="${padding.top}" width="${x2 - x1}" height="${plotHeight}" fill="${fillColor}"/>`;
+      }
+    });
 
     // Grid lines
     const gridLines = 4;
@@ -1052,6 +1212,21 @@ window.SapViewer = (function() {
       svg += `<text x="${x}" y="${height - 5}" text-anchor="middle" font-size="8" fill="#64748b">${label}</text>`;
     });
 
+    // Draw ratio line first (behind other lines)
+    if (ratio && ratioValues.length > 1) {
+      let ratioPoints = [];
+      displayDates.forEach((sd, i) => {
+        const val = ratio.calc(sd.new_leaf);
+        if (val !== null) {
+          ratioPoints.push({ x: toX(i), y: toYRatio(val), val });
+        }
+      });
+      if (ratioPoints.length > 1) {
+        const pathD = ratioPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+        svg += `<path d="${pathD}" fill="none" stroke="${ratio.color}" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.6"/>`;
+      }
+    }
+
     // Draw lines for each metric
     metrics.forEach((metric, mi) => {
       const color = colors[mi];
@@ -1061,14 +1236,18 @@ window.SapViewer = (function() {
       displayDates.forEach((sd, i) => {
         const val = parseFloat(sd.new_leaf?.[metric]);
         if (!isNaN(val)) {
-          newPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage });
+          newPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage, status: statusByDate[i] });
         }
       });
       if (newPoints.length > 1) {
         const pathD = newPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
         svg += `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" class="sap-chart-line"/>`;
-        // Data points
+        // Data points with status-colored ring for non-OK
         newPoints.forEach(p => {
+          if (p.status !== 'OK') {
+            const ringColor = p.status === 'Action' ? '#ef4444' : '#f59e0b';
+            svg += `<circle cx="${p.x}" cy="${p.y}" r="6" fill="none" stroke="${ringColor}" stroke-width="2" opacity="0.5"/>`;
+          }
           svg += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" class="sap-chart-point"
                    data-metric="${metric}" data-leaf="new" data-val="${p.val}" data-date="${p.date}" data-stage="${p.stage || ''}"/>`;
         });
@@ -1079,7 +1258,7 @@ window.SapViewer = (function() {
       displayDates.forEach((sd, i) => {
         const val = parseFloat(sd.old_leaf?.[metric]);
         if (!isNaN(val)) {
-          oldPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage });
+          oldPoints.push({ x: toX(i), y: toY(val), val, date: sd.sample_date, stage: sd.growth_stage, status: statusByDate[i] });
         }
       });
       if (oldPoints.length > 1) {
