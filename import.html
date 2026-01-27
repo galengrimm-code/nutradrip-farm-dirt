@@ -7323,6 +7323,45 @@
       return '';
     }
 
+    // Parse CSV line respecting quoted fields (handles commas inside quotes)
+    function parseCsvLine(line, delimiter = ',') {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (inQuotes) {
+          if (char === '"' && nextChar === '"') {
+            // Escaped quote
+            current += '"';
+            i++;
+          } else if (char === '"') {
+            // End of quoted field
+            inQuotes = false;
+          } else {
+            current += char;
+          }
+        } else {
+          if (char === '"') {
+            // Start of quoted field
+            inQuotes = true;
+          } else if (char === delimiter) {
+            // Field separator
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+      }
+      // Push last field
+      result.push(current.trim());
+      return result;
+    }
+
     // State variables for in-season import
     let inSeasonData = [];
     let pendingInSeasonImport = null;
@@ -7385,20 +7424,29 @@
             return;
           }
 
-          // Detect delimiter
-          const firstLine = lines[0];
+          // Detect delimiter (simple heuristic on header line)
+          const firstLine = lines[0].replace(/^\uFEFF/, ''); // Remove BOM
           let delimiter = ',';
-          if (firstLine.split(';').length > firstLine.split(',').length) delimiter = ';';
-          if (firstLine.split('\t').length > firstLine.split(delimiter).length) delimiter = '\t';
+          // Count delimiters outside quotes for detection
+          const countOutsideQuotes = (line, delim) => {
+            let count = 0, inQuotes = false;
+            for (const char of line) {
+              if (char === '"') inQuotes = !inQuotes;
+              else if (char === delim && !inQuotes) count++;
+            }
+            return count;
+          };
+          if (countOutsideQuotes(firstLine, ';') > countOutsideQuotes(firstLine, ',')) delimiter = ';';
+          if (countOutsideQuotes(firstLine, '\t') > countOutsideQuotes(firstLine, delimiter)) delimiter = '\t';
 
-          // Remove BOM if present
-          const cleanLine = firstLine.replace(/^\uFEFF/, '');
-          inSeasonCsvHeaders = cleanLine.split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+          // Parse headers using quote-aware parser
+          inSeasonCsvHeaders = parseCsvLine(firstLine, delimiter);
 
+          // Parse data rows
           inSeasonCsvRows = [];
           for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
-            const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+            const values = parseCsvLine(lines[i], delimiter);
             inSeasonCsvRows.push(values);
           }
 
