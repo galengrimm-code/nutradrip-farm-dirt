@@ -562,13 +562,25 @@ window.SapViewer = (function() {
       const selected = sd.sample_date === selectedDate ? 'selected' : '';
       let displayText;
 
-      if (sd.is_date_only_year) {
-        // Date is just a year, show only growth stage
-        displayText = sd.growth_stage || 'Unknown';
+      // Always show growth stage first, then date if available
+      const stage = sd.growth_stage || '';
+      const rawDate = sd.raw_date || '';
+
+      if (stage && rawDate && !sd.is_date_only_year) {
+        // Have both stage and full date: "V6 - May 29"
+        const dateStr = formatDateShort(rawDate);
+        displayText = `${stage} - ${dateStr}`;
+      } else if (stage && rawDate && sd.is_date_only_year) {
+        // Stage with year only: "V6 (2025)"
+        displayText = `${stage} (${rawDate})`;
+      } else if (stage) {
+        // Just stage
+        displayText = stage;
+      } else if (rawDate) {
+        // Just date
+        displayText = formatDate(rawDate);
       } else {
-        // Full date available, show "date (stage)"
-        const dateStr = formatDate(sd.raw_date);
-        displayText = sd.growth_stage ? `${dateStr} (${sd.growth_stage})` : dateStr;
+        displayText = 'Unknown';
       }
 
       html += `<option value="${sd.sample_date}" ${selected}>${displayText}</option>`;
@@ -1071,7 +1083,7 @@ window.SapViewer = (function() {
       ` : '';
 
       html += `
-        <div class="sap-chart-panel sap-chart-expandable" data-chart-key="${group.key}" onclick="SapViewer.expandChart('${group.key}')">
+        <div class="sap-chart-panel sap-chart-expandable" data-chart-key="${group.key}">
           <div class="sap-chart-title">${group.label}</div>
           <div class="sap-chart-container">
             ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
@@ -1101,16 +1113,18 @@ window.SapViewer = (function() {
       `;
       collapsibleGroups.forEach(group => {
         html += `
-          <div class="sap-chart-container sap-chart-expandable" data-chart-key="${group.key}" onclick="event.stopPropagation(); SapViewer.expandChart('${group.key}')">
-            ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
-          </div>
-          <div class="sap-chart-legend">
-            ${group.metrics.map((m, i) => `
-              <span class="sap-metric-legend" style="color: ${group.colors[i]};">
-                <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
-                ${SapLogic.formatNutrientName(m)}
-              </span>
-            `).join('')}
+          <div class="sap-chart-mini-panel sap-chart-expandable" data-chart-key="${group.key}">
+            <div class="sap-chart-container">
+              ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
+            </div>
+            <div class="sap-chart-legend">
+              ${group.metrics.map((m, i) => `
+                <span class="sap-metric-legend" style="color: ${group.colors[i]};">
+                  <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
+                  ${SapLogic.formatNutrientName(m)}
+                </span>
+              `).join('')}
+            </div>
           </div>
         `;
       });
@@ -1125,11 +1139,21 @@ window.SapViewer = (function() {
    * Expand a chart to full-screen modal
    */
   function expandChart(chartKey) {
+    console.log('expandChart called with key:', chartKey);
+    console.log('chartDataCache:', chartDataCache);
+
     const { displayDates, chartGroups, crop } = chartDataCache;
-    if (!displayDates || !chartGroups) return;
+    if (!displayDates || !chartGroups) {
+      console.log('No chart data cached');
+      return;
+    }
 
     const group = chartGroups.find(g => g.key === chartKey);
-    if (!group) return;
+    console.log('Found group:', group);
+    if (!group) {
+      console.log('Group not found for key:', chartKey);
+      return;
+    }
 
     // Large chart dimensions
     const chartWidth = 800;
@@ -1763,6 +1787,15 @@ window.SapViewer = (function() {
    */
   function setupGlobalClickHandler() {
     document.addEventListener('click', (e) => {
+      // Chart panel click (for expand)
+      const chartPanel = e.target.closest('.sap-chart-expandable[data-chart-key]');
+      if (chartPanel) {
+        const chartKey = chartPanel.dataset.chartKey;
+        console.log('Chart panel clicked, key:', chartKey);
+        expandChart(chartKey);
+        return;
+      }
+
       // System card click
       const card = e.target.closest('.sap-summary-card[data-system]');
       if (card && card.classList.contains('clickable')) {
