@@ -57,13 +57,13 @@ window.SapViewer = (function() {
       // Try IndexedDB first
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
       console.log('SapViewer: IndexedDB returned', inSeasonData.length, 'records');
-      console.log('SapViewer: SheetsAPI.isSignedIn =', window.SheetsAPI?.isSignedIn);
+      console.log('SapViewer: SheetsAPI.isSignedIn =', DataCore.SheetsAPI?.isSignedIn);
 
       // If empty and signed in, try loading from Google Sheets
-      if (inSeasonData.length === 0 && window.SheetsAPI?.isSignedIn) {
+      if (inSeasonData.length === 0 && DataCore.SheetsAPI?.isSignedIn) {
         console.log('SapViewer: IndexedDB empty, trying Google Sheets...');
         try {
-          inSeasonData = await window.SheetsAPI.getInSeasonAnalysis() || [];
+          inSeasonData = await DataCore.SheetsAPI.getInSeasonAnalysis() || [];
           // Cache to IndexedDB for future use
           if (inSeasonData.length > 0) {
             await DataCore.saveInSeasonToIndexedDB(inSeasonData);
