@@ -140,8 +140,15 @@ window.SapViewer = (function() {
     // Group by date + growth stage (to handle cases where LabDate is just a year)
     const dateMap = new Map();
 
+    // Log first sample's keys to debug what date fields are available
+    if (samples.length > 0) {
+      console.log('Sample record keys:', Object.keys(samples[0]));
+      console.log('Sample LabDate:', samples[0].LabDate, 'DateSampled:', samples[0].DateSampled, 'SampleDate:', samples[0].SampleDate);
+    }
+
     samples.forEach(record => {
-      const rawDate = record.LabDate || '';
+      // Look for actual date in multiple possible fields
+      const rawDate = record.DateSampled || record.SampleDate || record.date_sampled || record.LabDate || '';
       const growthStage = record.GrowthStage || '';
 
       // Create a unique key: if LabDate looks like just a year (4 digits), use GrowthStage as key
@@ -1155,48 +1162,56 @@ window.SapViewer = (function() {
       return;
     }
 
-    // Large chart dimensions
-    const chartWidth = 800;
-    const chartHeight = 400;
-    const padding = { top: 30, right: 40, bottom: 50, left: 70 };
-    const plotWidth = chartWidth - padding.left - padding.right;
-    const plotHeight = chartHeight - padding.top - padding.bottom;
+    try {
+      // Large chart dimensions
+      const chartWidth = 800;
+      const chartHeight = 400;
+      const padding = { top: 30, right: 40, bottom: 50, left: 70 };
+      const plotWidth = chartWidth - padding.left - padding.right;
+      const plotHeight = chartHeight - padding.top - padding.bottom;
 
-    const ratioLegend = group.ratio ? `
-      <span class="sap-metric-legend" style="color: ${group.ratio.color};">
-        <span class="sap-legend-line-mini" style="border-color: ${group.ratio.color};"></span>
-        ${group.ratio.label}
-      </span>
-    ` : '';
+      const ratioLegend = group.ratio ? `
+        <span class="sap-metric-legend" style="color: ${group.ratio.color};">
+          <span class="sap-legend-line-mini" style="border-color: ${group.ratio.color};"></span>
+          ${group.ratio.label}
+        </span>
+      ` : '';
 
-    const modalHtml = `
-      <div class="sap-modal sap-chart-modal" onclick="if(event.target === this) SapViewer.closeChartModal()">
-        <div class="sap-modal-content sap-chart-modal-content">
-          <button class="sap-modal-close" onclick="SapViewer.closeChartModal()">&times;</button>
-          <h3 class="sap-modal-title">${group.label}</h3>
-          <div class="sap-expanded-chart">
-            ${renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight)}
-          </div>
-          <div class="sap-chart-legend sap-expanded-legend">
-            <span class="sap-legend-item"><span class="sap-legend-line solid"></span> New Leaf</span>
-            <span class="sap-legend-item"><span class="sap-legend-line dashed"></span> Old Leaf</span>
-            ${group.metrics.map((m, i) => `
-              <span class="sap-metric-legend" style="color: ${group.colors[i]};">
-                <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
-                ${SapLogic.formatNutrientName(m)}
-              </span>
-            `).join('')}
-            ${ratioLegend}
+      const chartSvg = renderSingleChart(displayDates, group, crop, chartWidth, chartHeight, padding, plotWidth, plotHeight);
+      console.log('Chart SVG generated, length:', chartSvg?.length);
+
+      const modalHtml = `
+        <div class="sap-modal sap-chart-modal" onclick="if(event.target === this) SapViewer.closeChartModal()">
+          <div class="sap-modal-content sap-chart-modal-content">
+            <button class="sap-modal-close" onclick="SapViewer.closeChartModal()">&times;</button>
+            <h3 class="sap-modal-title">${group.label}</h3>
+            <div class="sap-expanded-chart">
+              ${chartSvg}
+            </div>
+            <div class="sap-chart-legend sap-expanded-legend">
+              <span class="sap-legend-item"><span class="sap-legend-line solid"></span> New Leaf</span>
+              <span class="sap-legend-item"><span class="sap-legend-line dashed"></span> Old Leaf</span>
+              ${group.metrics.map((m, i) => `
+                <span class="sap-metric-legend" style="color: ${group.colors[i]};">
+                  <span class="sap-legend-dot" style="background: ${group.colors[i]};"></span>
+                  ${SapLogic.formatNutrientName(m)}
+                </span>
+              `).join('')}
+              ${ratioLegend}
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
 
-    // Remove existing modal if any
-    const existing = document.querySelector('.sap-chart-modal');
-    if (existing) existing.remove();
+      // Remove existing modal if any
+      const existing = document.querySelector('.sap-chart-modal');
+      if (existing) existing.remove();
 
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      console.log('Modal inserted into DOM');
+    } catch (err) {
+      console.error('Error rendering expanded chart:', err);
+    }
   }
 
   /**
