@@ -57,6 +57,7 @@ window.SapViewer = (function() {
       // Try IndexedDB first
       inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
       console.log('SapViewer: IndexedDB returned', inSeasonData.length, 'records');
+      console.log('SapViewer: SheetsAPI.isSignedIn =', window.SheetsAPI?.isSignedIn);
 
       // If empty and signed in, try loading from Google Sheets
       if (inSeasonData.length === 0 && window.SheetsAPI?.isSignedIn) {
@@ -71,6 +72,8 @@ window.SapViewer = (function() {
         } catch (sheetsErr) {
           console.error('SapViewer: Sheets load failed:', sheetsErr);
         }
+      } else if (inSeasonData.length === 0) {
+        console.log('SapViewer: IndexedDB empty but not signed in - cannot load from Sheets');
       }
 
       // Filter to SAP type only
