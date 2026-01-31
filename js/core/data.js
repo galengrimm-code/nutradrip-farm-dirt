@@ -158,7 +158,7 @@ const SheetsAPI = {
 
   async init() {
     return new Promise((resolve, reject) => {
-      gapi.load('client', async () => {
+      gapi.load('client:picker', async () => {
         try {
           await gapi.client.init({
             apiKey: DataConfig.API_KEY,
@@ -168,7 +168,7 @@ const SheetsAPI = {
 
           tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: DataConfig.CLIENT_ID,
-            scope: 'https://www.googleapis.com/auth/spreadsheets',
+            scope: 'https://www.googleapis.com/auth/drive.file',
             callback: (response) => {
               if (response.error) {
                 console.error('Token error:', response);
@@ -560,6 +560,190 @@ function migrateDataIfNeeded() {
   return true;
 }
 
+// ========== GOOGLE PICKER ==========
+let pickerCallback = null;
+let pendingPickerAfterSignIn = false;
+
+function openSheetPicker(callback) {
+  pickerCallback = callback;
+
+  // Check if we have a valid token
+  const token = gapi.client.getToken();
+  if (token && token.access_token) {
+    console.log('[Picker] Have token, showing picker');
+    showPicker();
+    return;
+  }
+
+  // Need to sign in first - set flag and trigger sign-in
+  console.log('[Picker] No token, requesting sign-in first');
+  pendingPickerAfterSignIn = true;
+
+  // Store the original callback so we can restore it
+  const originalOnSignInChange = SheetsAPI.onSignInChange;
+  SheetsAPI.onSignInChange = (isSignedIn) => {
+    // Call original handler
+    originalOnSignInChange(isSignedIn);
+
+    // If sign-in succeeded and we have a pending picker request
+    if (isSignedIn && pendingPickerAfterSignIn) {
+      pendingPickerAfterSignIn = false;
+      SheetsAPI.onSignInChange = originalOnSignInChange; // Restore
+      console.log('[Picker] Sign-in complete, now showing picker');
+      // Small delay to ensure token is fully set
+      setTimeout(showPicker, 100);
+    }
+  };
+
+  SheetsAPI.signIn();
+}
+
+function showPicker() {
+  const token = gapi.client.getToken();
+  const accessToken = token?.access_token;
+
+  if (!accessToken) {
+    console.error('[Picker] No access token available');
+    if (pickerCallback) pickerCallback({ error: 'Please sign in with Google first' });
+    return;
+  }
+
+  console.log('[Picker] Building picker with token');
+  const picker = new google.picker.PickerBuilder()
+    .setTitle('Select your Google Sheet')
+    .addView(google.picker.ViewId.SPREADSHEETS)
+    .setOAuthToken(accessToken)
+    .setDeveloperKey(DataConfig.API_KEY)
+    .setCallback(handlePickerSelection)
+    .setOrigin(window.location.origin)
+    .build();
+
+  picker.setVisible(true);
+}
+
+function handlePickerSelection(data) {
+  if (data.action === google.picker.Action.PICKED) {
+    const sheetId = data.docs[0].id;
+    const sheetName = data.docs[0].name;
+
+    // Save connection
+    localStorage.setItem('googleSheetId', sheetId);
+    localStorage.setItem('googleSheetName', sheetName);
+
+    // Mark as authorized with new scope
+    localStorage.setItem('pickerAuthorized', 'true');
+
+    // Update URL for bookmarking
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('sheet', sheetId);
+    window.history.replaceState({}, '', newUrl);
+
+    if (pickerCallback) {
+      pickerCallback({ success: true, sheetId, sheetName });
+    }
+  } else if (data.action === google.picker.Action.CANCEL) {
+    if (pickerCallback) {
+      pickerCallback({ cancelled: true });
+    }
+  }
+}
+
+function needsMigration() {
+  const savedSheetId = localStorage.getItem('googleSheetId');
+  const hasReauthorized = localStorage.getItem('pickerAuthorized');
+  return savedSheetId && !hasReauthorized;
+}
+
+async function createNewSheet(operationName) {
+  // Check if we have a valid token
+  const token = gapi.client.getToken();
+  if (!token || !token.access_token) {
+    console.log('[CreateSheet] No token, requesting sign-in first');
+    await new Promise((resolve) => {
+      const originalCallback = SheetsAPI.onSignInChange;
+      SheetsAPI.onSignInChange = (isSignedIn) => {
+        originalCallback(isSignedIn);
+        if (isSignedIn) {
+          SheetsAPI.onSignInChange = originalCallback; // Restore
+          resolve();
+        }
+      };
+      SheetsAPI.signIn();
+    });
+  }
+
+  const sheetTitle = operationName ? `${operationName} - Soil Analysis` : 'Nutradrip - Soil Analysis';
+
+  const response = await gapi.client.sheets.spreadsheets.create({
+    properties: {
+      title: sheetTitle
+    },
+    sheets: [
+      { properties: { title: 'Samples', index: 0 } },
+      { properties: { title: 'Fields', index: 1 } },
+      { properties: { title: 'Settings', index: 2 } },
+      { properties: { title: 'YieldData', index: 3 } },
+      { properties: { title: 'SampleSites', index: 4 } }
+    ]
+  });
+
+  const sheetId = response.result.spreadsheetId;
+  const sheetName = response.result.properties.title;
+
+  // Add headers
+  await initializeSheetHeaders(sheetId);
+
+  // Save connection
+  localStorage.setItem('googleSheetId', sheetId);
+  localStorage.setItem('googleSheetName', sheetName);
+
+  // Mark as authorized with new scope
+  localStorage.setItem('pickerAuthorized', 'true');
+
+  // Update URL
+  const newUrl = new URL(window.location.href);
+  newUrl.searchParams.set('sheet', sheetId);
+  window.history.replaceState({}, '', newUrl);
+
+  return { sheetId, sheetName };
+}
+
+async function initializeSheetHeaders(sheetId) {
+  // Samples headers
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: 'Samples!A1:Z1',
+    valueInputOption: 'RAW',
+    resource: {
+      values: [[
+        'SampleID', 'Client', 'Farm', 'Field', 'Lat', 'Lng', 'SampleDate',
+        'pH', 'P_ppm', 'K_ppm', 'Zn_ppm', 'OM_pct', 'CEC', 'Ca_ppm', 'Mg_ppm',
+        'S_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm', 'pct_K', 'pct_Mg', 'pct_Ca'
+      ]]
+    }
+  });
+
+  // Fields headers
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: 'Fields!A1:J1',
+    valueInputOption: 'RAW',
+    resource: {
+      values: [['FieldID', 'Client', 'Farm', 'FieldName', 'Acres', 'Geometry', 'Notes', 'CreatedDate']]
+    }
+  });
+
+  // Settings headers
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: 'Settings!A1:B1',
+    valueInputOption: 'RAW',
+    resource: {
+      values: [['Key', 'Value']]
+    }
+  });
+}
+
 // ========== HELPER FUNCTIONS ==========
 function getActiveFields(fieldBoundaries, farmsData, activeClientId, activeFarmId) {
   const allFieldNames = Object.keys(fieldBoundaries);
@@ -643,7 +827,12 @@ window.DataCore = {
   getActiveFields,
   getFieldBoundaryCoords,
   extractSheetId,
-  isNewUser
+  isNewUser,
+
+  // Google Picker
+  openSheetPicker,
+  needsMigration,
+  createNewSheet
 };
 
 })();
