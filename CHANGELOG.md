@@ -4,6 +4,20 @@ All notable changes to the Soil Sample Analysis app will be documented in this f
 
 ---
 
+## [v1.0.184] - January 31, 2026
+
+### SAP Analysis - CSV Export
+
+- **Export to CSV**: New export feature for SAP analysis data
+  - Filter by Client, Farm, and/or Field before exporting
+  - Cascading dropdown filters (selecting client updates farm options, etc.)
+  - Shows record count preview before export
+  - Exports all metadata: SiteId, Client, Farm, Field, LabDate, GrowthStage, LeafAge, PlantType, Variety, Lat, Lng
+  - Exports all nutrient values as raw numbers (26 nutrient columns)
+  - Filename includes filter selections and export date
+
+---
+
 ## [v1.0.183] - January 27, 2026
 
 ### Sap Analysis Viewer - Status Mode & Reports
