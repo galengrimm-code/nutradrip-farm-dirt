@@ -2314,6 +2314,76 @@ window.SapViewer = (function() {
     return '<span class="chip">—</span>';
   }
 
+  // ========== EXPORT FUNCTIONS ==========
+
+  /**
+   * Get unique clients from SAP data
+   */
+  function getClients() {
+    const clients = new Set();
+    sapSites.forEach(site => {
+      if (site.Client) clients.add(site.Client);
+    });
+    return Array.from(clients).sort();
+  }
+
+  /**
+   * Get unique farms, optionally filtered by client
+   */
+  function getFarms(client = null) {
+    const farms = new Set();
+    sapSites.forEach(site => {
+      if (client && site.Client !== client) return;
+      if (site.Farm) farms.add(site.Farm);
+    });
+    return Array.from(farms).sort();
+  }
+
+  /**
+   * Get unique fields, optionally filtered by client and farm
+   */
+  function getFields(client = null, farm = null) {
+    const fields = new Set();
+    sapSites.forEach(site => {
+      if (client && site.Client !== client) return;
+      if (farm && site.Farm !== farm) return;
+      if (site.Field) fields.add(site.Field);
+    });
+    return Array.from(fields).sort();
+  }
+
+  /**
+   * Get raw SAP data for export, with optional filters
+   * Returns array of flat records with all nutrient values
+   */
+  function getExportData(filters = {}) {
+    const { client, farm, field } = filters;
+
+    // Filter inSeasonData to SAP records matching filters
+    const sapData = inSeasonData.filter(r => {
+      if (r.Type !== 'Sap' && r.Type !== 'SAP') return false;
+      if (client && r.Client !== client) return false;
+      if (farm && r.Farm !== farm) return false;
+      if (field && r.Field !== field) return false;
+      return true;
+    });
+
+    return sapData;
+  }
+
+  /**
+   * Get the list of all nutrient keys for CSV headers
+   */
+  function getNutrientKeys() {
+    return [
+      'Nitrogen', 'Nitrogen_NO3', 'Nitrogen_NH4', 'Phosphorus', 'Potassium',
+      'Calcium', 'Magnesium', 'Sulfur', 'Boron', 'Iron', 'Manganese',
+      'Copper', 'Zinc', 'Molybdenum', 'Chloride', 'Sodium', 'Silica',
+      'Aluminum', 'Cobalt', 'Nickel', 'Selenium', 'Brix', 'Sugars',
+      'EC', 'pH', 'KCa_Ratio', 'N_Conversion_Efficiency'
+    ];
+  }
+
   return {
     init,
     selectSite,
@@ -2336,6 +2406,12 @@ window.SapViewer = (function() {
     expandChart,
     closeChartModal,
     // Report generation
-    generateReport
+    generateReport,
+    // Export functions
+    getClients,
+    getFarms,
+    getFields,
+    getExportData,
+    getNutrientKeys
   };
 })();

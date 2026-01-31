@@ -128,6 +128,19 @@
 
     .sap-controls { background: white; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-end; }
 
+    .sap-export-section { background: white; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .sap-export-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .sap-export-header h4 { margin: 0; font-size: 0.9rem; color: #475569; font-weight: 600; }
+    .sap-export-controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+    .sap-export-controls .control-group { flex: 1; min-width: 140px; }
+    .sap-export-controls .control-group label { display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 500; }
+    .sap-export-controls select { width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem; background: white; font-size: 0.875rem; color: #1e293b; cursor: pointer; }
+    .sap-export-controls select:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
+    .sap-export-btn { padding: 0.5rem 1rem; background: #8b5cf6; color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.375rem; transition: background 0.15s; }
+    .sap-export-btn:hover { background: #7c3aed; }
+    .sap-export-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+    .sap-export-count { font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; }
+
     .sap-empty-state { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 3rem 2rem; text-align: center; color: #92400e; }
     .sap-empty-state h3 { margin: 0 0 0.5rem 0; font-size: 1.25rem; }
     .sap-empty-state p { margin: 0; }
@@ -1048,6 +1061,37 @@
           </div>
         </div>
 
+        <!-- Export Section -->
+        <div class="sap-export-section">
+          <div class="sap-export-header">
+            <h4>Export SAP Data</h4>
+          </div>
+          <div class="sap-export-controls">
+            <div class="control-group">
+              <label>Client</label>
+              <select id="sapExportClient">
+                <option value="">All Clients</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Farm</label>
+              <select id="sapExportFarm">
+                <option value="">All Farms</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Field</label>
+              <select id="sapExportField">
+                <option value="">All Fields</option>
+              </select>
+            </div>
+            <button class="sap-export-btn" onclick="exportSapToCSV()">
+              <span>📊</span> Export CSV
+            </button>
+          </div>
+          <div class="sap-export-count" id="sapExportCount"></div>
+        </div>
+
         <div id="sapViewerContent">
           <div class="sap-empty-state">
             <div style="font-size: 3rem; margin-bottom: 1rem;">🧪</div>
@@ -1547,7 +1591,9 @@
           if (tab.dataset.tab === 'inseason' && !sapViewerInitialized) {
             sapViewerInitialized = true;
             if (window.SapViewer) {
-              SapViewer.init();
+              SapViewer.init().then(() => {
+                initSapExportFilters();
+              });
             }
           }
         });
@@ -1561,6 +1607,129 @@
 
       document.querySelector(`.sap-subtab[data-subtab="${subtab}"]`).classList.add('active');
       document.getElementById(`${subtab}Subtab`).classList.add('active');
+    }
+
+    // ========== SAP EXPORT FUNCTIONS ==========
+
+    function initSapExportFilters() {
+      if (!window.SapViewer) return;
+
+      const clientSelect = document.getElementById('sapExportClient');
+      const farmSelect = document.getElementById('sapExportFarm');
+      const fieldSelect = document.getElementById('sapExportField');
+
+      // Populate clients
+      const clients = SapViewer.getClients();
+      clientSelect.innerHTML = '<option value="">All Clients</option>' +
+        clients.map(c => `<option value="${c}">${c}</option>`).join('');
+
+      // Client change handler
+      clientSelect.addEventListener('change', () => {
+        const client = clientSelect.value || null;
+        const farms = SapViewer.getFarms(client);
+        farmSelect.innerHTML = '<option value="">All Farms</option>' +
+          farms.map(f => `<option value="${f}">${f}</option>`).join('');
+        fieldSelect.innerHTML = '<option value="">All Fields</option>';
+        updateSapExportCount();
+      });
+
+      // Farm change handler
+      farmSelect.addEventListener('change', () => {
+        const client = clientSelect.value || null;
+        const farm = farmSelect.value || null;
+        const fields = SapViewer.getFields(client, farm);
+        fieldSelect.innerHTML = '<option value="">All Fields</option>' +
+          fields.map(f => `<option value="${f}">${f}</option>`).join('');
+        updateSapExportCount();
+      });
+
+      // Field change handler
+      fieldSelect.addEventListener('change', updateSapExportCount);
+
+      // Initial count
+      updateSapExportCount();
+    }
+
+    function updateSapExportCount() {
+      if (!window.SapViewer) return;
+
+      const filters = getSapExportFilters();
+      const data = SapViewer.getExportData(filters);
+      const countEl = document.getElementById('sapExportCount');
+
+      if (data.length === 0) {
+        countEl.textContent = 'No records to export';
+      } else {
+        countEl.textContent = `${data.length} record${data.length !== 1 ? 's' : ''} will be exported`;
+      }
+    }
+
+    function getSapExportFilters() {
+      return {
+        client: document.getElementById('sapExportClient').value || null,
+        farm: document.getElementById('sapExportFarm').value || null,
+        field: document.getElementById('sapExportField').value || null
+      };
+    }
+
+    function exportSapToCSV() {
+      if (!window.SapViewer) {
+        alert('SAP Viewer not initialized');
+        return;
+      }
+
+      const filters = getSapExportFilters();
+      const data = SapViewer.getExportData(filters);
+
+      if (data.length === 0) {
+        alert('No data to export with current filters');
+        return;
+      }
+
+      const nutrientKeys = SapViewer.getNutrientKeys();
+
+      // Build headers: metadata fields + nutrient fields
+      const metaFields = ['SiteId', 'Client', 'Farm', 'Field', 'LabDate', 'GrowthStage', 'LeafAge', 'PlantType', 'Variety', 'Lat', 'Lng'];
+      const headers = [...metaFields, ...nutrientKeys];
+
+      // Build rows
+      const rows = data.map(record => {
+        return headers.map(h => {
+          const val = record[h];
+          if (val === undefined || val === null || val === '') return '';
+          return val;
+        });
+      });
+
+      // Create CSV content
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => {
+          const str = String(cell);
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return '"' + str.replace(/"/g, '""') + '"';
+          }
+          return str;
+        }).join(','))
+        .join('\n');
+
+      // Generate filename
+      const parts = ['SAP_Export'];
+      if (filters.client) parts.push(filters.client.replace(/[^a-zA-Z0-9]/g, '_'));
+      if (filters.farm) parts.push(filters.farm.replace(/[^a-zA-Z0-9]/g, '_'));
+      if (filters.field) parts.push(filters.field.replace(/[^a-zA-Z0-9]/g, '_'));
+      parts.push(new Date().toISOString().split('T')[0]);
+      const filename = parts.join('_') + '.csv';
+
+      // Download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
     }
 
     function setupEventListeners() {
