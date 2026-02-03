@@ -14,10 +14,13 @@ window.SapViewer = (function() {
   // State
   let inSeasonData = [];
   let sapSites = [];
-  let filteredSites = []; // Sites filtered by client/farm/crop
+  let filteredSites = []; // Sites filtered by all filters
   let filterClient = null; // Current client filter
   let filterFarm = null; // Current farm filter
   let filterCrop = null; // Current crop filter (PlantType)
+  let filterField = null; // Current field filter
+  let filterSite = null; // Current site filter (SiteId)
+  let filterGrowthStage = null; // Current growth stage filter
   let selectedSiteId = null;
   let selectedDate = null;
   let viewMode = 'both'; // 'both', 'new', 'old'
@@ -140,22 +143,27 @@ window.SapViewer = (function() {
   }
 
   /**
-   * Set client/farm/crop filters and refresh the view
+   * Set all filters and refresh the view
    */
-  function setFilters(client, farm, crop) {
+  function setFilters(client, farm, crop, field, site, growthStage) {
     filterClient = client || null;
     filterFarm = farm || null;
     filterCrop = crop || null;
+    filterField = field || null;
+    filterSite = site || null;
+    filterGrowthStage = growthStage || null;
 
-    // Apply filters to sapSites
-    filteredSites = sapSites.filter(site => {
-      if (filterClient && site.Client !== filterClient) return false;
-      if (filterFarm && site.Farm !== filterFarm) return false;
-      if (filterCrop && site.PlantType !== filterCrop) return false;
+    // Apply filters to sapSites (excluding growthStage which filters records, not sites)
+    filteredSites = sapSites.filter(s => {
+      if (filterClient && s.Client !== filterClient) return false;
+      if (filterFarm && s.Farm !== filterFarm) return false;
+      if (filterCrop && s.PlantType !== filterCrop) return false;
+      if (filterField && s.Field !== filterField) return false;
+      if (filterSite && s.SiteId !== filterSite) return false;
       return true;
     });
 
-    console.log(`SapViewer: Filtered to ${filteredSites.length} sites (client: ${filterClient || 'all'}, farm: ${filterFarm || 'all'}, crop: ${filterCrop || 'all'})`);
+    console.log(`SapViewer: Filtered to ${filteredSites.length} sites`);
 
     // Clear current selection if it's no longer in filtered set
     if (selectedSiteId) {
@@ -290,6 +298,9 @@ window.SapViewer = (function() {
       if (filterClient && r.Client !== filterClient) return false;
       if (filterFarm && r.Farm !== filterFarm) return false;
       if (filterCrop && r.PlantType !== filterCrop) return false;
+      if (filterField && r.Field !== filterField) return false;
+      if (filterSite && r.SiteId !== filterSite) return false;
+      if (filterGrowthStage && r.GrowthStage !== filterGrowthStage) return false;
       return true;
     });
     console.log('Aggregate: inSeasonData count:', inSeasonData.length);
@@ -2425,11 +2436,44 @@ window.SapViewer = (function() {
   }
 
   /**
+   * Get unique sites (id + name), optionally filtered
+   */
+  function getSites(client = null, farm = null, crop = null, field = null) {
+    const sites = [];
+    sapSites.forEach(site => {
+      if (client && site.Client !== client) return;
+      if (farm && site.Farm !== farm) return;
+      if (crop && site.PlantType !== crop) return;
+      if (field && site.Field !== field) return;
+      sites.push({ id: site.SiteId, name: site.SiteId });
+    });
+    return sites.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Get unique growth stages from SAP data, optionally filtered
+   */
+  function getGrowthStages(client = null, farm = null, crop = null, field = null, site = null) {
+    const stages = new Set();
+    inSeasonData.forEach(r => {
+      if (r.Type !== 'Sap' && r.Type !== 'SAP') return;
+      if (client && r.Client !== client) return;
+      if (farm && r.Farm !== farm) return;
+      if (crop && r.PlantType !== crop) return;
+      if (field && r.Field !== field) return;
+      if (site && r.SiteId !== site) return;
+      if (r.GrowthStage) stages.add(r.GrowthStage);
+    });
+    // Sort by growth stage order
+    return Array.from(stages).sort((a, b) => parseGrowthStage(a) - parseGrowthStage(b));
+  }
+
+  /**
    * Get raw SAP data for export, with optional filters
    * Returns array of flat records with all nutrient values
    */
   function getExportData(filters = {}) {
-    const { client, farm, field, crop } = filters;
+    const { client, farm, field, crop, site, growthStage } = filters;
 
     // Filter inSeasonData to SAP records matching filters
     const sapData = inSeasonData.filter(r => {
@@ -2438,6 +2482,8 @@ window.SapViewer = (function() {
       if (farm && r.Farm !== farm) return false;
       if (field && r.Field !== field) return false;
       if (crop && r.PlantType !== crop) return false;
+      if (site && r.SiteId !== site) return false;
+      if (growthStage && r.GrowthStage !== growthStage) return false;
       return true;
     });
 
@@ -2484,6 +2530,8 @@ window.SapViewer = (function() {
     getClients,
     getFarms,
     getFields,
+    getSites,
+    getGrowthStages,
     getExportData,
     getNutrientKeys,
     // Filter functions
