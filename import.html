@@ -1301,6 +1301,20 @@
                 </div>
               </div>
               <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Client <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="inSeasonMapClient" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('Client')"></select>
+                  <span id="inSeasonPreviewClient" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="csv-mapping-field">
+                <label style="font-size: 0.8rem; font-weight: 500;">Farm <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <select id="inSeasonMapFarm" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('Farm')"></select>
+                  <span id="inSeasonPreviewFarm" class="shp-preview-values"></span>
+                </div>
+              </div>
+              <div class="csv-mapping-field">
                 <label style="font-size: 0.8rem; font-weight: 500;">Date Sampled <span style="font-weight: 400; color: #64748b;">← CSV column:</span></label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                   <select id="inSeasonMapDateSampled" class="csv-map-select" style="flex: 1;" onchange="updateInSeasonPreview('DateSampled')"></select>
@@ -7350,6 +7364,8 @@
     // Site ID aliases for auto-detection (includes NAL format)
     const SITE_ID_ALIASES = ['SiteID', 'Site ID', 'Site_ID', 'SITEID', 'site_id', 'SampleSiteID', 'Sample Site ID', 'Location ID', 'LocationID', 'client_sample_id', 'Client Sample ID', 'Client_Sample_ID'];
     const FIELD_ALIASES = ['Field', 'FieldName', 'Field Name', 'field', 'FIELD', 'Field_Name', 'sample_location', 'Sample Location', 'Sample_Location'];
+    const CLIENT_ALIASES = ['Client', 'ClientName', 'Client Name', 'client', 'CLIENT', 'Client_Name', 'Grower', 'GrowerName', 'Grower Name', 'grower', 'Customer', 'customer'];
+    const FARM_ALIASES = ['Farm', 'FarmName', 'Farm Name', 'farm', 'FARM', 'Farm_Name', 'Ranch', 'RanchName', 'ranch', 'Operation', 'operation'];
     const DATE_SAMPLED_ALIASES = ['date_sampled', 'Date Sampled', 'Date_Sampled', 'DateSampled', 'Sample Date', 'SampleDate', 'Lab Date', 'LabDate', 'Analysis Date', 'date', 'Date'];
 
     // Parse various date formats to YYYY-MM-DD
@@ -7594,6 +7610,18 @@
       autoSelectColumn(fieldSelect, FIELD_ALIASES);
       updateInSeasonPreview('Field');
 
+      // Client dropdown
+      const clientSelect = document.getElementById('inSeasonMapClient');
+      clientSelect.innerHTML = options;
+      autoSelectColumn(clientSelect, CLIENT_ALIASES);
+      updateInSeasonPreview('Client');
+
+      // Farm dropdown
+      const farmSelect = document.getElementById('inSeasonMapFarm');
+      farmSelect.innerHTML = options;
+      autoSelectColumn(farmSelect, FARM_ALIASES);
+      updateInSeasonPreview('Farm');
+
       // Date Sampled dropdown
       const dateSelect = document.getElementById('inSeasonMapDateSampled');
       dateSelect.innerHTML = options;
@@ -7716,7 +7744,9 @@
       // Get mappings
       const mappings = {
         SiteId: document.getElementById('inSeasonMapSiteId').value,
-        Field: document.getElementById('inSeasonMapField').value
+        Field: document.getElementById('inSeasonMapField').value,
+        Client: document.getElementById('inSeasonMapClient').value,
+        Farm: document.getElementById('inSeasonMapFarm').value
       };
       schema.columns.forEach(col => {
         const select = document.getElementById(`inSeasonMap${col}`);
@@ -7760,7 +7790,9 @@
             const colIndex = inSeasonCsvHeaders.indexOf(csvCol);
             if (colIndex !== -1) {
               const value = row[colIndex] || '';
-              record[field] = field === 'SiteId' || field === 'Field' ? value : parseFloat(value) || value;
+              // Keep text fields as strings, parse numbers for analysis values
+              const textFields = ['SiteId', 'Field', 'Client', 'Farm'];
+              record[field] = textFields.includes(field) ? value : parseFloat(value) || value;
             }
           }
         });
