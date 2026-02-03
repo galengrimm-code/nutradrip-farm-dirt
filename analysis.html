@@ -1051,7 +1051,6 @@
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span style="font-size: 1rem;">🏢</span>
             <select id="sapFilterClient" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 150px;">
-              <option value="">All Clients</option>
             </select>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1630,10 +1629,19 @@
       const cropSelect = document.getElementById('sapFilterCrop');
       const fieldSelect = document.getElementById('sapFilterField');
 
-      // Populate clients
+      // Populate clients (no "All Clients" option - must select one)
       const clients = SapViewer.getClients();
-      clientSelect.innerHTML = '<option value="">All Clients</option>' +
-        clients.map(c => `<option value="${c}">${c}</option>`).join('');
+      clientSelect.innerHTML = clients.map(c => `<option value="${c}">${c}</option>`).join('');
+
+      // Auto-select first client
+      if (clients.length > 0) {
+        sapFilterClient = clients[0];
+        clientSelect.value = clients[0];
+        // Populate farms for selected client
+        const farms = SapViewer.getFarms(sapFilterClient);
+        farmSelect.innerHTML = '<option value="">All Farms</option>' +
+          farms.map(f => `<option value="${f}">${f}</option>`).join('');
+      }
 
       // Populate initial fields
       populateFieldFilter();
@@ -1670,8 +1678,8 @@
         applySapFilters();
       });
 
-      // Initial summary
-      updateSapFilterSummary();
+      // Apply initial filters (with first client selected)
+      applySapFilters();
     }
 
     function populateFieldFilter() {
