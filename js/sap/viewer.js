@@ -2423,13 +2423,14 @@ window.SapViewer = (function() {
   }
 
   /**
-   * Get unique fields, optionally filtered by client and farm
+   * Get unique fields, optionally filtered by client, farm, and crop
    */
-  function getFields(client = null, farm = null) {
+  function getFields(client = null, farm = null, crop = null) {
     const fields = new Set();
     sapSites.forEach(site => {
       if (client && site.Client !== client) return;
       if (farm && site.Farm !== farm) return;
+      if (crop && site.PlantType !== crop) return;
       if (site.Field) fields.add(site.Field);
     });
     return Array.from(fields).sort();

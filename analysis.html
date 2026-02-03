@@ -1666,9 +1666,10 @@
         applySapFilters();
       });
 
-      // Crop change handler
+      // Crop change handler - cascade to field
       cropSelect.addEventListener('change', () => {
         sapFilterCrop = cropSelect.value || null;
+        populateFieldFilter();
         applySapFilters();
       });
 
@@ -1684,7 +1685,7 @@
 
     function populateFieldFilter() {
       const fieldSelect = document.getElementById('sapFilterField');
-      const fields = SapViewer.getFields(sapFilterClient, sapFilterFarm);
+      const fields = SapViewer.getFields(sapFilterClient, sapFilterFarm, sapFilterCrop);
       fieldSelect.innerHTML = '<option value="">All Fields</option>' +
         fields.map(f => `<option value="${f}">${f}</option>`).join('');
       sapFilterField = null;
