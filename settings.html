@@ -1167,6 +1167,34 @@
           } catch (createErr) { console.warn('Could not create Farms tab'); }
         }
 
+        // Ensure InSeasonAnalysis tab exists
+        try {
+          await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: CONFIG.SHEET_ID, range: 'InSeasonAnalysis!A1' });
+        } catch (e) {
+          try {
+            await gapi.client.sheets.spreadsheets.batchUpdate({
+              spreadsheetId: CONFIG.SHEET_ID,
+              resource: { requests: [{ addSheet: { properties: { title: 'InSeasonAnalysis' } } }] }
+            });
+            const headers = ['AnalysisID', 'SiteId', 'Type', 'Year', 'LabDate', 'Field', 'Lat', 'Lng', 'Client', 'Farm',
+              'N_pct', 'P_pct', 'K_pct', 'Ca_pct', 'Mg_pct', 'S_pct', 'Zn_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm',
+              'GrowthStage', 'PlantType', 'Variety', 'LeafAge',
+              'EC', 'Brix', 'Sugars',
+              'Nitrogen', 'Nitrogen_NH4', 'Nitrogen_NO3',
+              'Phosphorus', 'Potassium', 'Calcium', 'Magnesium', 'Sulfur',
+              'Boron', 'Iron', 'Manganese', 'Copper', 'Zinc', 'Molybdenum',
+              'Chloride', 'Sodium', 'Silica', 'Aluminum', 'Cobalt', 'Nickel', 'Selenium',
+              'KCa_Ratio', 'N_Conversion_Efficiency',
+              'pH', 'Nitrate_N', 'P', 'K', 'OM', 'CEC',
+              'TDS', 'Na', 'Cl', 'NO3', 'Hardness', 'Alkalinity', 'SAR', 'Ca', 'Mg', 'Zn', 'Mn', 'Fe', 'Cu', 'B', 'S'
+            ];
+            await gapi.client.sheets.spreadsheets.values.update({
+              spreadsheetId: CONFIG.SHEET_ID, range: 'InSeasonAnalysis!A1:BZ1', valueInputOption: 'RAW',
+              resource: { values: [headers] }
+            });
+          } catch (createErr) { console.warn('Could not create InSeasonAnalysis tab'); }
+        }
+
         // Clear and write clients
         if (clientsData.length > 0) {
           // Clear ALL existing data (rows 2+) with a large range to ensure no orphaned data
