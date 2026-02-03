@@ -1046,6 +1046,23 @@
 
       <!-- Sap Analysis Content -->
       <div id="sapSubtab" class="sap-subtab-content active">
+        <!-- Client/Farm Filter Bar -->
+        <div class="sap-filter-bar" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1rem;">🏢</span>
+            <select id="sapFilterClient" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 150px;">
+              <option value="">All Clients</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1rem;">🚜</span>
+            <select id="sapFilterFarm" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 150px;">
+              <option value="">All Farms</option>
+            </select>
+          </div>
+          <div id="sapFilterSummary" style="margin-left: auto; font-size: 0.8rem; color: #92400e; font-weight: 500;"></div>
+        </div>
+
         <div class="sap-controls">
           <div class="control-group">
             <label>Sample Site</label>
@@ -1059,37 +1076,12 @@
               <option value="">Select a date...</option>
             </select>
           </div>
-        </div>
-
-        <!-- Export Section -->
-        <div class="sap-export-section">
-          <div class="sap-export-header">
-            <h4>Export SAP Data</h4>
-          </div>
-          <div class="sap-export-controls">
-            <div class="control-group">
-              <label>Client</label>
-              <select id="sapExportClient">
-                <option value="">All Clients</option>
-              </select>
-            </div>
-            <div class="control-group">
-              <label>Farm</label>
-              <select id="sapExportFarm">
-                <option value="">All Farms</option>
-              </select>
-            </div>
-            <div class="control-group">
-              <label>Field</label>
-              <select id="sapExportField">
-                <option value="">All Fields</option>
-              </select>
-            </div>
-            <button class="sap-export-btn" onclick="exportSapToCSV()">
+          <div class="control-group" style="margin-left: auto;">
+            <label>Export</label>
+            <button class="sap-export-btn" onclick="exportSapToCSV()" style="margin-top: 0;">
               <span>📊</span> Export CSV
             </button>
           </div>
-          <div class="sap-export-count" id="sapExportCount"></div>
         </div>
 
         <div id="sapViewerContent">
@@ -1592,7 +1584,7 @@
             sapViewerInitialized = true;
             if (window.SapViewer) {
               SapViewer.init().then(() => {
-                initSapExportFilters();
+                initSapFilters();
               });
             }
           }
@@ -1609,14 +1601,16 @@
       document.getElementById(`${subtab}Subtab`).classList.add('active');
     }
 
-    // ========== SAP EXPORT FUNCTIONS ==========
+    // ========== SAP FILTER FUNCTIONS ==========
 
-    function initSapExportFilters() {
+    let sapFilterClient = null;
+    let sapFilterFarm = null;
+
+    function initSapFilters() {
       if (!window.SapViewer) return;
 
-      const clientSelect = document.getElementById('sapExportClient');
-      const farmSelect = document.getElementById('sapExportFarm');
-      const fieldSelect = document.getElementById('sapExportField');
+      const clientSelect = document.getElementById('sapFilterClient');
+      const farmSelect = document.getElementById('sapFilterFarm');
 
       // Populate clients
       const clients = SapViewer.getClients();
@@ -1625,50 +1619,54 @@
 
       // Client change handler
       clientSelect.addEventListener('change', () => {
-        const client = clientSelect.value || null;
-        const farms = SapViewer.getFarms(client);
+        sapFilterClient = clientSelect.value || null;
+        const farms = SapViewer.getFarms(sapFilterClient);
         farmSelect.innerHTML = '<option value="">All Farms</option>' +
           farms.map(f => `<option value="${f}">${f}</option>`).join('');
-        fieldSelect.innerHTML = '<option value="">All Fields</option>';
-        updateSapExportCount();
+        sapFilterFarm = null;
+        applySapFilters();
       });
 
       // Farm change handler
       farmSelect.addEventListener('change', () => {
-        const client = clientSelect.value || null;
-        const farm = farmSelect.value || null;
-        const fields = SapViewer.getFields(client, farm);
-        fieldSelect.innerHTML = '<option value="">All Fields</option>' +
-          fields.map(f => `<option value="${f}">${f}</option>`).join('');
-        updateSapExportCount();
+        sapFilterFarm = farmSelect.value || null;
+        applySapFilters();
       });
 
-      // Field change handler
-      fieldSelect.addEventListener('change', updateSapExportCount);
-
-      // Initial count
-      updateSapExportCount();
+      // Initial summary
+      updateSapFilterSummary();
     }
 
-    function updateSapExportCount() {
+    function applySapFilters() {
       if (!window.SapViewer) return;
 
-      const filters = getSapExportFilters();
-      const data = SapViewer.getExportData(filters);
-      const countEl = document.getElementById('sapExportCount');
+      // Apply filters to SapViewer
+      SapViewer.setFilters(sapFilterClient, sapFilterFarm);
 
-      if (data.length === 0) {
-        countEl.textContent = 'No records to export';
+      // Update summary
+      updateSapFilterSummary();
+    }
+
+    function updateSapFilterSummary() {
+      if (!window.SapViewer) return;
+
+      const summaryEl = document.getElementById('sapFilterSummary');
+      const filters = { client: sapFilterClient, farm: sapFilterFarm };
+      const data = SapViewer.getExportData(filters);
+      const sites = SapViewer.getFilteredSiteCount ? SapViewer.getFilteredSiteCount() : '?';
+
+      if (sapFilterClient || sapFilterFarm) {
+        summaryEl.textContent = `Showing ${data.length} records`;
       } else {
-        countEl.textContent = `${data.length} record${data.length !== 1 ? 's' : ''} will be exported`;
+        summaryEl.textContent = `${data.length} total records`;
       }
     }
 
     function getSapExportFilters() {
       return {
-        client: document.getElementById('sapExportClient').value || null,
-        farm: document.getElementById('sapExportFarm').value || null,
-        field: document.getElementById('sapExportField').value || null
+        client: sapFilterClient,
+        farm: sapFilterFarm,
+        field: null
       };
     }
 

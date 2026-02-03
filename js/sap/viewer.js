@@ -14,6 +14,9 @@ window.SapViewer = (function() {
   // State
   let inSeasonData = [];
   let sapSites = [];
+  let filteredSites = []; // Sites filtered by client/farm
+  let filterClient = null; // Current client filter
+  let filterFarm = null; // Current farm filter
   let selectedSiteId = null;
   let selectedDate = null;
   let viewMode = 'both'; // 'both', 'new', 'old'
@@ -55,7 +58,7 @@ window.SapViewer = (function() {
     setupGlobalClickHandler();
 
     // Show aggregate view by default (no site selected)
-    if (sapSites.length > 0) {
+    if (filteredSites.length > 0) {
       renderAggregateView();
     } else {
       renderEmptyState();
@@ -124,11 +127,66 @@ window.SapViewer = (function() {
       sapSites = Array.from(siteMap.values());
       sapSites.sort((a, b) => a.SiteId.localeCompare(b.SiteId));
 
+      // Initialize filtered sites (no filter applied yet)
+      filteredSites = [...sapSites];
+
       console.log(`SapViewer: Loaded ${sapSites.length} sites with ${sapData.length} total sap samples`);
     } catch (e) {
       console.error('Error loading sap data:', e);
       sapSites = [];
+      filteredSites = [];
     }
+  }
+
+  /**
+   * Set client/farm filters and refresh the view
+   */
+  function setFilters(client, farm) {
+    filterClient = client || null;
+    filterFarm = farm || null;
+
+    // Apply filters to sapSites
+    filteredSites = sapSites.filter(site => {
+      if (filterClient && site.Client !== filterClient) return false;
+      if (filterFarm && site.Farm !== filterFarm) return false;
+      return true;
+    });
+
+    console.log(`SapViewer: Filtered to ${filteredSites.length} sites (client: ${filterClient || 'all'}, farm: ${filterFarm || 'all'})`);
+
+    // Clear current selection if it's no longer in filtered set
+    if (selectedSiteId) {
+      const stillExists = filteredSites.some(s => s.SiteId === selectedSiteId);
+      if (!stillExists) {
+        selectedSiteId = null;
+        selectedDate = null;
+      }
+    }
+
+    // Re-render site selector and view
+    renderSiteSelector();
+
+    if (filteredSites.length > 0) {
+      if (selectedSiteId) {
+        // Refresh current site view
+        const site = filteredSites.find(s => s.SiteId === selectedSiteId);
+        if (site) {
+          const sampleDates = buildSampleDates(site.samples);
+          renderDateSelector(sampleDates);
+        }
+      } else {
+        renderAggregateView();
+      }
+    } else {
+      renderEmptyState();
+    }
+  }
+
+  /**
+   * Get count of currently filtered sites
+   */
+  function getFilteredSiteCount() {
+    return filteredSites.length;
   }
 
   /**
@@ -223,10 +281,15 @@ window.SapViewer = (function() {
    * Returns array of sample date objects with averaged nutrient values
    */
   function buildAggregateByGrowthStage() {
-    // Get all SAP records
-    const sapData = inSeasonData.filter(r => r.Type === 'Sap' || r.Type === 'SAP');
+    // Get all SAP records, respecting current filters
+    const sapData = inSeasonData.filter(r => {
+      if (r.Type !== 'Sap' && r.Type !== 'SAP') return false;
+      if (filterClient && r.Client !== filterClient) return false;
+      if (filterFarm && r.Farm !== filterFarm) return false;
+      return true;
+    });
     console.log('Aggregate: inSeasonData count:', inSeasonData.length);
-    console.log('Aggregate: sapData count:', sapData.length);
+    console.log('Aggregate: sapData count (filtered):', sapData.length);
     if (sapData.length > 0) {
       console.log('Aggregate: Sample record:', sapData[0]);
       console.log('Aggregate: Growth stages found:', [...new Set(sapData.map(r => r.GrowthStage))]);
@@ -545,11 +608,16 @@ window.SapViewer = (function() {
     if (!container) return;
 
     let html = '<option value="">All Sites (Avg by Stage)</option>';
-    sapSites.forEach(site => {
+    filteredSites.forEach(site => {
       const label = site.Field ? `${site.SiteId} (${site.Field})` : site.SiteId;
       html += `<option value="${site.SiteId}">${label}</option>`;
     });
     container.innerHTML = html;
+
+    // Restore selection if still valid
+    if (selectedSiteId && filteredSites.some(s => s.SiteId === selectedSiteId)) {
+      container.value = selectedSiteId;
+    }
   }
 
   function renderDateSelector(sampleDates) {
@@ -2412,6 +2480,9 @@ window.SapViewer = (function() {
     getFarms,
     getFields,
     getExportData,
-    getNutrientKeys
+    getNutrientKeys,
+    // Filter functions
+    setFilters,
+    getFilteredSiteCount
   };
 })();
