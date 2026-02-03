@@ -4766,11 +4766,13 @@
     }
 
     async function clearAllData() {
-      if (!confirm('Clear ALL data (samples, boundaries, and yield)?')) return;
+      if (!confirm('Clear ALL data (soil samples, boundaries, yield, and in-season samples)?')) return;
 
       sampleData = [];
       fieldBoundaries = {};
+      inSeasonData = [];
       await saveLocalData();
+      await DataCore.saveInSeasonToIndexedDB([]);
       saveBackup();
       updateSummary();
       updateBackupStatus();
@@ -4780,6 +4782,7 @@
         try {
           await clearSheetsData('Samples');
           await clearSheetsData('Fields');
+          await clearSheetsData('InSeasonAnalysis');
           showStatus('✓ All data cleared', true);
         } catch (e) {
           showStatus('Local cleared, but Sheets error: ' + e.message, false);
