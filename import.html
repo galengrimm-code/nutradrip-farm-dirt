@@ -8009,14 +8009,51 @@
       updateSummary(); // Update counts display
     }
 
-    // Ensure InSeasonAnalysis tab exists in Google Sheets
+    // Ensure InSeasonAnalysis tab exists in Google Sheets with headers
     async function ensureInSeasonAnalysisTab() {
       const tabName = 'InSeasonAnalysis';
+      const defaultHeaders = ['AnalysisID', 'SiteId', 'Type', 'Year', 'LabDate', 'Field', 'Lat', 'Lng', 'Client', 'Farm',
+        // Tissue columns
+        'N_pct', 'P_pct', 'K_pct', 'Ca_pct', 'Mg_pct', 'S_pct', 'Zn_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm',
+        // Sap metadata columns
+        'GrowthStage', 'PlantType', 'Variety', 'LeafAge',
+        // Sap core columns
+        'EC', 'Brix', 'Sugars',
+        // Sap nitrogen columns
+        'Nitrogen', 'Nitrogen_NH4', 'Nitrogen_NO3',
+        // Sap macro columns
+        'Phosphorus', 'Potassium', 'Calcium', 'Magnesium', 'Sulfur',
+        // Sap micro columns
+        'Boron', 'Iron', 'Manganese', 'Copper', 'Zinc', 'Molybdenum',
+        // Sap other elements
+        'Chloride', 'Sodium', 'Silica', 'Aluminum', 'Cobalt', 'Nickel', 'Selenium',
+        // Sap calculated
+        'KCa_Ratio', 'N_Conversion_Efficiency',
+        // Soil columns
+        'pH', 'Nitrate_N', 'P', 'K', 'OM', 'CEC',
+        // Water columns
+        'TDS', 'Na', 'Cl', 'NO3', 'Hardness', 'Alkalinity', 'SAR', 'Ca', 'Mg', 'Zn', 'Mn', 'Fe', 'Cu', 'B', 'S'
+      ];
+
       try {
-        await gapi.client.sheets.spreadsheets.values.get({
+        // Check if tab exists and has headers
+        const res = await gapi.client.sheets.spreadsheets.values.get({
           spreadsheetId: CONFIG.SHEET_ID,
-          range: `${tabName}!A1`
+          range: `${tabName}!A1:BZ1`
         });
+        const existingHeaders = res.result.values?.[0] || [];
+
+        // If tab exists but no headers, add them
+        if (existingHeaders.length === 0) {
+          console.log('InSeasonAnalysis tab exists but has no headers, adding them...');
+          await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: CONFIG.SHEET_ID,
+            range: `${tabName}!A1:BZ1`,
+            valueInputOption: 'RAW',
+            resource: { values: [defaultHeaders] }
+          });
+          console.log('Added headers to existing InSeasonAnalysis tab');
+        }
         return true;
       } catch (e) {
         if (e.result?.error?.code === 400 || e.result?.error?.message?.includes('Unable to parse range')) {
@@ -8028,35 +8065,11 @@
               }
             });
 
-            // Add headers
-            const headers = ['AnalysisID', 'SiteId', 'Type', 'Year', 'LabDate', 'Field', 'Lat', 'Lng', 'Client', 'Farm',
-              // Tissue columns
-              'N_pct', 'P_pct', 'K_pct', 'Ca_pct', 'Mg_pct', 'S_pct', 'Zn_ppm', 'Mn_ppm', 'Fe_ppm', 'Cu_ppm', 'B_ppm',
-              // Sap metadata columns
-              'GrowthStage', 'PlantType', 'Variety', 'LeafAge',
-              // Sap core columns
-              'EC', 'Brix', 'Sugars',
-              // Sap nitrogen columns
-              'Nitrogen', 'Nitrogen_NH4', 'Nitrogen_NO3',
-              // Sap macro columns
-              'Phosphorus', 'Potassium', 'Calcium', 'Magnesium', 'Sulfur',
-              // Sap micro columns
-              'Boron', 'Iron', 'Manganese', 'Copper', 'Zinc', 'Molybdenum',
-              // Sap other elements
-              'Chloride', 'Sodium', 'Silica', 'Aluminum', 'Cobalt', 'Nickel', 'Selenium',
-              // Sap calculated
-              'KCa_Ratio', 'N_Conversion_Efficiency',
-              // Soil columns
-              'pH', 'Nitrate_N', 'P', 'K', 'OM', 'CEC',
-              // Water columns
-              'TDS', 'Na', 'Cl', 'NO3', 'Hardness', 'Alkalinity', 'SAR', 'Ca', 'Mg', 'Zn', 'Mn', 'Fe', 'Cu', 'B', 'S'
-            ];
-
             await gapi.client.sheets.spreadsheets.values.update({
               spreadsheetId: CONFIG.SHEET_ID,
               range: `${tabName}!A1:BZ1`,
               valueInputOption: 'RAW',
-              resource: { values: [headers] }
+              resource: { values: [defaultHeaders] }
             });
 
             console.log('Created InSeasonAnalysis tab with headers');
