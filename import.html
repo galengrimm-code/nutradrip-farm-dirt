@@ -41,7 +41,8 @@
     }
     .data-summary { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; }
     .data-summary h4 { margin: 0 0 0.75rem 0; color: #475569; }
-    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
+    @media (max-width: 768px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
     .summary-item { text-align: center; padding: 0.75rem; background: white; border-radius: 0.375rem; }
     .summary-item .number { font-size: 1.5rem; font-weight: 700; color: #1e293b; }
     .summary-item .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
@@ -137,9 +138,13 @@
       <h4>📊 Current Data</h4>
       <div class="summary-grid">
         <div class="summary-item"><div class="number" id="fieldCount">0</div><div class="label">Fields</div></div>
-        <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Samples</div></div>
+        <div class="summary-item"><div class="number" id="sampleCount">0</div><div class="label">Soil Samples</div></div>
         <div class="summary-item"><div class="number" id="yearCount">0</div><div class="label">Years</div><div class="year-list" id="yearList" style="font-size: 0.7rem; color: #64748b; margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; justify-content: center;"></div></div>
-        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">Samples w/ Yield</div><div id="yieldFieldSummary" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
+        <div class="summary-item"><div class="number" id="yieldCount">0</div><div class="label">w/ Yield</div><div id="yieldFieldSummary" style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;"></div></div>
+        <div class="summary-item" style="background: #fef3c7;"><div class="number" id="sapCount" style="color: #b45309;">0</div><div class="label" style="color: #92400e;">Sap</div></div>
+        <div class="summary-item" style="background: #dcfce7;"><div class="number" id="tissueCount" style="color: #166534;">0</div><div class="label" style="color: #166534;">Tissue</div></div>
+        <div class="summary-item" style="background: #f3e8ff;"><div class="number" id="inSeasonSoilCount" style="color: #7c3aed;">0</div><div class="label" style="color: #7c3aed;">In-Season Soil</div></div>
+        <div class="summary-item" style="background: #e0f2fe;"><div class="number" id="waterCount" style="color: #0369a1;">0</div><div class="label" style="color: #0369a1;">Water</div></div>
       </div>
       <div id="yieldFieldListContainer" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 0.5rem;">
         <div id="yieldFieldList"></div>
@@ -1464,6 +1469,7 @@
     });
 
     let sampleData = [], fieldBoundaries = {}, yieldData = [];
+    let inSeasonData = []; // Sap, Tissue, In-Season Soil, Water samples
     let backupDownloadedThisSession = false;
 
     // ========== CLIENT/FARM DATA ==========
@@ -1619,7 +1625,9 @@
       loadClientsData();
       loadFarmsData();
       loadActiveSelection();
-      await loadLocalData(); updateSummary(); updateBackupStatus(); updateBackupFooter(); refreshFieldTable();
+      await loadLocalData();
+      inSeasonData = await DataCore.loadInSeasonFromIndexedDB() || [];
+      updateSummary(); updateBackupStatus(); updateBackupFooter(); refreshFieldTable();
       populateBoundaryClientFarmSelectors(); // Initialize client/farm dropdowns
       try { await SheetsAPI.init(); SheetsAPI.onSignInChange = handleSignInChange; handleSignInChange(SheetsAPI.isSignedIn); } catch (e) { console.warn(e); }
       document.getElementById('uploadBoundaryBtn').addEventListener('click', uploadBoundaries);
@@ -2034,6 +2042,16 @@
         summaryEl.innerHTML = '';
         container.style.display = 'none';
       }
+
+      // Update in-season sample counts by type
+      const sapCount = inSeasonData.filter(r => r.Type === 'SAP').length;
+      const tissueCount = inSeasonData.filter(r => r.Type === 'TIS').length;
+      const inSeasonSoilCount = inSeasonData.filter(r => r.Type === 'ISS').length;
+      const waterCount = inSeasonData.filter(r => r.Type === 'WAT').length;
+      document.getElementById('sapCount').textContent = sapCount;
+      document.getElementById('tissueCount').textContent = tissueCount;
+      document.getElementById('inSeasonSoilCount').textContent = inSeasonSoilCount;
+      document.getElementById('waterCount').textContent = waterCount;
     }
 
     function toggleYieldFieldList(e) {
@@ -4629,6 +4647,29 @@
           }
         } catch (e) { console.warn('Could not load Samples:', e); }
 
+        // Load InSeasonAnalysis (sap, tissue, in-season soil, water)
+        let loadedInSeason = 0;
+        try {
+          const inSeasonRes = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: CONFIG.SHEET_ID, range: 'InSeasonAnalysis!A1:BZ50000'
+          });
+          if (inSeasonRes.result.values && inSeasonRes.result.values.length > 1) {
+            const headers = inSeasonRes.result.values[0];
+            inSeasonData = inSeasonRes.result.values.slice(1).map(row => {
+              const rec = {};
+              headers.forEach((h, i) => {
+                if (row[i] !== undefined && row[i] !== '') {
+                  const num = parseFloat(row[i]);
+                  rec[h] = isNaN(num) ? row[i] : num;
+                }
+              });
+              return rec;
+            }).filter(r => r.Type);
+            loadedInSeason = inSeasonData.length;
+            await DataCore.saveInSeasonToIndexedDB(inSeasonData);
+          }
+        } catch (e) { console.warn('Could not load InSeasonAnalysis:', e); }
+
         // Save to local storage/IndexedDB
         await saveLocalData();
         await saveToIndexedDB();
@@ -4638,7 +4679,13 @@
         refreshFieldTable();
         populateBoundaryClientFarmSelectors();
 
-        showStatus(`✓ Loaded from Sheets: ${loadedClients} clients, ${loadedFarms} farms, ${loadedFields} fields, ${loadedSamples} samples`, true);
+        let statusParts = [];
+        if (loadedClients > 0) statusParts.push(`${loadedClients} clients`);
+        if (loadedFarms > 0) statusParts.push(`${loadedFarms} farms`);
+        if (loadedFields > 0) statusParts.push(`${loadedFields} fields`);
+        if (loadedSamples > 0) statusParts.push(`${loadedSamples} samples`);
+        if (loadedInSeason > 0) statusParts.push(`${loadedInSeason} in-season`);
+        showStatus(`✓ Loaded from Sheets: ${statusParts.join(', ')}`, true);
       } catch (e) {
         showStatus('Load error: ' + e.message, false);
         console.error(e);
@@ -7364,7 +7411,6 @@
     }
 
     // State variables for in-season import
-    let inSeasonData = [];
     let pendingInSeasonImport = null;
     let selectedInSeasonType = null;
     let inSeasonCsvHeaders = [];
@@ -7925,6 +7971,7 @@
       if (discarded > 0) statusMsg += ` (${discarded} unmatched from CSV discarded)`;
       if (removedExisting > 0) statusMsg += ` (${removedExisting} existing unmatched removed)`;
       showStatus(statusMsg, true);
+      updateSummary(); // Update counts display
     }
 
     // Ensure InSeasonAnalysis tab exists in Google Sheets
