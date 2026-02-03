@@ -284,6 +284,7 @@
       </p>
 
       <!-- Sample Type Selection -->
+      <p style="font-weight: 600; color: #a21caf; margin-bottom: 0.5rem;">Step 1: Select sample type</p>
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1rem;">
         <div id="inSeasonTypeTIS" class="in-season-type-card" onclick="selectInSeasonType('TIS')" style="border: 2px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; text-align: center; transition: all 0.2s;">
           <div style="font-size: 1.5rem;">🌿</div>
@@ -303,23 +304,32 @@
         </div>
       </div>
 
-      <!-- CSV File Upload -->
-      <div class="form-group">
-        <label>Lab Results CSV</label>
-        <input type="file" id="inSeasonFile" accept=".csv">
-        <small>CSV from lab with Site ID column to link results to sample sites</small>
+      <!-- Prompt to select type (shown initially) -->
+      <div id="inSeasonSelectPrompt" style="padding: 1.5rem; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 0.5rem; text-align: center; color: #64748b;">
+        <span style="font-size: 1.5rem;">👆</span>
+        <p style="margin: 0.5rem 0 0 0; font-weight: 500;">Select a sample type above to continue</p>
       </div>
 
-      <div id="inSeasonFileInfo" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #d946ef; border-radius: 0.375rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span id="inSeasonFileName" style="font-weight: 500; color: #a21caf;"></span>
-          <span id="inSeasonRowCount" style="font-size: 0.8rem; color: #64748b;"></span>
+      <!-- CSV File Upload (hidden until type selected) -->
+      <div id="inSeasonUploadSection" style="display: none;">
+        <p style="font-weight: 600; color: #a21caf; margin-bottom: 0.5rem;">Step 2: Upload CSV file</p>
+        <div class="form-group">
+          <label id="inSeasonFileLabel">Lab Results CSV</label>
+          <input type="file" id="inSeasonFile" accept=".csv">
+          <small>CSV from lab with Site ID column to link results to sample sites</small>
         </div>
-      </div>
 
-      <button class="button" id="openInSeasonMappingBtn" style="background: #d946ef; color: white;" disabled onclick="openInSeasonMappingModal()">
-        📋 Map Columns & Preview
-      </button>
+        <div id="inSeasonFileInfo" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: #fdf4ff; border: 1px solid #d946ef; border-radius: 0.375rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="inSeasonFileName" style="font-weight: 500; color: #a21caf;"></span>
+            <span id="inSeasonRowCount" style="font-size: 0.8rem; color: #64748b;"></span>
+          </div>
+        </div>
+
+        <button class="button" id="openInSeasonMappingBtn" style="background: #d946ef; color: white;" disabled onclick="openInSeasonMappingModal()">
+          📋 Map Columns & Preview
+        </button>
+      </div>
 
       <div id="inSeasonStatus" style="margin-top: 0.75rem;"></div>
     </div>
@@ -7439,6 +7449,7 @@
     // Select in-season type
     function selectInSeasonType(type) {
       selectedInSeasonType = type;
+      const schema = IN_SEASON_SCHEMAS[type];
 
       // Update UI - highlight selected
       ['TIS', 'SAP', 'ISS', 'WAT'].forEach(t => {
@@ -7452,8 +7463,17 @@
         }
       });
 
+      // Show upload section, hide prompt
+      document.getElementById('inSeasonSelectPrompt').style.display = 'none';
+      document.getElementById('inSeasonUploadSection').style.display = 'block';
+
+      // Update file label to show selected type
+      const fileLabel = document.getElementById('inSeasonFileLabel');
+      if (fileLabel) {
+        fileLabel.innerHTML = `${schema.emoji} ${schema.name} Lab Results CSV`;
+      }
+
       // Update modal title
-      const schema = IN_SEASON_SCHEMAS[type];
       const title = document.getElementById('inSeasonModalTitle');
       if (title) {
         title.textContent = `${schema.emoji} ${schema.name} Analysis - Column Mapping`;
