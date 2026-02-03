@@ -14,9 +14,10 @@ window.SapViewer = (function() {
   // State
   let inSeasonData = [];
   let sapSites = [];
-  let filteredSites = []; // Sites filtered by client/farm
+  let filteredSites = []; // Sites filtered by client/farm/crop
   let filterClient = null; // Current client filter
   let filterFarm = null; // Current farm filter
+  let filterCrop = null; // Current crop filter (PlantType)
   let selectedSiteId = null;
   let selectedDate = null;
   let viewMode = 'both'; // 'both', 'new', 'old'
@@ -139,20 +140,22 @@ window.SapViewer = (function() {
   }
 
   /**
-   * Set client/farm filters and refresh the view
+   * Set client/farm/crop filters and refresh the view
    */
-  function setFilters(client, farm) {
+  function setFilters(client, farm, crop) {
     filterClient = client || null;
     filterFarm = farm || null;
+    filterCrop = crop || null;
 
     // Apply filters to sapSites
     filteredSites = sapSites.filter(site => {
       if (filterClient && site.Client !== filterClient) return false;
       if (filterFarm && site.Farm !== filterFarm) return false;
+      if (filterCrop && site.PlantType !== filterCrop) return false;
       return true;
     });
 
-    console.log(`SapViewer: Filtered to ${filteredSites.length} sites (client: ${filterClient || 'all'}, farm: ${filterFarm || 'all'})`);
+    console.log(`SapViewer: Filtered to ${filteredSites.length} sites (client: ${filterClient || 'all'}, farm: ${filterFarm || 'all'}, crop: ${filterCrop || 'all'})`);
 
     // Clear current selection if it's no longer in filtered set
     if (selectedSiteId) {
@@ -286,6 +289,7 @@ window.SapViewer = (function() {
       if (r.Type !== 'Sap' && r.Type !== 'SAP') return false;
       if (filterClient && r.Client !== filterClient) return false;
       if (filterFarm && r.Farm !== filterFarm) return false;
+      if (filterCrop && r.PlantType !== filterCrop) return false;
       return true;
     });
     console.log('Aggregate: inSeasonData count:', inSeasonData.length);
@@ -2425,7 +2429,7 @@ window.SapViewer = (function() {
    * Returns array of flat records with all nutrient values
    */
   function getExportData(filters = {}) {
-    const { client, farm, field } = filters;
+    const { client, farm, field, crop } = filters;
 
     // Filter inSeasonData to SAP records matching filters
     const sapData = inSeasonData.filter(r => {
@@ -2433,6 +2437,7 @@ window.SapViewer = (function() {
       if (client && r.Client !== client) return false;
       if (farm && r.Farm !== farm) return false;
       if (field && r.Field !== field) return false;
+      if (crop && r.PlantType !== crop) return false;
       return true;
     });
 

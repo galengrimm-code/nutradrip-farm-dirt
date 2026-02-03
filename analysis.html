@@ -1046,7 +1046,7 @@
 
       <!-- Sap Analysis Content -->
       <div id="sapSubtab" class="sap-subtab-content active">
-        <!-- Client/Farm Filter Bar -->
+        <!-- Client/Farm/Crop Filter Bar -->
         <div class="sap-filter-bar" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span style="font-size: 1rem;">🏢</span>
@@ -1058,6 +1058,14 @@
             <span style="font-size: 1rem;">🚜</span>
             <select id="sapFilterFarm" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 150px;">
               <option value="">All Farms</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1rem;">🌱</span>
+            <select id="sapFilterCrop" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 120px;">
+              <option value="">All Crops</option>
+              <option value="Corn">🌽 Corn</option>
+              <option value="Soybeans">🫘 Soybeans</option>
             </select>
           </div>
           <div id="sapFilterSummary" style="margin-left: auto; font-size: 0.8rem; color: #92400e; font-weight: 500;"></div>
@@ -1605,12 +1613,14 @@
 
     let sapFilterClient = null;
     let sapFilterFarm = null;
+    let sapFilterCrop = null;
 
     function initSapFilters() {
       if (!window.SapViewer) return;
 
       const clientSelect = document.getElementById('sapFilterClient');
       const farmSelect = document.getElementById('sapFilterFarm');
+      const cropSelect = document.getElementById('sapFilterCrop');
 
       // Populate clients
       const clients = SapViewer.getClients();
@@ -1633,6 +1643,12 @@
         applySapFilters();
       });
 
+      // Crop change handler
+      cropSelect.addEventListener('change', () => {
+        sapFilterCrop = cropSelect.value || null;
+        applySapFilters();
+      });
+
       // Initial summary
       updateSapFilterSummary();
     }
@@ -1641,7 +1657,7 @@
       if (!window.SapViewer) return;
 
       // Apply filters to SapViewer
-      SapViewer.setFilters(sapFilterClient, sapFilterFarm);
+      SapViewer.setFilters(sapFilterClient, sapFilterFarm, sapFilterCrop);
 
       // Update summary
       updateSapFilterSummary();
@@ -1651,11 +1667,10 @@
       if (!window.SapViewer) return;
 
       const summaryEl = document.getElementById('sapFilterSummary');
-      const filters = { client: sapFilterClient, farm: sapFilterFarm };
+      const filters = { client: sapFilterClient, farm: sapFilterFarm, crop: sapFilterCrop };
       const data = SapViewer.getExportData(filters);
-      const sites = SapViewer.getFilteredSiteCount ? SapViewer.getFilteredSiteCount() : '?';
 
-      if (sapFilterClient || sapFilterFarm) {
+      if (sapFilterClient || sapFilterFarm || sapFilterCrop) {
         summaryEl.textContent = `Showing ${data.length} records`;
       } else {
         summaryEl.textContent = `${data.length} total records`;
@@ -1666,6 +1681,7 @@
       return {
         client: sapFilterClient,
         farm: sapFilterFarm,
+        crop: sapFilterCrop,
         field: null
       };
     }
