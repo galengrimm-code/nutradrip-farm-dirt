@@ -1074,18 +1074,6 @@
               <option value="">All Fields</option>
             </select>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1rem;">📍</span>
-            <select id="sapFilterSite" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 150px;">
-              <option value="">All Sites</option>
-            </select>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1rem;">📈</span>
-            <select id="sapFilterGrowthStage" style="padding: 0.5rem 0.75rem; border: 1px solid #d97706; border-radius: 0.375rem; background: white; font-size: 0.875rem; min-width: 100px;">
-              <option value="">All Stages</option>
-            </select>
-          </div>
           <div id="sapFilterSummary" style="margin-left: auto; font-size: 0.8rem; color: #92400e; font-weight: 500;"></div>
         </div>
 
@@ -1633,8 +1621,6 @@
     let sapFilterFarm = null;
     let sapFilterCrop = null;
     let sapFilterField = null;
-    let sapFilterSite = null;
-    let sapFilterGrowthStage = null;
 
     function initSapFilters() {
       if (!window.SapViewer) return;
@@ -1643,20 +1629,16 @@
       const farmSelect = document.getElementById('sapFilterFarm');
       const cropSelect = document.getElementById('sapFilterCrop');
       const fieldSelect = document.getElementById('sapFilterField');
-      const siteSelect = document.getElementById('sapFilterSite');
-      const growthStageSelect = document.getElementById('sapFilterGrowthStage');
 
       // Populate clients
       const clients = SapViewer.getClients();
       clientSelect.innerHTML = '<option value="">All Clients</option>' +
         clients.map(c => `<option value="${c}">${c}</option>`).join('');
 
-      // Populate initial fields, sites, growth stages
+      // Populate initial fields
       populateFieldFilter();
-      populateSiteFilter();
-      populateGrowthStageFilter();
 
-      // Client change handler - cascade to farm, field, site
+      // Client change handler - cascade to farm, field
       clientSelect.addEventListener('change', () => {
         sapFilterClient = clientSelect.value || null;
         // Update farms
@@ -1666,46 +1648,25 @@
         sapFilterFarm = null;
         // Update dependent filters
         populateFieldFilter();
-        populateSiteFilter();
-        populateGrowthStageFilter();
         applySapFilters();
       });
 
-      // Farm change handler - cascade to field, site
+      // Farm change handler - cascade to field
       farmSelect.addEventListener('change', () => {
         sapFilterFarm = farmSelect.value || null;
         populateFieldFilter();
-        populateSiteFilter();
-        populateGrowthStageFilter();
         applySapFilters();
       });
 
       // Crop change handler
       cropSelect.addEventListener('change', () => {
         sapFilterCrop = cropSelect.value || null;
-        populateSiteFilter();
-        populateGrowthStageFilter();
         applySapFilters();
       });
 
       // Field change handler
       fieldSelect.addEventListener('change', () => {
         sapFilterField = fieldSelect.value || null;
-        populateSiteFilter();
-        populateGrowthStageFilter();
-        applySapFilters();
-      });
-
-      // Site change handler
-      siteSelect.addEventListener('change', () => {
-        sapFilterSite = siteSelect.value || null;
-        populateGrowthStageFilter();
-        applySapFilters();
-      });
-
-      // Growth stage change handler
-      growthStageSelect.addEventListener('change', () => {
-        sapFilterGrowthStage = growthStageSelect.value || null;
         applySapFilters();
       });
 
@@ -1721,27 +1682,11 @@
       sapFilterField = null;
     }
 
-    function populateSiteFilter() {
-      const siteSelect = document.getElementById('sapFilterSite');
-      const sites = SapViewer.getSites(sapFilterClient, sapFilterFarm, sapFilterCrop, sapFilterField);
-      siteSelect.innerHTML = '<option value="">All Sites</option>' +
-        sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-      sapFilterSite = null;
-    }
-
-    function populateGrowthStageFilter() {
-      const growthStageSelect = document.getElementById('sapFilterGrowthStage');
-      const stages = SapViewer.getGrowthStages(sapFilterClient, sapFilterFarm, sapFilterCrop, sapFilterField, sapFilterSite);
-      growthStageSelect.innerHTML = '<option value="">All Stages</option>' +
-        stages.map(s => `<option value="${s}">${s}</option>`).join('');
-      sapFilterGrowthStage = null;
-    }
-
     function applySapFilters() {
       if (!window.SapViewer) return;
 
-      // Apply filters to SapViewer
-      SapViewer.setFilters(sapFilterClient, sapFilterFarm, sapFilterCrop, sapFilterField, sapFilterSite, sapFilterGrowthStage);
+      // Apply filters to SapViewer (site and growthStage selected via existing controls)
+      SapViewer.setFilters(sapFilterClient, sapFilterFarm, sapFilterCrop, sapFilterField, null, null);
 
       // Update summary
       updateSapFilterSummary();
@@ -1755,13 +1700,11 @@
         client: sapFilterClient,
         farm: sapFilterFarm,
         crop: sapFilterCrop,
-        field: sapFilterField,
-        site: sapFilterSite,
-        growthStage: sapFilterGrowthStage
+        field: sapFilterField
       };
       const data = SapViewer.getExportData(filters);
 
-      const hasFilters = sapFilterClient || sapFilterFarm || sapFilterCrop || sapFilterField || sapFilterSite || sapFilterGrowthStage;
+      const hasFilters = sapFilterClient || sapFilterFarm || sapFilterCrop || sapFilterField;
       if (hasFilters) {
         summaryEl.textContent = `Showing ${data.length} records`;
       } else {
@@ -1774,9 +1717,7 @@
         client: sapFilterClient,
         farm: sapFilterFarm,
         crop: sapFilterCrop,
-        field: sapFilterField,
-        site: sapFilterSite,
-        growthStage: sapFilterGrowthStage
+        field: sapFilterField
       };
     }
 
