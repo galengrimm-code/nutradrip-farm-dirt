@@ -42,7 +42,7 @@
   }
 
   $: visibleNutrients = getVisibleNutrients();
-  $: availableYears = getAvailableYears();
+  $: availableYears = ($selectedField, getAvailableYears());
   $: fieldOptions = getFieldOptions();
 
   // Compare year options: all years except the currently selected year
@@ -57,6 +57,13 @@
     } else if (compareYearOptions.length > 0) {
       compareYear.set(compareYearOptions[0]);
     }
+  }
+
+  // When field changes, reset year appropriately
+  $: if ($selectedField === 'all' && $selectedYear === 'all') {
+    selectedYear.set('most_recent');
+  } else if ($selectedField !== 'all' && $selectedYear === 'most_recent') {
+    selectedYear.set('all');
   }
 
   // Disable compare mode if year is "most_recent" or "all"

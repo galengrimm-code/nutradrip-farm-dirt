@@ -53,7 +53,7 @@
       </div>
 
       {#if activeTab === 'trends'}
-        <FieldTrends {selectedField} {selectedNutrient} />
+        <FieldTrends {selectedField} />
       {:else if activeTab === 'comparison'}
         <YearOverYear year1={selectedYear} year2={compareYear} />
       {:else if activeTab === 'rankings'}
