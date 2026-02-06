@@ -1,5 +1,8 @@
 <script>
   import { samples } from '$lib/stores/samples.js';
+  import { boundaries } from '$lib/stores/boundaries.js';
+  import { activeClientId, activeFarmId } from '$lib/stores/filters.js';
+  import { getActiveFields, loadFarmsData } from '$lib/core/data.js';
   import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit, LOWER_IS_BETTER } from '$lib/core/config.js';
 
   export let selectedNutrient = 'pH';
@@ -13,7 +16,7 @@
     n.key !== 'sampleId' && n.key !== 'P_Zn_Ratio'
   );
 
-  $: availableYears = [...new Set($samples.map(s => s.year).filter(Boolean))].sort((a, b) => b - a);
+  $: availableYears = [...new Set(operationSamples.map(s => s.year).filter(Boolean))].sort((a, b) => b - a);
 
   $: nutrientLabel = getNutrientName(selectedNutrient);
   $: nutrientUnit = getNutrientUnit(selectedNutrient);
@@ -23,9 +26,13 @@
 
   $: effectiveYear = selectedYear === 'most_recent' ? mostRecentYear : selectedYear;
 
+  // Filter by active client/farm operation
+  $: activeFields = getActiveFields($boundaries, loadFarmsData(), $activeClientId, $activeFarmId);
+  $: operationSamples = $samples.filter(s => activeFields.includes(s.field));
+
   $: filteredSamples = effectiveYear
-    ? $samples.filter(s => String(s.year) === String(effectiveYear))
-    : $samples;
+    ? operationSamples.filter(s => String(s.year) === String(effectiveYear))
+    : operationSamples;
 
   $: fieldData = computeFieldData(filteredSamples, selectedNutrient);
 
