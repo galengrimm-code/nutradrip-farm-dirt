@@ -3,7 +3,7 @@
   import { nutrientVisibility } from '$lib/stores/settings.js';
   import { ALL_NUTRIENTS, DEFAULT_VISIBLE, LOWER_IS_BETTER, getNutrientName, getNutrientUnit } from '$lib/core/config.js';
   import { calculateLinearRegression, getTrendInsight, getUrgencyBadge, getCriticalLevels } from '$lib/core/utils.js';
-  import { buildTriggerCard, collectInteractionNotes, getRelevantNotes, BADGE_COLORS, CARD_GRADIENTS } from '$lib/core/triggers.js';
+  import { buildTriggerCard, collectInteractionNotes, getRelevantNotes, getNutrientCVExplanation, BADGE_COLORS, CARD_GRADIENTS } from '$lib/core/triggers.js';
 
   export let selectedField = '';
 
@@ -125,10 +125,41 @@
       if (triggerCard) cardStyle = triggerCard.background;
       else if (yearData.length > 1) cardStyle = isPositive ? 'green' : 'red';
 
+      // Moisture warning for P and K
+      let moistureWarning = null;
+      if ((attr === 'P' || attr === 'K') && samps.length > 0) {
+        const moistureConditions = samps
+          .filter(s => s.soilMoistureCondition)
+          .map(s => ({ year: s.year, moisture: s.soilMoistureCondition }));
+        const hasDry = moistureConditions.some(m => m.moisture === 'dry');
+        const moistureByYear = {};
+        moistureConditions.forEach(m => {
+          if (!moistureByYear[m.year]) moistureByYear[m.year] = new Set();
+          moistureByYear[m.year].add(m.moisture);
+        });
+        const yearsWithMoisture = Object.keys(moistureByYear);
+        const hasMixedMoisture = yearsWithMoisture.length > 1 &&
+          new Set(yearsWithMoisture.flatMap(y => [...moistureByYear[y]])).size > 1;
+        if (hasDry) {
+          moistureWarning = { type: 'dry', pctHigher: attr === 'P' ? '15-25%' : '20-40%' };
+        }
+        if (hasMixedMoisture && trendInsight && trendInsight.stability.label === 'Volatile') {
+          moistureWarning = moistureWarning || {};
+          moistureWarning.mixed = true;
+        }
+      }
+
+      // CV explanation for volatile nutrients
+      let cvExplanation = null;
+      if (trendInsight && trendInsight.stability.label === 'Volatile') {
+        cvExplanation = getNutrientCVExplanation(attr, trendInsight.stability.value);
+      }
+
       cards.push({
         attr, name, unit, decimals, yearData, first, last,
         avgChange, medianChange, pctChange, isPositive,
         slope, trendInsight, triggerCard, relevantNotes, badge,
+        moistureWarning, cvExplanation,
         cardStyle, cardGradient: CARD_GRADIENTS[cardStyle] || CARD_GRADIENTS.neutral,
         badgeColors: BADGE_COLORS[cardStyle] || BADGE_COLORS.neutral
       });
@@ -199,7 +230,7 @@
         <!-- Content: table + chart side by side -->
         <div class="flex flex-col md:flex-row gap-3">
           <!-- Year data table -->
-          <div class="flex-1 text-xs">
+          <div class="shrink-0 text-xs">
             <div class="flex justify-between px-1 text-[10px] text-slate-400 font-semibold mb-0.5">
               <span></span><span class="w-14 text-center">Avg</span><span class="w-14 text-center">Median</span>
             </div>
@@ -280,6 +311,37 @@
               </div>
             {/each}
           </div>
+        {/if}
+
+        <!-- Moisture warning (P and K only) -->
+        {#if card.moistureWarning}
+          {#if card.moistureWarning.type === 'dry'}
+            <div class="text-xs text-amber-800 bg-amber-50 rounded-md px-3 py-2 border border-amber-200">
+              Dry sampling: {card.attr} may test {card.moistureWarning.pctHigher} higher than actual plant-available levels.
+            </div>
+          {/if}
+          {#if card.moistureWarning.mixed}
+            <div class="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-2">
+              Some variability may be due to different moisture conditions at sampling.
+            </div>
+          {/if}
+        {/if}
+
+        <!-- CV explanation (volatile nutrients) -->
+        {#if card.cvExplanation}
+          <details class="text-xs text-slate-500" open>
+            <summary class="cursor-pointer text-red-600 font-medium">{card.cvExplanation.title}</summary>
+            <div class="mt-2 p-3 bg-red-50 rounded-md border border-red-200">
+              <p class="text-red-900 mb-2">{card.cvExplanation.explanation}</p>
+              <p class="font-semibold text-slate-600 text-[10px] mb-1">Common drivers:</p>
+              <ul class="list-disc pl-5 text-slate-500 text-[10px] space-y-0.5">
+                {#each card.cvExplanation.drivers as driver}
+                  <li>{driver}</li>
+                {/each}
+              </ul>
+              <p class="mt-3 p-2 bg-green-50 rounded text-green-800 font-medium text-[10px]">{card.cvExplanation.suggestion}</p>
+            </div>
+          </details>
         {/if}
       </div>
     {/each}

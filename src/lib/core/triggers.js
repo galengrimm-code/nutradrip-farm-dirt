@@ -387,6 +387,91 @@ export function buildTriggerCard(attr, { lastAvg, stabilityValue, slope, years, 
   return buildGenericNutrientCard(attr, { value: lastAvg, cv: stabilityValue, slope, years });
 }
 
+// ========== CV Explanations ==========
+export function getNutrientCVExplanation(nutrient, cvValue) {
+  const cv = cvValue ? cvValue.toFixed(0) : '?';
+
+  const micronutrients = ['Zn', 'B', 'Cu', 'Fe', 'Mn', 'Boron'];
+  if (micronutrients.includes(nutrient)) {
+    const isFeMn = ['Fe', 'Mn'].includes(nutrient);
+    return {
+      title: `High variability detected (CV = ${cv}%)`,
+      explanation: isFeMn
+        ? `${nutrient} tests are sensitive to soil moisture and redox conditions at sampling. Wet vs dry sampling can cause large swings.`
+        : 'This micronutrient commonly shows high variability due to low concentrations, strong pH effects, and localized soil chemistry. Small absolute differences can produce large CV values.',
+      drivers: isFeMn
+        ? ['Soil moisture at sampling', 'Redox conditions', 'pH zone differences', 'Organic matter distribution']
+        : ['pH changes between zones', 'Organic matter differences', 'Manure or banded fertilizer history', 'Lab extraction sensitivity'],
+      suggestion: isFeMn
+        ? `Use ${nutrient} trends as contextual indicators, not standalone decision drivers.`
+        : 'High CV is common for this nutrient. Interpret trends cautiously and confirm with consistent sampling or tissue tests.'
+    };
+  }
+
+  if (nutrient === 'P') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'High variability in P is often linked to placement history (banded fertilizer or manure) and sampling path differences.',
+    drivers: ['Banded P vs broadcast', 'Manure application patterns', 'Sampling depth inconsistency', 'Soil pH effects on availability'],
+    suggestion: 'If P has been banded or manure-applied, consider zone or grid sampling to better capture true distribution.'
+  };
+
+  if (nutrient === 'K') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'Potassium variability often reflects soil texture differences and moisture conditions at sampling.',
+    drivers: ['Clay vs sand zones', 'Soil moisture at sampling', 'Cation exchange differences', 'Crop removal patterns'],
+    suggestion: 'Resample at similar moisture conditions and consider texture-based zones.'
+  };
+
+  if (nutrient === 'pH') return {
+    title: `High variability detected (SD = ${cvValue ? cvValue.toFixed(2) : '?'})`,
+    explanation: 'pH is typically stable across a field. High variability often indicates real spatial differences rather than noise.',
+    drivers: ['Past lime application patterns', 'Soil type boundaries', 'Topography and erosion', 'Variable rate lime history'],
+    suggestion: 'High pH variability is a strong signal for zone-based management.'
+  };
+
+  if (nutrient === 'OM') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'Organic matter normally changes slowly. High variability usually reflects soil type, erosion, or sampling depth differences.',
+    drivers: ['Topsoil depth differences', 'Erosion and deposition zones', 'Sampling depth inconsistency', 'Different lab methods between years'],
+    suggestion: 'Manage OM by landscape position rather than uniform field averages. Keep sampling depth and lab consistent.'
+  };
+
+  if (nutrient === 'CEC') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'CEC reflects soil texture and organic matter. High variability often indicates real soil type differences across the field.',
+    drivers: ['Soil texture changes', 'Organic matter differences', 'Erosion patterns', 'Sampling depth variation'],
+    suggestion: 'CEC variability often mirrors soil type boundaries. Consider texture-based management zones.'
+  };
+
+  if (['Ca_sat', 'Mg_sat', 'K_sat', 'H_sat'].includes(nutrient)) return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'Base saturation variability usually reflects CEC differences and liming history across the field.',
+    drivers: ['Soil texture zones', 'Variable lime applications', 'CEC differences', 'pH management history'],
+    suggestion: 'Consider whether CEC varies similarly. Zone-based management may be warranted.'
+  };
+
+  if (nutrient === 'S') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'Sulfur is mobile in soil and can vary significantly with drainage, organic matter, and recent rainfall.',
+    drivers: ['Drainage patterns', 'Organic matter distribution', 'Recent rainfall/leaching', 'Atmospheric deposition patterns'],
+    suggestion: 'Sulfur tests are best interpreted alongside organic matter and drainage conditions.'
+  };
+
+  if (nutrient === 'P_Zn_Ratio') return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'P:Zn ratio variability often amplifies the variability of both P and Zn measurements.',
+    drivers: ['P placement history', 'Zn micronutrient variability', 'pH zone differences', 'Combined measurement noise'],
+    suggestion: 'Review P and Zn trends individually. If both are stable, ratio variability may be less concerning.'
+  };
+
+  return {
+    title: `High variability detected (CV = ${cv}%)`,
+    explanation: 'Field averages are inconsistent across samples. When variability is high, trends may reflect sampling or spatial effects rather than true nutrient change.',
+    drivers: ['Sampling path changed between years', 'Inconsistent sampling depth', 'Different soil moisture at sampling', 'Lab or test method changes'],
+    suggestion: 'When variability is high, confirm trends with consistent sampling methodology before making major adjustments.'
+  };
+}
+
 // ========== Badge colors ==========
 export const BADGE_COLORS = {
   green: { color: '#16a34a', bg: '#dcfce7', border: '#22c55e' },
