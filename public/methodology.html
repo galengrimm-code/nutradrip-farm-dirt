@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="logo.png">
+  <title>Methodology - Soil Analysis App</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      color: white;
+      padding: 2rem 1rem;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      opacity: 0.9;
+      font-size: 0.95rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    .intro {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .intro p {
+      color: #475569;
+      margin-bottom: 1rem;
+    }
+
+    .jump-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .jump-links a {
+      padding: 0.5rem 1rem;
+      background: #e0f2fe;
+      color: #0369a1;
+      text-decoration: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .jump-links a:hover {
+      background: #bae6fd;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+
+    .section-header {
+      background: #f8fafc;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .section-header:hover {
+      background: #f1f5f9;
+    }
+
+    .section-header h2 {
+      color: #1e40af;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-header .toggle {
+      color: #64748b;
+      font-size: 1.25rem;
+      transition: transform 0.2s;
+    }
+
+    .section.open .toggle {
+      transform: rotate(180deg);
+    }
+
+    .section-content {
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    }
+
+    .section.open .section-content {
+      padding: 1.5rem;
+      max-height: 5000px;
+    }
+
+    .calc-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .calc-box:last-child {
+      margin-bottom: 0;
+    }
+
+    .calc-box h3 {
+      color: #1e293b;
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .calc-box h4 {
+      color: #475569;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin: 0.75rem 0 0.5rem 0;
+    }
+
+    .calc-box p {
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .formula {
+      background: #1e293b;
+      color: #a5f3fc;
+      padding: 0.75rem 1rem;
+      border-radius: 0.375rem;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+
+    .formula .comment {
+      color: #6b7280;
+    }
+
+    .threshold-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      margin: 0.75rem 0;
+    }
+
+    .threshold-table th,
+    .threshold-table td {
+      padding: 0.5rem;
+      border: 1px solid #e2e8f0;
+      text-align: left;
+    }
+
+    .threshold-table th {
+      background: #f1f5f9;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .threshold-table td {
+      color: #64748b;
+    }
+
+    .used-in {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      margin-top: 0.5rem;
+    }
+
+    .used-in span {
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+    }
+
+    .agro-note {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 0.75rem;
+      margin: 0.75rem 0;
+      border-radius: 0 0.375rem 0.375rem 0;
+    }
+
+    .agro-note p {
+      color: #92400e;
+      margin: 0;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.75rem 1.5rem;
+      background: #3b82f6;
+      color: white;
+      border-radius: 8px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .back-link:hover {
+      background: #2563eb;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+
+    footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 640px) {
+      .jump-links {
+        flex-direction: column;
+      }
+      .formula {
+        font-size: 0.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Methodology</h1>
+    <p>How We Calculate - Statistical Methods & Agronomic Logic</p>
+  </header>
+
+  <div class="container">
+    <div class="intro">
+      <p>This page explains the statistical methods and agronomic logic behind the insights in this app. All calculations are performed locally in your browser using industry-standard formulas.</p>
+      <div class="jump-links">
+        <a href="#stability">Stability</a>
+        <a href="#trends">Trends</a>
+        <a href="#ratios">Ratios</a>
+        <a href="#thresholds">Thresholds</a>
+        <a href="#averages">Averages</a>
+        <a href="#yield">Yield Correlation</a>
+        <a href="#spatial">Map & Spatial</a>
+        <a href="#color">Color Scales</a>
+        <a href="#sap">Sap Analysis</a>
+      </div>
+    </div>
+
+    <!-- STABILITY ANALYSIS -->
+    <div class="section open" id="stability">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>📊</span> Stability Analysis</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Coefficient of Variation (CV)</h3>
+          <h4>What it measures</h4>
+          <p>How consistent sample values are at each location across years. CV expresses standard deviation as a percentage of the mean, making it comparable across nutrients with different scales.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+CV = (Standard Deviation / Mean) × 100
+
+<span class="comment">// Where:</span>
+Mean = sum(values) / count
+Variance = sum((value - mean)²) / count
+Standard Deviation = sqrt(Variance)
+          </div>
+
+          <h4>Thresholds</h4>
+          <table class="threshold-table">
+            <tr><th>CV Range</th><th>Label</th><th>Interpretation</th></tr>
+            <tr><td>&lt; 20%</td><td>Stable</td><td>Values are consistent year-to-year</td></tr>
+            <tr><td>20-30%</td><td>Moderate</td><td>Normal variability, trends may be meaningful</td></tr>
+            <tr><td>&gt; 30%</td><td>Volatile</td><td>High variability, interpret trends with caution</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why it matters:</strong> High CV can indicate sampling inconsistency (different paths, depths, or moisture conditions), true field variability, or management history (variable rate applications). When CV is high, year-to-year changes may not reflect true nutrient trends.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Stability Map</span>
+            <span>Insight Messages</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Standard Deviation for pH</h3>
+          <h4>What it measures</h4>
+          <p>pH variability using standard deviation instead of CV because pH is a logarithmic scale (each unit represents a 10× change in hydrogen ion concentration).</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+SD = sqrt(sum((value - mean)²) / count)
+          </div>
+
+          <h4>Thresholds for pH</h4>
+          <table class="threshold-table">
+            <tr><th>SD Range</th><th>Label</th><th>Interpretation</th></tr>
+            <tr><td>&lt; 0.2</td><td>Stable</td><td>Consistent pH across samples</td></tr>
+            <tr><td>0.2-0.35</td><td>Moderate</td><td>Normal pH variability</td></tr>
+            <tr><td>&gt; 0.35</td><td>Volatile</td><td>Significant pH variability</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why pH is different:</strong> A CV of 5% on pH 7.0 would be 0.35 units, but that same CV on pH 5.0 would only be 0.25 units. Using SD ensures consistent interpretation regardless of pH level.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends (pH card)</span>
+            <span>Stability Map</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Stability Score</h3>
+          <h4>What it measures</h4>
+          <p>A 0-100 score inversely related to CV, used for color scaling on the stability map.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+Stability Score = max(0, min(100, 100 - CV))
+
+<span class="comment">// Examples:</span>
+<span class="comment">// CV = 10% → Score = 90 (very stable)</span>
+<span class="comment">// CV = 30% → Score = 70 (moderate)</span>
+<span class="comment">// CV = 50% → Score = 50 (volatile)</span>
+          </div>
+
+          <div class="used-in">
+            <span>Stability Map</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Confidence Rating</h3>
+          <h4>What it measures</h4>
+          <p>How much trust to place in trend analysis, based on both sample years and data stability.</p>
+
+          <h4>Logic</h4>
+          <table class="threshold-table">
+            <tr><th>Years</th><th>Rating</th></tr>
+            <tr><td>2 years</td><td>Low</td></tr>
+            <tr><td>3-4 years</td><td>Moderate</td></tr>
+            <tr><td>5+ years</td><td>High</td></tr>
+          </table>
+          <p style="margin-top: 0.5rem;">Rating is downgraded one level if stability is "Volatile".</p>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Insight Messages</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TREND ANALYSIS -->
+    <div class="section" id="trends">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>📈</span> Trend Analysis</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Linear Regression</h3>
+          <h4>What it measures</h4>
+          <p>The rate of change (slope) in nutrient levels over time, using least-squares regression to find the best-fit line through yearly averages.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+<span class="comment">// Given data points: (year, average_value)</span>
+
+n = number of years
+sumX = sum(years)
+sumY = sum(values)
+sumXY = sum(year × value)
+sumX² = sum(year²)
+
+slope = (n × sumXY - sumX × sumY) / (n × sumX² - sumX²)
+intercept = (sumY - slope × sumX) / n
+
+<span class="comment">// Slope units: ppm/year (or units/year for pH)</span>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Scatter Plot</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>R² (Coefficient of Determination)</h3>
+          <h4>What it measures</h4>
+          <p>How well the linear model fits the data. R² of 1.0 means perfect fit; R² of 0 means no linear relationship.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+meanY = sum(values) / n
+SS_total = sum((value - meanY)²)
+SS_residual = sum((value - predicted)²)
+
+R² = 1 - (SS_residual / SS_total)
+          </div>
+
+          <div class="agro-note">
+            <p><strong>Interpreting R²:</strong> In agricultural data, R² above 0.5 indicates a strong linear trend. Lower values don't mean the data is wrong—they indicate factors beyond time are influencing the nutrient level.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Yield Correlation</span>
+            <span>Scatter Plot</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Trend Direction</h3>
+          <h4>What it measures</h4>
+          <p>Whether a nutrient is increasing, decreasing, or holding steady over time.</p>
+
+          <h4>Logic</h4>
+          <div class="formula">
+<span class="comment">// For pH: use fixed threshold</span>
+if |slope| &lt; 0.02 → "Flat"
+
+<span class="comment">// For other nutrients: use relative threshold</span>
+minMagnitude = |currentValue| × 0.02  <span class="comment">// 2% of current value</span>
+
+if |slope| &lt; minMagnitude → "Flat"
+if slope > minMagnitude → "Up"
+if slope &lt; -minMagnitude → "Down"
+          </div>
+
+          <div class="agro-note">
+            <p><strong>Why relative thresholds:</strong> A slope of 1 ppm/year is significant for Zn (often 1-3 ppm) but trivial for P (often 20-50 ppm). Relative thresholds ensure trends are meaningful at any scale.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Insight Messages</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Years to Critical</h3>
+          <h4>What it measures</h4>
+          <p>If a nutrient is declining, estimates when it will reach the critical threshold at the current rate.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+<span class="comment">// Only calculated when:</span>
+<span class="comment">// - Trend is declining (slope &lt; 0)</span>
+<span class="comment">// - Current value is above critical</span>
+<span class="comment">// - Decline rate is meaningful</span>
+
+years_to_critical = (currentValue - criticalLevel) / |slope|
+
+<span class="comment">// Example:</span>
+<span class="comment">// Current P = 30 ppm, Critical = 15 ppm, Slope = -2 ppm/yr</span>
+<span class="comment">// Years = (30 - 15) / 2 = 7.5 years</span>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Warning Messages</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Percent Change</h3>
+          <h4>What it measures</h4>
+          <p>The relative change between the first and last year in the trend period.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+percentChange = ((lastValue - firstValue) / firstValue) × 100
+
+<span class="comment">// Example:</span>
+<span class="comment">// First year avg: 25 ppm, Last year avg: 30 ppm</span>
+<span class="comment">// Change = ((30 - 25) / 25) × 100 = +20%</span>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Comparison View</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NUTRIENT RATIOS -->
+    <div class="section" id="ratios">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>⚖️</span> Nutrient Ratios</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>P:Zn Ratio</h3>
+          <h4>What it measures</h4>
+          <p>The balance between phosphorus and zinc. High ratios indicate potential zinc uptake issues even when soil Zn is adequate.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+P:Zn Ratio = P (ppm) / Zn (ppm)
+
+<span class="comment">// Example:</span>
+<span class="comment">// P = 30 ppm, Zn = 2.0 ppm</span>
+<span class="comment">// Ratio = 30 / 2.0 = 15:1</span>
+          </div>
+
+          <h4>Thresholds</h4>
+          <table class="threshold-table">
+            <tr><th>Ratio</th><th>Status</th><th>Interpretation</th></tr>
+            <tr><td>&lt; 8:1</td><td>Low</td><td>P may be limiting relative to Zn</td></tr>
+            <tr><td>8-12:1</td><td>Optimal</td><td>Balanced P and Zn relationship</td></tr>
+            <tr><td>12-20:1</td><td>Elevated</td><td>Monitor Zn, especially with sensitive crops</td></tr>
+            <tr><td>&gt; 20:1</td><td>High Risk</td><td>P-induced Zn deficiency likely</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why it matters:</strong> High phosphorus can interfere with zinc uptake at the root surface, even when soil Zn tests adequate. This is most common in high-P soils, sandy textures, and high-yield systems where Zn demand is elevated.</p>
+          </div>
+
+          <div class="used-in">
+            <span>P:Zn Ratio Card</span>
+            <span>Zn Insights</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Dynamic Zn Target</h3>
+          <h4>What it measures</h4>
+          <p>The recommended Zn level based on current P, ensuring a balanced ratio even when P is high.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+standardMin = 1.5 ppm
+ratioBasedTarget = P / 10  <span class="comment">// Target 10:1 ratio</span>
+znTarget = max(standardMin, ratioBasedTarget)
+
+<span class="comment">// Examples:</span>
+<span class="comment">// P = 15 ppm → target = max(1.5, 1.5) = 1.5 ppm</span>
+<span class="comment">// P = 25 ppm → target = max(1.5, 2.5) = 2.5 ppm</span>
+<span class="comment">// P = 50 ppm → target = max(1.5, 5.0) = 5.0 ppm</span>
+          </div>
+
+          <h4>Sufficiency Thresholds (using dynamic target)</h4>
+          <table class="threshold-table">
+            <tr><th>Zn Level</th><th>Status</th></tr>
+            <tr><td>&lt; 50% of target</td><td>Low (deficient)</td></tr>
+            <tr><td>50-100% of target</td><td>Marginal (below target)</td></tr>
+            <tr><td>≥ 100% of target</td><td>Adequate</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why dynamic:</strong> With P at 50 ppm, a Zn level of 2.0 ppm gives a ratio of 25:1—high risk for Zn deficiency. The dynamic target of 5.0 ppm ensures balanced uptake regardless of P level.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Zn Field Trends Card</span>
+            <span>Zn Insights</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THRESHOLD LOGIC -->
+    <div class="section" id="thresholds">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🎯</span> Threshold Logic</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Critical vs Optimal vs Ideal</h3>
+          <h4>Definitions</h4>
+          <table class="threshold-table">
+            <tr><th>Level</th><th>Definition</th><th>Example (P)</th></tr>
+            <tr><td>Critical</td><td>Below this, yield loss is likely</td><td>15 ppm</td></tr>
+            <tr><td>Optimal Min</td><td>Lower bound of ideal range</td><td>25 ppm</td></tr>
+            <tr><td>Optimal Max</td><td>Upper bound of ideal range</td><td>50 ppm</td></tr>
+            <tr><td>Ideal</td><td>Midpoint of optimal range</td><td>37.5 ppm</td></tr>
+          </table>
+
+          <h4>Formula for Ideal</h4>
+          <div class="formula">
+ideal = (optimalMin + optimalMax) / 2
+          </div>
+
+          <div class="used-in">
+            <span>Settings</span>
+            <span>Color Scales</span>
+            <span>Insight Messages</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Nutrient Behavior Types</h3>
+          <h4>What it determines</h4>
+          <p>How trends are interpreted depends on whether more is better, less is better, or a specific target is best.</p>
+
+          <h4>Behavior Categories</h4>
+          <table class="threshold-table">
+            <tr><th>Type</th><th>Nutrients</th><th>Trend Interpretation</th></tr>
+            <tr><td>More is OK</td><td>P, K, OM, S, Zn, Cu, Mn, Fe, B, K_Sat</td><td>Increasing = good, decreasing = concern</td></tr>
+            <tr><td>Target Specific</td><td>pH, Ca_sat, Mg_sat</td><td>Moving toward target = good, away = concern</td></tr>
+            <tr><td>Lower is Better</td><td>H_Sat</td><td>Decreasing = good, increasing = concern</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why this matters:</strong> A declining pH moving from 7.5 to 7.0 is different than declining from 6.5 to 6.0. The first is improving toward optimal; the second is concerning. Behavior type ensures correct interpretation.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Trend Insights</span>
+            <span>Badge Logic</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Badge (Urgency) Assignment</h3>
+          <h4>Logic</h4>
+          <div class="formula">
+<span class="comment">// Based on current level relative to thresholds + trend direction</span>
+
+if below_critical:
+  badge = "Action Required"
+else if below_optimal AND declining:
+  badge = "Needs Attention"
+else if below_optimal OR declining_from_optimal:
+  badge = "Review"
+else:
+  badge = "Good"
+
+<span class="comment">// Override: If variability is high (volatile), cannot be "Good"</span>
+if stability == "Volatile" AND badge == "Good":
+  badge = "Review"
+          </div>
+
+          <h4>Badge Definitions</h4>
+          <table class="threshold-table">
+            <tr><th>Badge</th><th>Meaning</th></tr>
+            <tr><td>Good</td><td>At or above target, stable or improving</td></tr>
+            <tr><td>Review</td><td>Minor concern, worth monitoring</td></tr>
+            <tr><td>Needs Attention</td><td>Below optimal and/or declining</td></tr>
+            <tr><td>Action Required</td><td>Below critical threshold</td></tr>
+          </table>
+
+          <div class="used-in">
+            <span>Field Trends Cards</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FIELD AVERAGES -->
+    <div class="section" id="averages">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>📐</span> Field Averages & Aggregation</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Mean (Average)</h3>
+          <h4>Formula</h4>
+          <div class="formula">
+mean = sum(values) / count
+
+<span class="comment">// Zeros are excluded for certain attributes where 0 = "not tested"</span>
+<span class="comment">// (Zn, Cu, Mn, Fe, B, S, Ca_sat, Mg_sat, K_sat, H_Sat)</span>
+          </div>
+
+          <div class="used-in">
+            <span>Field Averages</span>
+            <span>Map Markers</span>
+            <span>Trend Charts</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Median</h3>
+          <h4>What it measures</h4>
+          <p>The middle value when samples are sorted. Less affected by outliers than mean.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+sorted = values.sort()
+n = count
+
+if n is odd:
+  median = sorted[floor(n/2)]
+else:
+  median = (sorted[n/2 - 1] + sorted[n/2]) / 2
+          </div>
+
+          <div class="agro-note">
+            <p><strong>When to use median:</strong> If one sample in a field shows P = 200 ppm (possible manure spot), the mean is skewed. Median gives a more representative "typical" value for the field.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Field Trends</span>
+            <span>Color Scaling</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Location Grouping</h3>
+          <h4>How it works</h4>
+          <p>Samples are grouped by proximity to track the same location across years. Uses a grid-based approach for efficiency.</p>
+
+          <h4>Algorithm</h4>
+          <div class="formula">
+proximityFeet = 50  <span class="comment">// Default: samples within 50 ft are same location</span>
+CELL_SIZE = proximityFeet / 364000  <span class="comment">// Convert to degrees (~30m cells)</span>
+
+<span class="comment">// Assign each sample to a grid cell</span>
+gridLat = floor(latitude / CELL_SIZE)
+gridLon = floor(longitude / CELL_SIZE)
+cellKey = `${gridLat},${gridLon}`
+
+<span class="comment">// Samples in same cell are considered same location</span>
+          </div>
+
+          <div class="used-in">
+            <span>Stability Map</span>
+            <span>CV Calculation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- YIELD CORRELATION -->
+    <div class="section" id="yield">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🌾</span> Yield Correlation</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Pearson Correlation Coefficient (r)</h3>
+          <h4>What it measures</h4>
+          <p>The strength and direction of the linear relationship between a soil nutrient and yield.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+n = count of paired values
+sumX = sum(nutrient values)
+sumY = sum(yield values)
+sumXY = sum(nutrient × yield)
+sumX² = sum(nutrient²)
+sumY² = sum(yield²)
+
+r = (n × sumXY - sumX × sumY) /
+    sqrt((n × sumX² - sumX²) × (n × sumY² - sumY²))
+
+<span class="comment">// r ranges from -1 to +1</span>
+<span class="comment">// +1 = perfect positive correlation</span>
+<span class="comment">// -1 = perfect negative correlation</span>
+<span class="comment">// 0 = no linear relationship</span>
+          </div>
+
+          <h4>Significance Levels</h4>
+          <table class="threshold-table">
+            <tr><th>|r| Value</th><th>Significance</th></tr>
+            <tr><td>&gt; 0.7</td><td>High (strong relationship)</td></tr>
+            <tr><td>0.4-0.7</td><td>Medium (moderate relationship)</td></tr>
+            <tr><td>0.2-0.4</td><td>Low (weak relationship)</td></tr>
+            <tr><td>&lt; 0.2</td><td>None (no meaningful relationship)</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Correlation ≠ Causation:</strong> A high correlation between P and yield doesn't prove P is limiting yield. The correlation could be driven by other factors (soil type, drainage, management) that happen to correlate with P.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Yield Correlation Table</span>
+            <span>Scatter Plot</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Normalized (Field-Relative) Correlation</h3>
+          <h4>What it measures</h4>
+          <p>Correlation after removing between-field differences, showing only within-field relationships.</p>
+
+          <h4>Method</h4>
+          <div class="formula">
+<span class="comment">// For each sample:</span>
+fieldMean = mean(all samples in that field)
+normalizedValue = (value / fieldMean) × 100  <span class="comment">// As % of field mean</span>
+
+<span class="comment">// Then calculate correlation on normalized values</span>
+          </div>
+
+          <div class="agro-note">
+            <p><strong>Why normalize:</strong> Raw correlations include field-to-field differences. A high-yielding field might have high P simply because it's a better field overall. Normalization isolates whether P variation within a field affects yield, which is more actionable for variable-rate decisions.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Yield Correlation (normalized mode)</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>95% Confidence Interval</h3>
+          <h4>What it shows</h4>
+          <p>The range where we expect 95% of individual predictions to fall, shown as a band around the regression line.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+tValue = 1.96  <span class="comment">// For 95% confidence</span>
+MSE = sum(residuals²) / (n - 2)  <span class="comment">// Mean squared error</span>
+SE = sqrt(MSE)  <span class="comment">// Standard error</span>
+
+<span class="comment">// For each point x:</span>
+SE_y = SE × sqrt(1 + 1/n + (x - meanX)² / SS_x)
+upper = predicted + tValue × SE_y
+lower = predicted - tValue × SE_y
+          </div>
+
+          <div class="used-in">
+            <span>Scatter Plot</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP & SPATIAL -->
+    <div class="section" id="spatial">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🗺️</span> Map & Spatial</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Point-in-Polygon (Field Detection)</h3>
+          <h4>What it does</h4>
+          <p>Determines if a soil sample or yield point falls within a field boundary.</p>
+
+          <h4>Algorithm (Ray Casting)</h4>
+          <div class="formula">
+<span class="comment">// Cast a ray from point to infinity (eastward)</span>
+<span class="comment">// Count how many boundary edges the ray crosses</span>
+<span class="comment">// Odd count = inside, Even count = outside</span>
+
+inside = false
+for each edge (yi, xi) to (yj, xj):
+  if ((yi > lat) != (yj > lat)) AND
+     (lon < (xj - xi) × (lat - yi) / (yj - yi) + xi):
+    inside = !inside
+return inside
+          </div>
+
+          <div class="used-in">
+            <span>Import (yield matching)</span>
+            <span>Sample-to-field assignment</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Haversine Distance</h3>
+          <h4>What it calculates</h4>
+          <p>The great-circle distance between two geographic points, accounting for Earth's curvature.</p>
+
+          <h4>Formula</h4>
+          <div class="formula">
+R = 3959  <span class="comment">// Earth radius in miles</span>
+
+dLat = (lat2 - lat1) × π / 180
+dLon = (lon2 - lon1) × π / 180
+
+a = sin(dLat/2)² + cos(lat1 × π/180) × cos(lat2 × π/180) × sin(dLon/2)²
+distance = R × 2 × atan2(sqrt(a), sqrt(1-a))
+
+<span class="comment">// Result in miles</span>
+          </div>
+
+          <div class="used-in">
+            <span>Sample grouping</span>
+            <span>Yield matching</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Dynamic Zoom-Based Color Scaling</h3>
+          <h4>What it does</h4>
+          <p>Adjusts the color scale based on currently visible fields, not all fields. This reveals within-view variation.</p>
+
+          <h4>Logic</h4>
+          <div class="formula">
+<span class="comment">// Get field averages for fields currently visible on map</span>
+visibleAvgs = getAveragesForVisibleFields()
+
+<span class="comment">// Calculate min/max from visible fields only</span>
+minAvg = min(visibleAvgs)
+maxAvg = max(visibleAvgs)
+range = maxAvg - minAvg
+
+<span class="comment">// Scale colors relative to visible range</span>
+position = (fieldAvg - minAvg) / range  <span class="comment">// 0 to 1</span>
+color = getGradientColor(position)
+          </div>
+
+          <div class="agro-note">
+            <p><strong>Why dynamic:</strong> If one field has P=100 and all others have P=20-30, a static scale would make all the normal fields look identical (all red). Dynamic scaling reveals the meaningful variation within the current view.</p>
+          </div>
+
+          <div class="used-in">
+            <span>Main Map</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLOR SCALES -->
+    <div class="section" id="color">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🎨</span> Color Scales</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Nutrient Status Gradient</h3>
+          <h4>Color stops</h4>
+          <table class="threshold-table">
+            <tr><th>Position</th><th>Color</th><th>Meaning</th></tr>
+            <tr><td>0%</td><td style="background:#dc2626;color:white;">Red (#dc2626)</td><td>Critical/Deficient</td></tr>
+            <tr><td>25%</td><td style="background:#f97316;color:white;">Orange (#f97316)</td><td>Below optimal</td></tr>
+            <tr><td>50%</td><td style="background:#eab308;">Yellow (#eab308)</td><td>Marginal</td></tr>
+            <tr><td>75%</td><td style="background:#84cc16;">Lime (#84cc16)</td><td>Good</td></tr>
+            <tr><td>100%</td><td style="background:#16a34a;color:white;">Green (#16a34a)</td><td>Optimal</td></tr>
+          </table>
+
+          <h4>Color Interpolation</h4>
+          <div class="formula">
+<span class="comment">// Linear interpolation between adjacent color stops</span>
+factor = (position - stop1.pos) / (stop2.pos - stop1.pos)
+
+R = round(R1 + (R2 - R1) × factor)
+G = round(G1 + (G2 - G1) × factor)
+B = round(B1 + (B2 - B1) × factor)
+          </div>
+
+          <div class="used-in">
+            <span>Map Markers</span>
+            <span>Sample Points</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>IQR-Based Color Scaling</h3>
+          <h4>What it does</h4>
+          <p>For attributes without agronomic thresholds (CEC, micronutrients), uses the interquartile range to handle outliers.</p>
+
+          <h4>Algorithm</h4>
+          <div class="formula">
+sorted = values.sort()
+Q1 = sorted[floor(n × 0.25)]  <span class="comment">// 25th percentile</span>
+Q3 = sorted[floor(n × 0.75)]  <span class="comment">// 75th percentile</span>
+IQR = Q3 - Q1
+
+lowerBound = max(min, Q1 - 1.5 × IQR)
+upperBound = min(max, Q3 + 1.5 × IQR)
+
+<span class="comment">// Clamp value to bounds, then scale</span>
+clampedValue = clamp(value, lowerBound, upperBound)
+position = (clampedValue - lowerBound) / (upperBound - lowerBound)
+          </div>
+
+          <div class="agro-note">
+            <p><strong>Why IQR:</strong> For CEC, values can range from 5 to 40+ meq/100g. Without agronomic "optimal", we use the distribution itself. IQR-based bounds prevent one extreme value from compressing the entire color scale.</p>
+          </div>
+
+          <div class="used-in">
+            <span>CEC Map</span>
+            <span>Micronutrient Maps</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Change Gradient (Year-to-Year)</h3>
+          <h4>Color stops for percent change</h4>
+          <table class="threshold-table">
+            <tr><th>Change</th><th>Color</th></tr>
+            <tr><td>-30% or worse</td><td style="background:#b91c1c;color:white;">Dark red (#b91c1c)</td></tr>
+            <tr><td>-15%</td><td style="background:#f87171;">Light red (#f87171)</td></tr>
+            <tr><td>0% (neutral)</td><td style="background:#d1d5db;">Gray (#d1d5db)</td></tr>
+            <tr><td>+15%</td><td style="background:#86efac;">Light green (#86efac)</td></tr>
+            <tr><td>+30% or better</td><td style="background:#15803d;color:white;">Dark green (#15803d)</td></tr>
+          </table>
+
+          <div class="used-in">
+            <span>Comparison View</span>
+            <span>Change Maps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAP ANALYSIS -->
+    <div class="section" id="sap">
+      <div class="section-header" onclick="toggleSection(this)">
+        <h2><span>🧪</span> Sap Analysis</h2>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="section-content">
+        <div class="calc-box">
+          <h3>Leaf Signal Patterns</h3>
+          <h4>What it measures</h4>
+          <p>Compares nutrient status between new (young, actively growing) and old (mature, source) leaves to identify plant physiological patterns.</p>
+
+          <h4>Pattern Logic</h4>
+          <div class="formula">
+newLow = new leaf status is "low" (below optimal)
+newHigh = new leaf status is "high" (above optimal)
+oldLow = old leaf status is "low"
+oldHigh = old leaf status is "high"
+
+<span class="comment">// Pattern interpretation</span>
+if (newLow AND oldLow):
+  signal = "SUPPLY LOW"
+  <span class="comment">// Whole-plant deficiency - check root uptake</span>
+
+if (newHigh AND oldHigh):
+  signal = "EXCESS"
+  <span class="comment">// Accumulation in both - reduce inputs or dilution issue</span>
+
+if (newLow AND oldOK):
+  signal = "NEW LIMIT"
+  <span class="comment">// Transport to new growth limited - check mobility</span>
+
+if (newOK AND oldLow):
+  signal = "REMOB"
+  <span class="comment">// Remobilizing from old leaves - normal or stress response</span>
+
+if (newHigh AND oldOK):
+  signal = "NEW BUILD"
+  <span class="comment">// Accumulating in new growth</span>
+
+if (newOK AND oldHigh):
+  signal = "OLD BUILD"
+  <span class="comment">// Stored in old tissue</span>
+          </div>
+
+          <h4>Signal Interpretation</h4>
+          <table class="threshold-table">
+            <tr><th>Signal</th><th>Meaning</th><th>Action</th></tr>
+            <tr><td style="background:#dc2626;color:white;">SUPPLY LOW</td><td>Both leaves deficient</td><td>Root uptake issue, check soil availability</td></tr>
+            <tr><td style="background:#7c3aed;color:white;">EXCESS</td><td>Both leaves high</td><td>Reduce inputs, possible luxury consumption</td></tr>
+            <tr><td style="background:#f59e0b;color:white;">NEW LIMIT</td><td>New low, old OK</td><td>Mobility issue, check transport (immobile nutrients)</td></tr>
+            <tr><td style="background:#0891b2;color:white;">REMOB</td><td>New OK, old low</td><td>Plant pulling from storage, may indicate stress</td></tr>
+            <tr><td style="background:#8b5cf6;color:white;">NEW BUILD</td><td>New high, old OK</td><td>Accumulating in growing points</td></tr>
+            <tr><td style="background:#6366f1;color:white;">OLD BUILD</td><td>New OK, old high</td><td>Stored in mature leaves</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Why it matters:</strong> A nutrient can be "low" in new leaves but "OK" in old leaves - this tells a different story than both being low. The pattern reveals whether the issue is supply (root uptake), transport (mobility), or demand (growth stage).</p>
+          </div>
+
+          <div class="used-in">
+            <span>Sap Viewer</span>
+            <span>Status Mode</span>
+            <span>Reports</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Sap Ratio Calculations</h3>
+          <h4>Calculated Ratios</h4>
+          <div class="formula">
+K:Ca Ratio = Potassium / Calcium
+K:Mg Ratio = Potassium / Magnesium
+K/(Ca+Mg) = Potassium / (Calcium + Magnesium)
+NO₃:NH₄ Ratio = Nitrate-N / Ammonium-N
+Ca:Mg Ratio = Calcium / Magnesium
+Sugar:K Ratio = (Sugars × 1000) / Potassium
+          </div>
+
+          <h4>Ratio Thresholds (Corn)</h4>
+          <table class="threshold-table">
+            <tr><th>Ratio</th><th>Optimal Range</th><th>Why It Matters</th></tr>
+            <tr><td>K:Ca</td><td>1.5 - 3.0</td><td>Cation balance affects cell structure</td></tr>
+            <tr><td>K:Mg</td><td>4.0 - 8.0</td><td>Impacts photosynthesis efficiency</td></tr>
+            <tr><td>K/(Ca+Mg)</td><td>0.8 - 1.5</td><td>Overall cation balance indicator</td></tr>
+            <tr><td>NO₃:NH₄</td><td>1.0 - 4.0</td><td>Nitrogen form preference varies by growth stage</td></tr>
+            <tr><td>Ca:Mg</td><td>2.0 - 5.0</td><td>Cell wall integrity and enzyme function</td></tr>
+          </table>
+
+          <div class="used-in">
+            <span>Sap Viewer Ratios Mode</span>
+            <span>Reports</span>
+          </div>
+        </div>
+
+        <div class="calc-box">
+          <h3>Status Evaluation</h3>
+          <h4>How status is determined</h4>
+          <div class="formula">
+<span class="comment">// Compare value against 4-zone threshold</span>
+threshold = { low, optimal_low, optimal_high, high }
+
+if (value < low):
+  status = "Action"
+  severity = ((low - value) / low) × 100
+  direction = "low"
+
+if (value >= low AND value < optimal_low):
+  status = "Watch"
+  severity = ((optimal_low - value) / (optimal_low - low)) × 50
+  direction = "low"
+
+if (value >= optimal_low AND value <= optimal_high):
+  status = "OK"
+  severity = 0
+  direction = null
+
+if (value > optimal_high AND value <= high):
+  status = "Watch"
+  severity = ((value - optimal_high) / (high - optimal_high)) × 50
+  direction = "high"
+
+if (value > high):
+  status = "Action"
+  severity = ((value - high) / high) × 100
+  direction = "high"
+          </div>
+
+          <h4>Status Priority (for sorting)</h4>
+          <table class="threshold-table">
+            <tr><th>Status</th><th>Priority</th><th>Color</th></tr>
+            <tr><td>Action</td><td>1 (highest)</td><td style="background:#fef2f2;color:#dc2626;">Red background</td></tr>
+            <tr><td>Watch</td><td>2</td><td style="background:#fffbeb;color:#d97706;">Yellow background</td></tr>
+            <tr><td>OK</td><td>3 (lowest)</td><td style="background:#f0fdf4;color:#16a34a;">Green/minimal</td></tr>
+          </table>
+
+          <div class="agro-note">
+            <p><strong>Severity score:</strong> Ranges 0-100 and indicates how far outside the optimal range the value is. Used to sort nutrients within the same status level (e.g., which "Action" item is most severe).</p>
+          </div>
+
+          <div class="used-in">
+            <span>Sap Viewer</span>
+            <span>Status Mode Sorting</span>
+            <span>System Cards</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 2rem;">
+      <a href="analysis.html" class="back-link">Back to Analysis</a>
+      <a href="index.html" class="back-link" style="margin-left: 0.5rem; background: #64748b;">Back to Map</a>
+    </div>
+  </div>
+
+  <footer>
+    <p>Soil Analysis App by Precision Farms LLC</p>
+    <p style="margin-top: 0.5rem;">
+      <a href="privacy-policy.html">Privacy Policy</a> |
+      <a href="terms-of-service.html">Terms of Service</a>
+    </p>
+  </footer>
+
+  <script>
+    function toggleSection(header) {
+      const section = header.parentElement;
+      section.classList.toggle('open');
+    }
+
+    // Open section if navigated to via anchor
+    document.addEventListener('DOMContentLoaded', () => {
+      const hash = window.location.hash;
+      if (hash) {
+        const section = document.querySelector(hash);
+        if (section && section.classList.contains('section')) {
+          // Close all sections first
+          document.querySelectorAll('.section').forEach(s => s.classList.remove('open'));
+          // Open the target section
+          section.classList.add('open');
+          // Scroll to it
+          setTimeout(() => section.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+      }
+    });
+  </script>
+</body>
+</html>

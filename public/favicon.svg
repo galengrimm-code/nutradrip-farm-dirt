@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="15" fill="#fef3c7"/>
+
+  <!-- Water droplet shape with gradient from sap (top) to dirt (bottom) -->
+  <defs>
+    <linearGradient id="sapToDirt" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#84cc16"/><!-- Sap green-yellow -->
+      <stop offset="50%" style="stop-color:#a3e635"/><!-- Light sap -->
+      <stop offset="100%" style="stop-color:#92400e"/><!-- Dirt brown -->
+    </linearGradient>
+  </defs>
+
+  <!-- Droplet shape -->
+  <path d="M16 4 C16 4 8 14 8 19 C8 24 11.5 27 16 27 C20.5 27 24 24 24 19 C24 14 16 4 16 4 Z"
+        fill="url(#sapToDirt)"/>
+
+  <!-- Small highlight -->
+  <ellipse cx="12" cy="17" rx="2" ry="3" fill="rgba(255,255,255,0.3)"/>
+</svg>

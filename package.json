@@ -1,0 +1,22 @@
+{
+  "name": "farm-dirt",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "svelte-spa-router": "^4.0.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tailwindcss/vite": "^4.1.3",
+    "svelte": "^5.20.0",
+    "tailwindcss": "^4.1.3",
+    "vite": "^6.2.0"
+  }
+}

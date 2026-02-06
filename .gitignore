@@ -1,2 +1,11 @@
 tmpclaude-*
 .claude/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite
+*.local
