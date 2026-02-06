@@ -11,5 +11,8 @@ export default defineConfig({
     alias: {
       '$lib': '/src/lib'
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 800
   }
 });
