@@ -51,6 +51,14 @@
   // Compare info bar
   let compareInfo = { from: '', to: '', summary: '' };
 
+  // Expose actions for parent (desktop controls bar)
+  export function triggerAddSite() {
+    showToast('Right-click on the map to add a sample site', 'success', 5000);
+  }
+  export function triggerPrintLabels() {
+    showPrintModal = true;
+  }
+
   const ZOOM_THRESHOLD = MAP_DEFAULTS.zoomThreshold;
   const MAX_MATCH_DISTANCE = 200; // feet
 
@@ -764,22 +772,22 @@
     {fieldModeActive ? '📱 Field Mode ON' : '📱 Field Mode'}
   </button>
 
-  <!-- Add site button (visible when signed in) -->
+  <!-- Mobile-only: Add site + Print labels (hidden on desktop since they're in the controls bar) -->
   {#if $isSignedIn}
-    <div class="absolute top-28 right-3 z-[1000] flex flex-col gap-1.5">
+    <div class="absolute top-28 right-3 z-[1000] flex flex-col gap-1.5 md:hidden">
       <button
         class="px-3 py-2 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
         onclick={() => {
-          showToast('Right-click (or long-press) on the map to add a sample site', 'success', 5000);
+          showToast('Long-press on the map to add a sample site', 'success', 5000);
         }}
       >
-        📍 Add Site
+        + Add Site
       </button>
       <button
         class="px-3 py-2 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
         onclick={() => showPrintModal = true}
       >
-        🖨️ Print Labels
+        Print Labels
       </button>
     </div>
   {/if}

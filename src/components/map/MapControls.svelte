@@ -3,7 +3,11 @@
   import { boundaryFieldNames } from '$lib/stores/boundaries.js';
   import { selectedField, selectedAttribute, selectedYear, compareMode, compareYear } from '$lib/stores/filters.js';
   import { nutrientVisibility } from '$lib/stores/settings.js';
+  import { isSignedIn } from '$lib/stores/app.js';
   import { ALL_NUTRIENTS, DEFAULT_VISIBLE } from '$lib/core/config.js';
+
+  export let onaddsite = () => {};
+  export let onprintlabels = () => {};
 
   let showPanel = false;
 
@@ -141,6 +145,27 @@
           <option value={year}>{year}</option>
         {/each}
       </select>
+    </div>
+  {/if}
+
+  <!-- Spacer to push action buttons to the right -->
+  <div class="flex-1"></div>
+
+  <!-- Add Site + Print Labels (desktop only, when signed in) -->
+  {#if $isSignedIn}
+    <div class="flex items-end gap-2">
+      <button
+        onclick={onaddsite}
+        class="px-3 py-1.5 rounded-md text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 cursor-pointer transition-colors"
+      >
+        + Add Site
+      </button>
+      <button
+        onclick={onprintlabels}
+        class="px-3 py-1.5 rounded-md text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 cursor-pointer transition-colors"
+      >
+        Print Labels
+      </button>
     </div>
   {/if}
 </div>
