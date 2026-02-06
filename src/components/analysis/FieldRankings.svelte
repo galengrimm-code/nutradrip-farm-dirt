@@ -3,7 +3,7 @@
   import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit, LOWER_IS_BETTER } from '$lib/core/config.js';
 
   export let selectedNutrient = 'pH';
-  export let selectedYear = 'most_recent';
+  let selectedYear = 'most_recent';
 
   let sortColumn = 'avg';
   let sortDirection = 'desc';
@@ -13,13 +13,13 @@
     n.key !== 'sampleId' && n.key !== 'P_Zn_Ratio'
   );
 
-  $: availableYears = [...new Set($samples.map(s => s.year).filter(Boolean))].sort();
+  $: availableYears = [...new Set($samples.map(s => s.year).filter(Boolean))].sort((a, b) => b - a);
 
   $: nutrientLabel = getNutrientName(selectedNutrient);
   $: nutrientUnit = getNutrientUnit(selectedNutrient);
   $: lowerIsBetter = LOWER_IS_BETTER.includes(selectedNutrient);
 
-  $: mostRecentYear = availableYears.length > 0 ? availableYears[availableYears.length - 1] : null;
+  $: mostRecentYear = availableYears.length > 0 ? availableYears[0] : null;
 
   $: effectiveYear = selectedYear === 'most_recent' ? mostRecentYear : selectedYear;
 

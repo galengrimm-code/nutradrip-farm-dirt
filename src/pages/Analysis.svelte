@@ -57,7 +57,7 @@
       {:else if activeTab === 'comparison'}
         <YearOverYear year1={selectedYear} year2={compareYear} />
       {:else if activeTab === 'rankings'}
-        <FieldRankings {selectedNutrient} {selectedYear} />
+        <FieldRankings {selectedNutrient} />
       {:else if activeTab === 'yield'}
         <!-- Yield sub-tabs -->
         <div class="flex gap-1 border-b border-slate-200 mb-4">
