@@ -717,7 +717,32 @@
     map.fitBounds(L.latLngBounds([Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]), { padding: [50, 50] });
   }
 
+  function zoomToField(fieldName) {
+    if (!map || fieldName === 'all') return;
+
+    // Try boundary first
+    const coords = getFieldBoundaryCoords($boundaries, fieldName);
+    if (coords) {
+      const isMultiPoly = Array.isArray(coords[0]?.[0]);
+      const polyCoords = isMultiPoly ? coords : [coords];
+      const allLatLngs = polyCoords.flat().map(c => L.latLng(c[0], c[1]));
+      if (allLatLngs.length > 0) {
+        map.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50], maxZoom: 17 });
+        return;
+      }
+    }
+
+    // Fall back to sample locations
+    const fieldSamples = $samples.filter(s => s.field === fieldName && s.lat && s.lon);
+    if (fieldSamples.length > 0) {
+      const lats = fieldSamples.map(s => s.lat);
+      const lons = fieldSamples.map(s => s.lon);
+      map.fitBounds(L.latLngBounds([Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]), { padding: [50, 50], maxZoom: 17 });
+    }
+  }
+
   $: if (map && $samples.length > 0) { zoomToData(); }
+  $: if (map) { zoomToField($selectedField); }
   // Reload sample sites when sign-in status changes
   $: if ($isSignedIn && map) { loadSampleSites(); }
 </script>
