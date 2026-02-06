@@ -9,7 +9,7 @@
   <TopBar />
 
   <!-- Main content area -->
-  <main class="flex-1 overflow-hidden pb-16 md:pb-0">
+  <main class="flex-1 overflow-y-auto pb-16 md:pb-0">
     <slot />
   </main>
 

@@ -71,6 +71,12 @@ function initGoogleApi() {
   const checkAndInit = () => {
     if (typeof gapi !== 'undefined' && typeof google !== 'undefined') {
       SheetsAPI.init().then(() => {
+        // Wire sign-in state changes to the Svelte store
+        SheetsAPI.onSignInChange = (signedIn) => {
+          isSignedIn.set(signedIn);
+          if (signedIn) loadFromSheets();
+        };
+
         if (SheetsAPI.isSignedIn) {
           isSignedIn.set(true);
           console.log('[Init] Google API initialized, user is signed in');
