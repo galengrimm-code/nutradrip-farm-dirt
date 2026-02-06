@@ -3,7 +3,7 @@
   import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit, LOWER_IS_BETTER } from '$lib/core/config.js';
 
   export let selectedNutrient = 'pH';
-  export let selectedYear = '';
+  export let selectedYear = 'most_recent';
 
   let sortColumn = 'avg';
   let sortDirection = 'desc';
@@ -13,12 +13,18 @@
     n.key !== 'sampleId' && n.key !== 'P_Zn_Ratio'
   );
 
+  $: availableYears = [...new Set($samples.map(s => s.year).filter(Boolean))].sort();
+
   $: nutrientLabel = getNutrientName(selectedNutrient);
   $: nutrientUnit = getNutrientUnit(selectedNutrient);
   $: lowerIsBetter = LOWER_IS_BETTER.includes(selectedNutrient);
 
-  $: filteredSamples = selectedYear
-    ? $samples.filter(s => String(s.year) === String(selectedYear))
+  $: mostRecentYear = availableYears.length > 0 ? availableYears[availableYears.length - 1] : null;
+
+  $: effectiveYear = selectedYear === 'most_recent' ? mostRecentYear : selectedYear;
+
+  $: filteredSamples = effectiveYear
+    ? $samples.filter(s => String(s.year) === String(effectiveYear))
     : $samples;
 
   $: fieldData = computeFieldData(filteredSamples, selectedNutrient);
@@ -32,8 +38,6 @@
   $: overallAvg = fieldData.length > 0
     ? fieldData.reduce((sum, f) => sum + f.avg, 0) / fieldData.length
     : 0;
-
-  $: availableYears = [...new Set($samples.map(s => s.year).filter(Boolean))].sort();
 
   function computeFieldData(sampleList, nutrient) {
     const byField = {};
@@ -125,7 +129,7 @@
         <span class="text-xs font-semibold text-slate-500 uppercase">Year</span>
         <select bind:value={selectedYear}
           class="px-2 py-2 border rounded-lg min-h-[44px] text-sm bg-white">
-          <option value="">All Years</option>
+          <option value="most_recent">Most Recent</option>
           {#each availableYears as yr}
             <option value={yr}>{yr}</option>
           {/each}
