@@ -4,10 +4,12 @@
   import { selectedField, selectedAttribute, selectedYear, compareMode, compareYear } from '$lib/stores/filters.js';
   import { nutrientVisibility } from '$lib/stores/settings.js';
   import { isSignedIn } from '$lib/stores/app.js';
-  import { ALL_NUTRIENTS, DEFAULT_VISIBLE } from '$lib/core/config.js';
+  import { ALL_NUTRIENTS, DEFAULT_VISIBLE, getNutrientName } from '$lib/core/config.js';
 
   export let onaddsite = () => {};
   export let onprintlabels = () => {};
+
+  const STABILITY_NUTRIENTS = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'Zn', 'S'];
 
   let showPanel = false;
 
@@ -95,6 +97,10 @@
     >
       {#each visibleNutrients as nutrient}
         <option value={nutrient.key}>{nutrient.name}</option>
+      {/each}
+      <option disabled>───── Stability (CV%) ─────</option>
+      {#each STABILITY_NUTRIENTS as key}
+        <option value="{key}_stability">{getNutrientName(key)} Stability</option>
       {/each}
     </select>
   </div>
@@ -227,6 +233,10 @@
           >
             {#each visibleNutrients as nutrient}
               <option value={nutrient.key}>{nutrient.name}</option>
+            {/each}
+            <option disabled>───── Stability (CV%) ─────</option>
+            {#each STABILITY_NUTRIENTS as key}
+              <option value="{key}_stability">{getNutrientName(key)} Stability</option>
             {/each}
           </select>
         </div>
