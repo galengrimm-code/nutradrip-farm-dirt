@@ -113,6 +113,7 @@ export async function saveInSeasonToIndexedDB(inSeasonData) {
 let tokenClient;
 let accessToken = null;
 let tokenExpiry = null;
+let refreshAttempted = false;
 
 export const SheetsAPI = {
   isInitialized: false,
@@ -135,6 +136,7 @@ export const SheetsAPI = {
               if (response.error) { console.error('Token error:', response); return; }
               accessToken = response.access_token;
               tokenExpiry = Date.now() + (response.expires_in * 1000) - 60000;
+              refreshAttempted = false;
               localStorage.setItem('googleAccessToken', accessToken);
               localStorage.setItem('googleTokenExpiry', tokenExpiry.toString());
               gapi.client.setToken({ access_token: accessToken });
@@ -171,8 +173,24 @@ export const SheetsAPI = {
   },
 
   checkTokenRefresh() {
-    if (this.isSignedIn && tokenExpiry && Date.now() > tokenExpiry - 1800000) {
-      console.log('Token expiring soon, refreshing silently...');
+    if (!this.isSignedIn || !tokenExpiry) return;
+    const now = Date.now();
+    // Token already expired — clear auth state quietly
+    if (now > tokenExpiry) {
+      console.log('[Sheets] Token expired, clearing auth state');
+      accessToken = null;
+      tokenExpiry = null;
+      refreshAttempted = false;
+      localStorage.removeItem('googleAccessToken');
+      localStorage.removeItem('googleTokenExpiry');
+      this.isSignedIn = false;
+      this.onSignInChange(false);
+      return;
+    }
+    // Token expiring within 30 min — attempt one silent refresh
+    if (now > tokenExpiry - 1800000 && !refreshAttempted) {
+      refreshAttempted = true;
+      console.log('[Sheets] Token expiring soon, attempting refresh...');
       tokenClient.requestAccessToken({ prompt: '' });
     }
   },
