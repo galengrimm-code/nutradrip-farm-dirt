@@ -765,7 +765,7 @@
 
   <!-- Field mode button -->
   <button
-    class="absolute top-16 right-3 z-[1000] px-3 py-2 rounded-lg shadow-lg text-xs font-semibold cursor-pointer transition-colors
+    class="absolute top-3 left-3 z-[1000] px-3 py-2 rounded-lg shadow-lg text-xs font-semibold cursor-pointer transition-colors
            {fieldModeActive ? 'bg-blue-600 text-white' : 'bg-white/95 backdrop-blur-sm text-slate-700 border border-slate-200 hover:bg-slate-50'}"
     onclick={toggleFieldMode}
   >
