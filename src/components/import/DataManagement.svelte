@@ -4,7 +4,7 @@
   import { boundaries } from '$lib/stores/boundaries.js';
   import { yieldData } from '$lib/stores/yield.js';
   import { inSeasonData } from '$lib/stores/inSeason.js';
-  import { assignSamplesToFields } from '$lib/core/import-utils.js';
+  import { assignSamplesToFields, isPointInOrNearPolygon } from '$lib/core/import-utils.js';
   import { saveToIndexedDB, saveYieldToIndexedDB, SheetsAPI, loadFromIndexedDB, loadYieldFromIndexedDB, loadInSeasonFromIndexedDB } from '$lib/core/data.js';
   import { soilSettings } from '$lib/stores/settings.js';
   import { get } from 'svelte/store';
@@ -12,6 +12,169 @@
 
   let syncing = false;
   let confirmAction = null;
+
+  // ========== OUTLIER DETECTION ==========
+  let showThresholds = false;
+  let detectedOutliers = [];
+  let selectAll = true;
+  let scanning = false;
+  let confirmDeleteOutliers = false;
+
+  function getOutlierThresholds() {
+    const saved = localStorage.getItem('outlierThresholds');
+    if (saved) return JSON.parse(saved);
+    return { cornMin: 50, cornMax: 350, soyMin: 20, soyMax: 100, pHMin: 4.5, pHMax: 8.5, pMax: 300, kMax: 800, cecMax: 50, omMax: 15 };
+  }
+
+  let thresholds = getOutlierThresholds();
+
+  function saveThresholds() {
+    localStorage.setItem('outlierThresholds', JSON.stringify(thresholds));
+    showToast('Outlier thresholds saved', 'success');
+  }
+
+  function getYieldThresholdsForCrop(crop) {
+    const c = (crop || '').toLowerCase();
+    if (c.includes('soy') || c.includes('bean')) return { min: thresholds.soyMin || 20, max: thresholds.soyMax || 100 };
+    return { min: thresholds.cornMin || 50, max: thresholds.cornMax || 350 };
+  }
+
+  function scanForOutliers() {
+    scanning = true;
+    detectedOutliers = [];
+    const currentSamples = get(samples);
+
+    currentSamples.forEach((sample, index) => {
+      const field = sample.field || 'Unknown';
+      const year = sample.year || 'N/A';
+      const sampleId = sample.sampleId || `#${index + 1}`;
+
+      const pH = parseFloat(sample.pH);
+      if (!isNaN(pH) && pH > 0) {
+        if (pH < thresholds.pHMin) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'pH too low', value: pH.toFixed(2), selected: true });
+        else if (pH > thresholds.pHMax) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'pH too high', value: pH.toFixed(2), selected: true });
+      }
+
+      const P = parseFloat(sample.P);
+      if (!isNaN(P) && P > thresholds.pMax) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'P too high', value: P.toFixed(0) + ' ppm', selected: true });
+
+      const K = parseFloat(sample.K);
+      if (!isNaN(K) && K > thresholds.kMax) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'K too high', value: K.toFixed(0) + ' ppm', selected: true });
+
+      const CEC = parseFloat(sample.CEC);
+      if (!isNaN(CEC) && CEC > thresholds.cecMax) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'CEC too high', value: CEC.toFixed(1), selected: true });
+
+      const OM = parseFloat(sample.OM);
+      if (!isNaN(OM) && OM > thresholds.omMax) detectedOutliers.push({ type: 'sample', index, field, year, sampleId, dataType: 'Nutrient', issue: 'OM too high', value: OM.toFixed(2) + '%', selected: true });
+
+      // Yield outliers
+      if (sample.yieldInfo && Array.isArray(sample.yieldInfo)) {
+        sample.yieldInfo.forEach((yi, yiIndex) => {
+          const avgYield = yi.avgYield;
+          if (!avgYield || avgYield <= 0) return;
+          const ct = getYieldThresholdsForCrop(yi.crop);
+          if (avgYield < ct.min) detectedOutliers.push({ type: 'yield', sampleIndex: index, yieldIndex: yiIndex, field, year: yi.year || 'N/A', sampleId, dataType: `Yield (${yi.crop || 'unknown'})`, issue: `Yield too low (<${ct.min})`, value: avgYield.toFixed(1) + ' bu/ac', selected: true });
+          else if (avgYield > ct.max) detectedOutliers.push({ type: 'yield', sampleIndex: index, yieldIndex: yiIndex, field, year: yi.year || 'N/A', sampleId, dataType: `Yield (${yi.crop || 'unknown'})`, issue: `Yield too high (>${ct.max})`, value: avgYield.toFixed(1) + ' bu/ac', selected: true });
+        });
+      }
+    });
+
+    detectedOutliers = detectedOutliers;
+    selectAll = true;
+    scanning = false;
+    if (detectedOutliers.length === 0) showToast('No outliers detected! Data looks clean.', 'success');
+  }
+
+  function scanOrphanedSamples() {
+    const currentBoundaries = get(boundaries);
+    if (Object.keys(currentBoundaries).length === 0) { showToast('No field boundaries loaded. Import boundaries first.', 'error'); return; }
+
+    scanning = true;
+    detectedOutliers = [];
+    const currentSamples = get(samples);
+
+    currentSamples.forEach((sample, index) => {
+      if (!sample.lat || !sample.lon) return;
+      let isInside = false;
+
+      for (const [fieldName, fieldData] of Object.entries(currentBoundaries)) {
+        const polys = fieldData.boundary || fieldData;
+        const polyArray = Array.isArray(polys[0]?.[0]) ? polys : [polys];
+        for (const poly of polyArray) {
+          if (isPointInOrNearPolygon([sample.lat, sample.lon], poly)) {
+            isInside = true;
+            break;
+          }
+        }
+        if (isInside) break;
+      }
+
+      if (!isInside) {
+        detectedOutliers.push({
+          type: 'sample', index,
+          field: sample.field || 'Unassigned',
+          year: sample.year || 'N/A',
+          sampleId: sample.sampleId || `#${index + 1}`,
+          dataType: 'Outside Boundary',
+          issue: 'Not inside any field',
+          value: `${parseFloat(sample.lat).toFixed(5)}, ${parseFloat(sample.lon).toFixed(5)}`,
+          selected: true
+        });
+      }
+    });
+
+    detectedOutliers = detectedOutliers;
+    selectAll = true;
+    scanning = false;
+    if (detectedOutliers.length === 0) showToast('All samples are inside field boundaries!', 'success');
+  }
+
+  function toggleSelectAll(checked) {
+    selectAll = checked;
+    detectedOutliers = detectedOutliers.map(o => ({ ...o, selected: checked }));
+  }
+
+  $: selectedCount = detectedOutliers.filter(o => o.selected).length;
+
+  async function deleteSelectedOutliers() {
+    confirmDeleteOutliers = false;
+    const toDelete = detectedOutliers.filter(o => o.selected);
+    if (toDelete.length === 0) return;
+
+    const currentSamples = get(samples);
+    const currentBoundaries = get(boundaries);
+
+    // Handle yield deletes first
+    const yieldDeletes = toDelete.filter(o => o.type === 'yield');
+    yieldDeletes.forEach(o => {
+      const sample = currentSamples[o.sampleIndex];
+      if (sample?.yieldInfo) sample.yieldInfo.splice(o.yieldIndex, 1);
+    });
+
+    // Delete full samples (sorted reverse to maintain indices)
+    const sampleIndices = [...new Set(toDelete.filter(o => o.type === 'sample').map(o => o.index))].sort((a, b) => b - a);
+    sampleIndices.forEach(idx => currentSamples.splice(idx, 1));
+
+    samples.set([...currentSamples]);
+    await saveToIndexedDB(currentSamples, currentBoundaries);
+
+    // Audit log
+    const log = JSON.parse(localStorage.getItem('outlierAuditLog') || '[]');
+    log.unshift({
+      date: new Date().toISOString(),
+      total: toDelete.length,
+      nutrients: toDelete.filter(o => o.dataType === 'Nutrient').length,
+      yields: toDelete.filter(o => o.dataType.startsWith('Yield')).length,
+      outside: toDelete.filter(o => o.dataType === 'Outside Boundary').length
+    });
+    if (log.length > 50) log.length = 50;
+    localStorage.setItem('outlierAuditLog', JSON.stringify(log));
+
+    showToast(`Deleted ${toDelete.length} outlier(s)`, 'success');
+    detectedOutliers = [];
+  }
+
+  $: auditLog = JSON.parse(localStorage.getItem('outlierAuditLog') || '[]');
 
   $: confirmMessages = {
     samples: 'This will permanently delete all soil samples. This cannot be undone.',
@@ -345,6 +508,174 @@
       </div>
     </div>
   </div>
+
+  <!-- Outlier Cleaner Section -->
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="border-t-4 border-red-500 px-5 pt-4 pb-2">
+      <h3 class="text-base font-semibold text-slate-800">Outlier Cleaner</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Detect and remove nutrient outliers or samples outside field boundaries</p>
+    </div>
+
+    <div class="px-5 pb-5 pt-2 space-y-4">
+      <!-- Threshold config toggle -->
+      <button
+        type="button"
+        onclick={() => showThresholds = !showThresholds}
+        class="flex items-center gap-2 px-3 py-2 border border-red-200 rounded-lg text-sm text-red-700 cursor-pointer hover:bg-red-50 transition-colors"
+      >
+        <span>{showThresholds ? '\u25BC' : '\u25B6'}</span> Configure Outlier Thresholds
+      </button>
+
+      {#if showThresholds}
+        <div class="border border-red-200 rounded-lg p-4 bg-red-50/30 space-y-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">Corn Yield Min (bu/ac)</span>
+              <input type="number" bind:value={thresholds.cornMin} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">Corn Yield Max (bu/ac)</span>
+              <input type="number" bind:value={thresholds.cornMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">Soybean Min (bu/ac)</span>
+              <input type="number" bind:value={thresholds.soyMin} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">Soybean Max (bu/ac)</span>
+              <input type="number" bind:value={thresholds.soyMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">pH Min</span>
+              <input type="number" step="0.1" bind:value={thresholds.pHMin} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">pH Max</span>
+              <input type="number" step="0.1" bind:value={thresholds.pHMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">P Max (ppm)</span>
+              <input type="number" bind:value={thresholds.pMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">K Max (ppm)</span>
+              <input type="number" bind:value={thresholds.kMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">CEC Max</span>
+              <input type="number" bind:value={thresholds.cecMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <span class="text-xs font-semibold text-slate-600 block mb-1">OM Max (%)</span>
+              <input type="number" step="0.1" bind:value={thresholds.omMax} class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm min-h-[44px]" />
+            </div>
+          </div>
+          <button
+            onclick={saveThresholds}
+            class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg min-h-[44px] cursor-pointer hover:bg-red-700 transition-colors"
+          >Save Thresholds</button>
+        </div>
+      {/if}
+
+      <!-- Scan buttons -->
+      <div class="flex gap-3 flex-wrap">
+        <button
+          onclick={scanForOutliers}
+          disabled={scanning}
+          class="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white font-medium rounded-lg min-h-[44px] cursor-pointer hover:bg-red-700 transition-colors disabled:opacity-50"
+        >Scan for Outliers</button>
+        <button
+          onclick={scanOrphanedSamples}
+          disabled={scanning}
+          class="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white font-medium rounded-lg min-h-[44px] cursor-pointer hover:bg-purple-700 transition-colors disabled:opacity-50"
+        >Find Samples Outside Boundaries</button>
+      </div>
+
+      <!-- Results -->
+      {#if detectedOutliers.length > 0}
+        <div class="border border-red-200 rounded-lg overflow-hidden">
+          <!-- Summary -->
+          <div class="px-4 py-3 bg-red-50 border-b border-red-200">
+            <span class="font-bold text-red-700">Found {detectedOutliers.length} potential issue{detectedOutliers.length !== 1 ? 's' : ''}</span>
+            <span class="text-sm text-slate-500 ml-2">({selectedCount} selected)</span>
+          </div>
+
+          <!-- Table -->
+          <div class="max-h-[400px] overflow-y-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead class="sticky top-0 bg-red-50">
+                <tr>
+                  <th class="py-2 px-3 text-left w-10">
+                    <input type="checkbox" checked={selectAll} onchange={(e) => toggleSelectAll(e.target.checked)} />
+                  </th>
+                  <th class="py-2 px-3 text-left text-xs font-semibold text-slate-500 uppercase">Field</th>
+                  <th class="py-2 px-3 text-left text-xs font-semibold text-slate-500 uppercase">Year</th>
+                  <th class="py-2 px-3 text-left text-xs font-semibold text-slate-500 uppercase">Type</th>
+                  <th class="py-2 px-3 text-left text-xs font-semibold text-slate-500 uppercase">Issue</th>
+                  <th class="py-2 px-3 text-left text-xs font-semibold text-slate-500 uppercase">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each detectedOutliers as outlier, i}
+                  <tr class="border-t border-red-100 hover:bg-red-50/50 transition-colors">
+                    <td class="py-2 px-3">
+                      <input type="checkbox" bind:checked={outlier.selected} />
+                    </td>
+                    <td class="py-2 px-3 text-slate-700">{outlier.field}</td>
+                    <td class="py-2 px-3 text-slate-500">{outlier.year}</td>
+                    <td class="py-2 px-3">
+                      <span class="px-1.5 py-0.5 rounded text-xs font-medium
+                        {outlier.dataType === 'Nutrient' ? 'bg-blue-100 text-blue-700' :
+                         outlier.dataType === 'Outside Boundary' ? 'bg-purple-100 text-purple-700' :
+                         'bg-amber-100 text-amber-700'}">
+                        {outlier.dataType}
+                      </span>
+                    </td>
+                    <td class="py-2 px-3 text-red-600 font-medium">{outlier.issue}</td>
+                    <td class="py-2 px-3 font-mono text-xs text-slate-600">{outlier.value}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Actions -->
+          <div class="px-4 py-3 bg-slate-50 border-t border-red-200 flex gap-3 flex-wrap">
+            <button
+              onclick={() => toggleSelectAll(true)}
+              class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm cursor-pointer hover:bg-slate-50 min-h-[44px]"
+            >Select All</button>
+            <button
+              onclick={() => toggleSelectAll(false)}
+              class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm cursor-pointer hover:bg-slate-50 min-h-[44px]"
+            >Select None</button>
+            <button
+              onclick={() => { if (selectedCount > 0) confirmDeleteOutliers = true; }}
+              disabled={selectedCount === 0}
+              class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg text-sm cursor-pointer hover:bg-red-700 transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >Delete Selected ({selectedCount})</button>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Audit log -->
+      {#if auditLog.length > 0}
+        <div class="border border-amber-200 rounded-lg bg-amber-50 p-3">
+          <h4 class="text-sm font-semibold text-amber-800 mb-2">Deletion History</h4>
+          <div class="max-h-[150px] overflow-y-auto text-xs text-amber-700 space-y-1">
+            {#each auditLog as entry}
+              {@const d = new Date(entry.date)}
+              <div class="py-1 border-b border-amber-200/50 last:border-0">
+                <strong>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}:</strong>
+                Removed {entry.total} outlier{entry.total !== 1 ? 's' : ''}
+                ({entry.nutrients || 0} nutrient, {entry.yields || 0} yield{entry.outside ? `, ${entry.outside} outside boundaries` : ''})
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
 </div>
 
 <!-- Confirm Dialog -->
@@ -357,5 +688,17 @@
     destructive={true}
     onconfirm={executeClear}
     oncancel={() => confirmAction = null}
+  />
+{/if}
+
+{#if confirmDeleteOutliers}
+  <ConfirmDialog
+    title="Delete {selectedCount} Outlier{selectedCount !== 1 ? 's' : ''}"
+    message="Permanently delete {selectedCount} selected data point{selectedCount !== 1 ? 's' : ''}? This cannot be undone."
+    confirmText="Yes, Delete"
+    cancelText="Cancel"
+    destructive={true}
+    onconfirm={deleteSelectedOutliers}
+    oncancel={() => confirmDeleteOutliers = false}
   />
 {/if}

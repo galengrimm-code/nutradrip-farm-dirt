@@ -27,9 +27,11 @@
   }
 
   async function uploadSamples() {
-    if (!year) { showToast('Sample Year is required', 'error'); return; }
-    const yearNum = parseInt(year);
-    if (isNaN(yearNum) || yearNum < 1900 || yearNum > 2100) { showToast('Enter a valid year', 'error'); return; }
+    if (importType === 'shapefile' && !year) { showToast('Sample Year is required for shapefiles', 'error'); return; }
+    if (year) {
+      const yearNum = parseInt(year);
+      if (isNaN(yearNum) || yearNum < 1900 || yearNum > 2100) { showToast('Enter a valid year', 'error'); return; }
+    }
     if (files.length === 0) { showToast('Please select file(s)', 'error'); return; }
 
     uploading = true;
@@ -156,18 +158,18 @@
     <div class="grid grid-cols-3 gap-3">
       <div>
         <label for="sample-year" class="text-xs font-medium text-slate-600 block mb-1">
-          Year <span class="text-red-500">*</span>
+          Year {#if importType === 'shapefile'}<span class="text-red-500">*</span>{:else}<span class="text-slate-400">(auto)</span>{/if}
         </label>
         <input
           id="sample-year"
           type="number"
           bind:value={year}
-          placeholder="2025"
+          placeholder={importType === 'csv' ? 'Auto-detect' : '2025'}
           min="1900"
           max="2100"
           class="w-full px-3 py-2.5 border rounded-lg text-base bg-white min-h-[44px]
                  focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none
-                 {year ? 'border-slate-300' : 'border-red-300'}"
+                 {importType === 'shapefile' && !year ? 'border-red-300' : 'border-slate-300'}"
         />
       </div>
       <div>
@@ -220,7 +222,7 @@
 
         <button
           type="button"
-          onclick={() => { importType = 'csv'; files = []; }}
+          onclick={() => { importType = 'csv'; files = []; year = ''; }}
           class="flex items-center gap-2 p-3 border-2 rounded-lg text-left transition-colors cursor-pointer min-h-[44px]
                  {importType === 'csv'
                    ? 'border-green-500 bg-green-50 text-green-800'

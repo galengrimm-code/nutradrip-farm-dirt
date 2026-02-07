@@ -10,7 +10,7 @@
   let activeTab = 'boundaries';
   const tabs = [
     { id: 'boundaries', label: 'Boundaries', icon: '\u{1F4E6}' },
-    { id: 'samples', label: 'Samples', icon: '\u{1F52C}' },
+    { id: 'samples', label: 'Soil Samples', icon: '\u{1F52C}' },
     { id: 'inseason', label: 'In-Season', icon: '\u{1F9EA}' },
     { id: 'yield', label: 'Yield', icon: '\u{1F33E}' },
     { id: 'management', label: 'Data Mgmt', icon: '\u{1F504}' },
