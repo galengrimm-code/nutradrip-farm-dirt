@@ -16,6 +16,7 @@ import {
   migrateDataIfNeeded,
   needsMigration
 } from './data.js';
+import { tagSamplesWithIrrigation } from './import-utils.js';
 
 export async function initializeApp() {
   isLoading.set(true);
@@ -67,6 +68,16 @@ async function loadCachedData() {
     if (zones && zones.length > 0) {
       irrigationZones.set(zones);
       console.log(`[Init] Loaded ${zones.length} irrigation zones from IndexedDB`);
+
+      // Tag samples with irrigation data
+      let currentSamples;
+      samples.subscribe(s => currentSamples = s)();
+      if (currentSamples && currentSamples.length > 0) {
+        tagSamplesWithIrrigation(currentSamples, zones);
+        samples.set([...currentSamples]);
+        const tagged = currentSamples.filter(s => s.irrigated).length;
+        if (tagged > 0) console.log(`[Init] Tagged ${tagged} samples as irrigated`);
+      }
     }
   } catch (e) { /* ignore */ }
 
@@ -134,6 +145,12 @@ async function loadFromSheets() {
 
     // Update samples
     if (sheetSamples && sheetSamples.length > 0) {
+      // Re-tag with irrigation zones if any exist
+      let currentZones;
+      irrigationZones.subscribe(z => currentZones = z)();
+      if (currentZones && currentZones.length > 0) {
+        tagSamplesWithIrrigation(sheetSamples, currentZones);
+      }
       samples.set(sheetSamples);
     }
 
