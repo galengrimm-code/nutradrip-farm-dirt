@@ -225,51 +225,70 @@
     const highChange = getZoneChange('high');
     const allChange = getZoneChange('all');
     const result = [];
+    const name = nutrientLabel;
+    const unit = nutrientUnit ? ` ${nutrientUnit}` : '';
+    const def = ALL_NUTRIENTS.find(n => n.key === selectedNutrient);
+    const dec = def ? def.decimals : 1;
 
+    // Low zone insight
     if (lowChange) {
+      const pct = Math.abs(lowChange.pctChange).toFixed(0);
+      const abs = Math.abs(lowChange.change).toFixed(dec);
       if (lowChange.change > 0) {
         result.push({
           type: 'positive',
-          text: `Low-testing zones improved by ${formatVal(Math.abs(lowChange.change))} (${Math.abs(lowChange.pctChange).toFixed(1)}%). Historically deficient areas are responding to management.`
+          icon: '\uD83D\uDCC8',
+          text: `Low ${name} areas improved ${pct}% (+${lowChange.change.toFixed(dec)}${unit} avg)`
         });
       } else if (lowChange.change < 0) {
         result.push({
           type: 'negative',
-          text: `Low-testing zones declined by ${formatVal(Math.abs(lowChange.change))} (${Math.abs(lowChange.pctChange).toFixed(1)}%). Deficient areas may need more targeted application.`
+          icon: '\uD83D\uDCC9',
+          text: `Low ${name} areas declined ${pct}% (${lowChange.change.toFixed(dec)}${unit} avg)`
         });
       }
     }
 
+    // High zone insight
     if (highChange) {
+      const pct = Math.abs(highChange.pctChange).toFixed(0);
       if (highChange.change < 0) {
         result.push({
           type: 'neutral',
-          text: `High-testing zones decreased by ${formatVal(Math.abs(highChange.change))} (${Math.abs(highChange.pctChange).toFixed(1)}%). This may indicate reduced over-application in high areas.`
+          icon: '\u2696\uFE0F',
+          text: `High ${name} areas decreased ${pct}% (${highChange.change.toFixed(dec)}${unit} avg)`
         });
       } else if (highChange.change > 0) {
         result.push({
-          type: 'neutral',
-          text: `High-testing zones increased by ${formatVal(Math.abs(highChange.change))} (${Math.abs(highChange.pctChange).toFixed(1)}%). Consider whether these areas need reduced rates.`
+          type: 'warning',
+          icon: '\u2B06\uFE0F',
+          text: `High ${name} areas increased ${pct}% (+${highChange.change.toFixed(dec)}${unit} avg)`
         });
       }
     }
 
     // Strategy insight
     if (lowChange && highChange) {
-      if (lowChange.change > 0 && highChange.change < 0) {
+      const lc = lowChange.change;
+      const hc = highChange.change;
+
+      if (lc > 0 && hc <= 0) {
         result.push({
           type: 'positive',
-          text: 'Strategy: Low zones are rising while high zones are falling -- this pattern indicates effective variable-rate targeting.'
+          icon: '\uD83C\uDFAF',
+          text: `Your fertility strategy is successfully bringing up the low spots while maintaining high areas!`
         });
-      } else if (allChange && allChange.change > 0) {
+      } else if (lc > 0 && hc > 0) {
         result.push({
           type: 'neutral',
-          text: 'Strategy: All zones are trending upward uniformly. Consider implementing variable-rate application to optimize inputs.'
+          icon: '\uD83D\uDCCA',
+          text: `All areas are increasing \u2014 consider variable rate application to target low spots more`
         });
-      } else if (lowChange.change < 0 && highChange.change > 0) {
+      } else if (lc <= 0 && hc > 0) {
         result.push({
-          type: 'negative',
-          text: 'Strategy: Low zones are declining while high zones are rising -- review application targeting and placement strategy.'
+          type: 'warning',
+          icon: '\u26A0\uFE0F',
+          text: `High areas getting higher while low areas stagnate \u2014 review application targeting`
         });
       }
     }
@@ -478,13 +497,14 @@
       <!-- Insights -->
       {#if insights.length > 0}
         <div class="space-y-2">
-          <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Insights</h4>
+          <h4 class="text-sm font-bold text-slate-700">Insights</h4>
           {#each insights as insight}
             <div class="rounded-lg p-3 border-l-4 text-sm
               {insight.type === 'positive' ? 'border-green-500 bg-green-50 text-green-800' :
                insight.type === 'negative' ? 'border-red-500 bg-red-50 text-red-800' :
+               insight.type === 'warning' ? 'border-amber-500 bg-amber-50 text-amber-800' :
                'border-slate-400 bg-slate-50 text-slate-700'}">
-              {insight.text}
+              {#if insight.icon}<span class="mr-1.5">{insight.icon}</span>{/if}{insight.text}
             </div>
           {/each}
         </div>
