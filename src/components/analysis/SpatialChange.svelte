@@ -1,9 +1,16 @@
 <script>
-  import { samples, uniqueFields, uniqueYears } from '$lib/stores/samples.js';
+  import { samples } from '$lib/stores/samples.js';
+  import { boundaries } from '$lib/stores/boundaries.js';
+  import { activeClientId, activeFarmId } from '$lib/stores/filters.js';
+  import { getActiveFields, loadFarmsData } from '$lib/core/data.js';
   import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit } from '$lib/core/config.js';
 
   export let selectedField = '';
   export let selectedNutrient = 'pH';
+
+  // Filter by active client/farm operation
+  $: activeFields = getActiveFields($boundaries, loadFarmsData(), $activeClientId, $activeFarmId);
+  $: operationFields = activeFields.filter(f => f).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   let baseYear = '';
   let compareYear = 'all';
@@ -42,10 +49,11 @@
     return value.toFixed(decimals);
   }
 
-  // Filtered samples by field
+  // Filter samples by operation, then by field if selected
+  $: operationSamples = $samples.filter(s => activeFields.includes(s.field));
   $: filteredSamples = selectedField
-    ? $samples.filter(s => s.field === selectedField)
-    : $samples;
+    ? operationSamples.filter(s => s.field === selectedField)
+    : operationSamples;
 
   // Available years from filtered samples
   $: availableYears = [...new Set(filteredSamples.map(s => s.year).filter(Boolean))].sort();
@@ -290,7 +298,7 @@
         <select bind:value={selectedField}
           class="px-2 py-2 border rounded-lg min-h-[44px] text-sm bg-white">
           <option value="">All Fields</option>
-          {#each $uniqueFields as field}
+          {#each operationFields as field}
             <option value={field}>{field}</option>
           {/each}
         </select>

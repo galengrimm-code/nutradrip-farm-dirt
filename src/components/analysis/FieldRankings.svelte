@@ -16,23 +16,20 @@
     n.key !== 'sampleId' && n.key !== 'P_Zn_Ratio'
   );
 
+  // Filter by active client/farm operation
+  $: activeFields = getActiveFields($boundaries, loadFarmsData(), $activeClientId, $activeFarmId);
+  $: operationSamples = $samples.filter(s => activeFields.includes(s.field));
+
   $: availableYears = [...new Set(operationSamples.map(s => s.year).filter(Boolean))].sort((a, b) => b - a);
 
   $: nutrientLabel = getNutrientName(selectedNutrient);
   $: nutrientUnit = getNutrientUnit(selectedNutrient);
   $: lowerIsBetter = LOWER_IS_BETTER.includes(selectedNutrient);
 
-  $: mostRecentYear = availableYears.length > 0 ? availableYears[0] : null;
-
-  $: effectiveYear = selectedYear === 'most_recent' ? mostRecentYear : selectedYear;
-
-  // Filter by active client/farm operation
-  $: activeFields = getActiveFields($boundaries, loadFarmsData(), $activeClientId, $activeFarmId);
-  $: operationSamples = $samples.filter(s => activeFields.includes(s.field));
-
-  $: filteredSamples = effectiveYear
-    ? operationSamples.filter(s => String(s.year) === String(effectiveYear))
-    : operationSamples;
+  // "Most Recent" = each field's most recent sample year (so all fields appear)
+  $: filteredSamples = selectedYear === 'most_recent'
+    ? getMostRecentPerField(operationSamples)
+    : operationSamples.filter(s => String(s.year) === String(selectedYear));
 
   $: fieldData = computeFieldData(filteredSamples, selectedNutrient);
 
@@ -46,20 +43,36 @@
     ? fieldData.reduce((sum, f) => sum + f.avg, 0) / fieldData.length
     : 0;
 
+  function getMostRecentPerField(sampleList) {
+    // Find each field's most recent year, return only those samples
+    const mostRecentByField = {};
+    sampleList.forEach(s => {
+      if (!s.field || !s.year) return;
+      const yr = String(s.year);
+      if (!mostRecentByField[s.field] || yr > mostRecentByField[s.field]) {
+        mostRecentByField[s.field] = yr;
+      }
+    });
+    return sampleList.filter(s => s.field && String(s.year) === mostRecentByField[s.field]);
+  }
+
   function computeFieldData(sampleList, nutrient) {
     const byField = {};
+    const fieldYears = {};
     sampleList.forEach(s => {
       if (!s.field || s.field === 'Unassigned') return;
       const val = parseFloat(s[nutrient]);
       if (isNaN(val)) return;
       if (!byField[s.field]) byField[s.field] = [];
       byField[s.field].push(val);
+      if (s.year) fieldYears[s.field] = String(s.year);
     });
 
     return Object.entries(byField).map(([field, vals]) => {
       vals.sort((a, b) => a - b);
       return {
         field,
+        year: fieldYears[field] || '',
         avg: vals.reduce((a, b) => a + b, 0) / vals.length,
         min: vals[0],
         max: vals[vals.length - 1],
@@ -170,6 +183,12 @@
               onclick={() => sort('field')}>
               Field {getSortIcon('field')}
             </th>
+            {#if selectedYear === 'most_recent'}
+              <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase cursor-pointer select-none"
+                onclick={() => sort('year')}>
+                Year {getSortIcon('year')}
+              </th>
+            {/if}
             <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase cursor-pointer select-none"
               onclick={() => sort('avg')}>
               Average {getSortIcon('avg')}
@@ -197,6 +216,11 @@
               <td class="py-2 px-3 font-medium text-slate-800">
                 {row.field}
               </td>
+              {#if selectedYear === 'most_recent'}
+                <td class="text-right py-2 px-3 text-slate-400 text-xs">
+                  {row.year}
+                </td>
+              {/if}
               <td class="text-right py-2 px-3 font-mono {getValueColor(row.avg)}">
                 {formatVal(row.avg)}
               </td>
