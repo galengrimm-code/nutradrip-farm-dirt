@@ -18,6 +18,8 @@
   import { getActiveFields, getFieldBoundaryCoords, loadFarmsData, SheetsAPI, loadClientsData, saveIrrigationZonesToIndexedDB } from '$lib/core/data.js';
   import { getSheetId } from '$lib/core/config.js';
   import { tagSamplesWithIrrigation } from '$lib/core/import-utils.js';
+  import { polygon as turfPolygon, multiPolygon as turfMultiPolygon } from '@turf/helpers';
+  import turfIntersect from '@turf/intersect';
   import MapLegend from './MapLegend.svelte';
   import SampleSiteModal from './SampleSiteModal.svelte';
   import PrintLabelsModal from './PrintLabelsModal.svelte';
@@ -688,6 +690,8 @@
   // ========== IRRIGATION ZONE DRAWING ==========
   function handleDrawClick(e) {
     if (!drawingMode) return;
+    // Don't handle if a zone layer was clicked (its handler will fire separately)
+    if (e.originalEvent?._zoneHandled) return;
 
     if (!drawStartLatLng) {
       // First click — set start point
@@ -799,31 +803,136 @@
     samples.set([...currentSamples]); // trigger reactivity
   }
 
+  // Convert circle center + radius to a GeoJSON polygon (64-point approximation)
+  function circleToGeoJSONCoords(center, radiusMeters, numPoints = 64) {
+    const [lat, lng] = center;
+    const coords = [];
+    for (let i = 0; i <= numPoints; i++) {
+      const angle = (i / numPoints) * Math.PI * 2;
+      const dLat = (radiusMeters / 6371000) * (180 / Math.PI) * Math.cos(angle);
+      const dLng = (radiusMeters / 6371000) * (180 / Math.PI) * Math.sin(angle) / Math.cos(lat * Math.PI / 180);
+      coords.push([lng + dLng, lat + dLat]); // GeoJSON is [lng, lat]
+    }
+    return [coords];
+  }
+
+  // Convert rectangle bounds to GeoJSON polygon coords
+  function rectToGeoJSONCoords(bounds) {
+    const [[swLat, swLng], [neLat, neLng]] = bounds;
+    return [[
+      [swLng, swLat], [neLng, swLat], [neLng, neLat], [swLng, neLat], [swLng, swLat]
+    ]];
+  }
+
+  // Get all field boundaries as a single Turf MultiPolygon for clipping
+  function getBoundariesAsGeoJSON() {
+    const allPolygons = [];
+    for (const [, fieldData] of Object.entries($boundaries)) {
+      const coords = fieldData?.boundary || fieldData;
+      if (!coords || coords.length === 0) continue;
+      try {
+        const isMultiPoly = Array.isArray(coords[0]?.[0]);
+        const polyCoords = isMultiPoly ? coords : [coords];
+        polyCoords.forEach(ring => {
+          if (ring.length < 3) return;
+          // Convert [lat, lng] to GeoJSON [lng, lat] and close the ring
+          const geoRing = ring.map(c => [c[1], c[0]]);
+          if (geoRing[0][0] !== geoRing[geoRing.length - 1][0] || geoRing[0][1] !== geoRing[geoRing.length - 1][1]) {
+            geoRing.push([...geoRing[0]]);
+          }
+          allPolygons.push([geoRing]);
+        });
+      } catch { /* skip invalid */ }
+    }
+    return allPolygons;
+  }
+
+  // Clip a zone GeoJSON to field boundaries, returns array of Leaflet [lat, lng] coordinate arrays
+  function clipZoneToBoundaries(zoneCoords) {
+    const zonePoly = turfPolygon(zoneCoords);
+    const boundaryPolygons = getBoundariesAsGeoJSON();
+    const clippedParts = [];
+
+    for (const bCoords of boundaryPolygons) {
+      try {
+        const bPoly = turfPolygon(bCoords);
+        const intersection = turfIntersect(zonePoly, bPoly);
+        if (intersection) {
+          const geom = intersection.geometry;
+          if (geom.type === 'Polygon') {
+            // Convert [lng, lat] back to [lat, lng] for Leaflet
+            clippedParts.push(geom.coordinates[0].map(c => [c[1], c[0]]));
+          } else if (geom.type === 'MultiPolygon') {
+            geom.coordinates.forEach(poly => {
+              clippedParts.push(poly[0].map(c => [c[1], c[0]]));
+            });
+          }
+        }
+      } catch { /* skip failed intersections */ }
+    }
+    return clippedParts;
+  }
+
   function displayIrrigationZones() {
     if (!map) return;
     // Clear existing zone layers
     zoneLayers.forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
     zoneLayers = [];
 
+    const hasBoundaries = Object.keys($boundaries).length > 0;
+
     $irrigationZones.forEach(zone => {
-      let layer;
-      if (zone.type === 'circle' && zone.center && zone.radius) {
-        layer = L.circle(zone.center, {
-          radius: zone.radius,
-          color: '#2563eb', fillColor: '#3b82f6',
-          fillOpacity: 0.12, weight: 2, dashArray: '8, 4'
-        });
-      } else if (zone.type === 'rectangle' && zone.bounds) {
-        layer = L.rectangle(zone.bounds, {
-          color: '#2563eb', fillColor: '#3b82f6',
-          fillOpacity: 0.12, weight: 2, dashArray: '8, 4'
-        });
+      const layers = [];
+      const zoneStyle = {
+        color: '#2563eb', fillColor: '#3b82f6',
+        fillOpacity: 0.18, weight: 2.5, dashArray: '8, 4'
+      };
+
+      if (hasBoundaries) {
+        // Try to clip zone to field boundaries
+        let zoneGeoCoords;
+        if (zone.type === 'circle' && zone.center && zone.radius) {
+          zoneGeoCoords = circleToGeoJSONCoords(zone.center, zone.radius);
+        } else if (zone.type === 'rectangle' && zone.bounds) {
+          zoneGeoCoords = rectToGeoJSONCoords(zone.bounds);
+        }
+
+        if (zoneGeoCoords) {
+          const clipped = clipZoneToBoundaries(zoneGeoCoords);
+          if (clipped.length > 0) {
+            clipped.forEach(coords => {
+              layers.push(L.polygon(coords, zoneStyle));
+            });
+          } else {
+            // No intersection — render unclipped as fallback
+            if (zone.type === 'circle') {
+              layers.push(L.circle(zone.center, { ...zoneStyle, radius: zone.radius }));
+            } else {
+              layers.push(L.rectangle(zone.bounds, zoneStyle));
+            }
+          }
+        }
+      } else {
+        // No boundaries — render unclipped
+        if (zone.type === 'circle' && zone.center && zone.radius) {
+          layers.push(L.circle(zone.center, { ...zoneStyle, radius: zone.radius }));
+        } else if (zone.type === 'rectangle' && zone.bounds) {
+          layers.push(L.rectangle(zone.bounds, zoneStyle));
+        }
       }
 
-      if (layer) {
+      layers.forEach(layer => {
         layer.bindTooltip(`<strong>${zone.name}</strong><br><span style="font-size:10px;color:#64748b;">Irrigation Zone</span>`, { sticky: true });
 
-        // Right-click to edit
+        // Click to edit
+        layer.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          editingZone = zone;
+          pendingZone = null;
+          showZoneModal = true;
+        });
+
+        // Right-click to edit too
         layer.on('contextmenu', (e) => {
           L.DomEvent.stopPropagation(e);
           editingZone = zone;
@@ -833,7 +942,7 @@
 
         layer.addTo(map);
         zoneLayers.push(layer);
-      }
+      });
     });
   }
 
