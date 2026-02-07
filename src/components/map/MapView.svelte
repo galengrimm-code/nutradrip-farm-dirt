@@ -18,8 +18,8 @@
   import { getActiveFields, getFieldBoundaryCoords, loadFarmsData, SheetsAPI, loadClientsData, saveIrrigationZonesToIndexedDB } from '$lib/core/data.js';
   import { getSheetId } from '$lib/core/config.js';
   import { tagSamplesWithIrrigation } from '$lib/core/import-utils.js';
-  import { polygon as turfPolygon, multiPolygon as turfMultiPolygon } from '@turf/helpers';
-  import turfIntersect from '@turf/intersect';
+  import { polygon as turfPolygon, featureCollection } from '@turf/helpers';
+  import { intersect as turfIntersect } from '@turf/intersect';
   import MapLegend from './MapLegend.svelte';
   import SampleSiteModal from './SampleSiteModal.svelte';
   import PrintLabelsModal from './PrintLabelsModal.svelte';
@@ -106,11 +106,15 @@
     map?.remove();
   });
 
+  // Track previous zoom level to detect zoom threshold crossings
+  let prevZoomLevel = MAP_DEFAULTS.zoom;
+
   function initMap() {
     map = L.map(mapContainer, {
       center: [MAP_DEFAULTS.lat, MAP_DEFAULTS.lng],
       zoom: MAP_DEFAULTS.zoom,
-      zoomControl: false
+      zoomControl: false,
+      preferCanvas: true // Render vector layers on canvas for performance
     });
 
     const satellite = L.tileLayer(
@@ -126,13 +130,28 @@
     L.control.layers({ 'Satellite': satellite, 'Street': streets }, null, { position: 'topright' }).addTo(map);
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    const debouncedUpdate = debounce(() => updateMap(), 250);
+    // Only redraw on zoom if crossing the field/sample threshold, or in field-shading mode
     map.on('zoomend', () => {
-      zoomLevel = map.getZoom();
-      viewModeText = zoomLevel >= ZOOM_THRESHOLD ? 'Sample View' : 'Field View';
-      debouncedUpdate();
+      const newZoom = map.getZoom();
+      const crossedThreshold = (prevZoomLevel < ZOOM_THRESHOLD) !== (newZoom < ZOOM_THRESHOLD);
+      prevZoomLevel = newZoom;
+      zoomLevel = newZoom;
+      viewModeText = newZoom >= ZOOM_THRESHOLD ? 'Sample View' : 'Field View';
+
+      if (crossedThreshold) {
+        updateMap();
+      } else if (newZoom < ZOOM_THRESHOLD && $selectedField === 'all') {
+        // Field shading: colors depend on visible fields, debounce redraw
+        debouncedFieldShadingUpdate();
+      }
     });
-    map.on('moveend', debouncedUpdate);
+
+    // Only redraw on pan in field-shading mode (colors change based on visible fields)
+    map.on('moveend', () => {
+      if (zoomLevel < ZOOM_THRESHOLD && $selectedField === 'all' && !$selectedAttribute.endsWith('_stability') && !$compareMode) {
+        debouncedFieldShadingUpdate();
+      }
+    });
 
     // Right-click (or long-press) to add sample site
     map.on('contextmenu', handleMapRightClick);
@@ -144,6 +163,8 @@
     updateMap();
     zoomToData();
   }
+
+  const debouncedFieldShadingUpdate = debounce(() => updateMap(), 300);
 
   // Reactivity: re-render when stores change
   $: if (map) {
@@ -266,7 +287,7 @@
         noMatchCount++;
       }
 
-      const html = `<div style="width:${markerSize}px;height:${markerSize}px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:${fontSize}px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3);border:2px solid rgba(255,255,255,0.8);">${displayVal}</div>`;
+      const html = `<div class="sm" style="width:${markerSize}px;height:${markerSize}px;background:${color};font-size:${fontSize}px;">${displayVal}</div>`;
       const icon = L.divIcon({ html, className: '', iconSize: [markerSize, markerSize], iconAnchor: [markerSize / 2, markerSize / 2] });
       const marker = L.marker([laterSample.lat, laterSample.lon], { icon });
 
@@ -441,8 +462,9 @@
       const locHash = `${Number(sample.lat).toFixed(4)}_${Number(sample.lon).toFixed(4)}`;
       const stability = cachedStabilityData[locHash];
       const hasWarning = stability?.hasHighVariability;
+      const fs = fieldModeActive ? 12 : 9;
 
-      const html = `<div style="width:${markerSize}px;height:${markerSize}px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:${fieldModeActive ? 12 : 9}px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.3);border:2px solid rgba(255,255,255,0.8);position:relative;">${attr === 'sampleId' ? '' : displayText}${hasWarning ? '<span style="position:absolute;top:-4px;right:-4px;font-size:10px;">⚠️</span>' : ''}</div>`;
+      const html = `<div class="sm" style="width:${markerSize}px;height:${markerSize}px;background:${color};font-size:${fs}px;">${attr === 'sampleId' ? '' : displayText}${hasWarning ? '<span class="sw">⚠️</span>' : ''}</div>`;
 
       const icon = L.divIcon({ html, className: '', iconSize: [markerSize, markerSize], iconAnchor: [markerSize / 2, markerSize / 2] });
       const marker = L.marker([sample.lat, sample.lon], { icon });
@@ -856,7 +878,9 @@
     for (const bCoords of boundaryPolygons) {
       try {
         const bPoly = turfPolygon(bCoords);
-        const intersection = turfIntersect(zonePoly, bPoly);
+        // Turf v7: intersect takes a FeatureCollection
+        const fc = featureCollection([zonePoly, bPoly]);
+        const intersection = turfIntersect(fc);
         if (intersection) {
           const geom = intersection.geometry;
           if (geom.type === 'Polygon') {
@@ -1052,6 +1076,25 @@
   @keyframes gpsPulse {
     0% { transform: scale(1); opacity: 0.7; }
     100% { transform: scale(3); opacity: 0; }
+  }
+  /* Sample marker: moved from inline styles to class for performance */
+  :global(.sm) {
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+    border: 2px solid rgba(255,255,255,0.8);
+    position: relative;
+    will-change: transform;
+  }
+  :global(.sw) {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 10px;
   }
 </style>
 
