@@ -81,7 +81,7 @@
 </script>
 
 <!-- Desktop controls bar -->
-<div class="hidden md:flex items-center gap-4 px-4 py-2 bg-white border-b border-slate-200 flex-wrap">
+<div class="hidden md:flex items-center gap-4 px-4 py-2 bg-white border-b border-slate-200 flex-wrap relative z-[1001]">
   <!-- Field selector -->
   <div class="flex flex-col gap-0.5">
     <label for="desktop-field" class="text-[10px] font-semibold text-slate-500 uppercase">Field</label>
