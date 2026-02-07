@@ -1,6 +1,8 @@
 <script>
   import { samples } from '$lib/stores/samples.js';
   import { ALL_NUTRIENTS, getNutrientName, LOWER_IS_BETTER } from '$lib/core/config.js';
+  import { calculatePValue } from '$lib/core/utils.js';
+  import { irrigationZones } from '$lib/stores/irrigationZones.js';
   import { onMount } from 'svelte';
 
   export let selectedNutrient = 'pH';
@@ -9,6 +11,7 @@
   let sortDirection = 'desc';
   let showScatter = false;
   let canvasEl;
+  let colorByIrrigation = false;
 
   // Nutrient keys for correlation (skip sampleId)
   const nutrientKeys = ALL_NUTRIENTS.filter(n => n.key !== 'sampleId').map(n => n.key);
@@ -27,6 +30,10 @@
     if (sortColumn === 'label') {
       const dir = sortDirection === 'asc' ? 1 : -1;
       return a.label.localeCompare(b.label) * dir;
+    }
+    if (sortColumn === 'pValue') {
+      // For p-value, default sort is ascending (most significant first)
+      return sortDirection === 'asc' ? a.pValue - b.pValue : b.pValue - a.pValue;
     }
     const aVal = sortColumn === 'r' ? Math.abs(a[sortColumn]) : (a[sortColumn] || 0);
     const bVal = sortColumn === 'r' ? Math.abs(b[sortColumn]) : (b[sortColumn] || 0);
@@ -52,7 +59,7 @@
       });
 
       if (pairs.length < 3) {
-        return { nutrient, label: getNutrientName(nutrient), r: 0, r2: 0, n: pairs.length, sig: '' };
+        return { nutrient, label: getNutrientName(nutrient), r: 0, r2: 0, n: pairs.length, pValue: 1, sig: '' };
       }
 
       const n = pairs.length;
@@ -65,12 +72,24 @@
       const denom = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
       const r = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
       const r2 = r * r;
-      const absR = Math.abs(r);
-      const sig = absR > 0.7 ? '***' : absR > 0.4 ? '**' : absR > 0.2 ? '*' : '';
 
-      return { nutrient, label: getNutrientName(nutrient), r, r2, n, sig };
+      // t-test for significance: t = r * sqrt(n-2) / sqrt(1-r²)
+      const df = n - 2;
+      let pValue = 1;
+      if (df > 0 && Math.abs(r) < 1) {
+        const tStat = r * Math.sqrt(df) / Math.sqrt(1 - r2);
+        pValue = calculatePValue(tStat, df);
+      } else if (Math.abs(r) >= 1) {
+        pValue = 0;
+      }
+      const sig = pValue < 0.001 ? '***' : pValue < 0.01 ? '**' : pValue < 0.05 ? '*' : '';
+
+      return { nutrient, label: getNutrientName(nutrient), r, r2, n, pValue, sig };
     }).filter(c => c.n >= 3);
   }
+
+  // Check if any samples have irrigation data
+  $: hasIrrigationData = $irrigationZones.length > 0 && yieldSamples.some(s => s.irrigated === true);
 
   function getScatterData(sampleList, nutrient) {
     const points = [];
@@ -79,7 +98,7 @@
       if (isNaN(x)) return;
       Object.entries(s.yieldCorrelations).forEach(([yr, yc]) => {
         const y = yc.yield || yc.avgYield;
-        if (y > 0) points.push({ x, y, field: s.field, year: yr });
+        if (y > 0) points.push({ x, y, field: s.field, year: yr, irrigated: !!s.irrigated });
       });
     });
     return points;
@@ -99,18 +118,16 @@
     return sortDirection === 'asc' ? '\u25B2' : '\u25BC';
   }
 
-  function getCorrelationColor(r) {
-    const absR = Math.abs(r);
-    if (absR > 0.7) return 'text-green-600 font-bold';
-    if (absR > 0.4) return 'text-amber-600 font-semibold';
-    if (absR > 0.2) return 'text-slate-600';
+  function getCorrelationColor(r, pValue) {
+    if (pValue < 0.001) return 'text-green-600 font-bold';
+    if (pValue < 0.01) return 'text-amber-600 font-semibold';
+    if (pValue < 0.05) return 'text-slate-600';
     return 'text-slate-400';
   }
 
-  function getCorrelationBg(r) {
-    const absR = Math.abs(r);
-    if (absR > 0.7) return 'bg-green-50';
-    if (absR > 0.4) return 'bg-amber-50';
+  function getCorrelationBg(r, pValue) {
+    if (pValue < 0.001) return 'bg-green-50';
+    if (pValue < 0.01) return 'bg-amber-50';
     return '';
   }
 
@@ -124,7 +141,7 @@
   }
 
   // Redraw scatter plot when dependencies change
-  $: if (showScatter && canvasEl && scatterData.length > 0) {
+  $: if (showScatter && canvasEl && scatterData.length > 0 && colorByIrrigation !== undefined) {
     // Use requestAnimationFrame to ensure canvas is in the DOM
     requestAnimationFrame(() => drawScatter());
   }
@@ -184,12 +201,49 @@
     scatterData.forEach(p => {
       ctx.beginPath();
       ctx.arc(sx(p.x), sy(p.y), 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#3b82f680';
-      ctx.fill();
-      ctx.strokeStyle = '#3b82f6';
+      if (colorByIrrigation && p.irrigated) {
+        ctx.fillStyle = '#06b6d480'; // cyan for irrigated
+        ctx.fill();
+        ctx.strokeStyle = '#06b6d4';
+      } else if (colorByIrrigation && !p.irrigated) {
+        ctx.fillStyle = '#f9731680'; // orange for dryland
+        ctx.fill();
+        ctx.strokeStyle = '#f97316';
+      } else {
+        ctx.fillStyle = '#3b82f680';
+        ctx.fill();
+        ctx.strokeStyle = '#3b82f6';
+      }
       ctx.lineWidth = 1;
       ctx.stroke();
     });
+
+    // Legend when coloring by irrigation
+    if (colorByIrrigation) {
+      const legendX = cw - pad.right - 100;
+      const legendY = pad.top + 10;
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(legendX - 5, legendY - 5, 105, 35);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(legendX - 5, legendY - 5, 105, 35);
+      // Irrigated
+      ctx.beginPath();
+      ctx.arc(legendX + 6, legendY + 6, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+      ctx.fillStyle = '#334155';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('Irrigated', legendX + 15, legendY + 10);
+      // Dryland
+      ctx.beginPath();
+      ctx.arc(legendX + 6, legendY + 22, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#f97316';
+      ctx.fill();
+      ctx.fillStyle = '#334155';
+      ctx.fillText('Dryland', legendX + 15, legendY + 26);
+    }
 
     // Regression line
     const n = scatterData.length;
@@ -247,9 +301,9 @@
     <div class="flex gap-4 text-xs text-slate-500 flex-wrap">
       <span>{yieldSamples.length} sample{yieldSamples.length !== 1 ? 's' : ''} with yield data</span>
       <span>{correlations.length} nutrient{correlations.length !== 1 ? 's' : ''} analyzed</span>
-      {#if correlations.filter(c => Math.abs(c.r) > 0.4).length > 0}
+      {#if correlations.filter(c => c.pValue < 0.05).length > 0}
         <span class="text-amber-600 font-medium">
-          {correlations.filter(c => Math.abs(c.r) > 0.4).length} significant correlation{correlations.filter(c => Math.abs(c.r) > 0.4).length !== 1 ? 's' : ''}
+          {correlations.filter(c => c.pValue < 0.05).length} significant correlation{correlations.filter(c => c.pValue < 0.05).length !== 1 ? 's' : ''}
         </span>
       {/if}
     </div>
@@ -275,6 +329,10 @@
               onclick={() => sort('n')}>
               n {getSortIcon('n')}
             </th>
+            <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase cursor-pointer select-none"
+              onclick={() => sort('pValue')}>
+              p-value {getSortIcon('pValue')}
+            </th>
             <th class="text-center py-2 px-3 text-xs font-semibold text-slate-500 uppercase">
               Sig
             </th>
@@ -285,11 +343,11 @@
         </thead>
         <tbody>
           {#each sortedCorrelations as row}
-            <tr class="border-t border-slate-100 hover:bg-slate-50 transition-colors {getCorrelationBg(row.r)}">
+            <tr class="border-t border-slate-100 hover:bg-slate-50 transition-colors {getCorrelationBg(row.r, row.pValue)}">
               <td class="py-2 px-3 font-medium text-slate-800">
                 {row.label}
               </td>
-              <td class="text-right py-2 px-3 font-mono {getCorrelationColor(row.r)}">
+              <td class="text-right py-2 px-3 font-mono {getCorrelationColor(row.r, row.pValue)}">
                 {row.r >= 0 ? '+' : ''}{row.r.toFixed(3)}
               </td>
               <td class="text-right py-2 px-3 font-mono text-slate-600">
@@ -297,6 +355,9 @@
               </td>
               <td class="text-right py-2 px-3 text-slate-400">
                 {row.n}
+              </td>
+              <td class="text-right py-2 px-3 font-mono text-xs text-slate-500">
+                {row.pValue < 0.001 ? '<0.001' : row.pValue.toFixed(3)}
               </td>
               <td class="text-center py-2 px-3">
                 {#if row.sig}
@@ -322,18 +383,25 @@
 
     <!-- Significance legend -->
     <div class="flex gap-4 text-xs text-slate-400 pt-1">
-      <span><strong class="text-amber-500">***</strong> |r| &gt; 0.7 (strong)</span>
-      <span><strong class="text-amber-500">**</strong> |r| &gt; 0.4 (moderate)</span>
-      <span><strong class="text-amber-500">*</strong> |r| &gt; 0.2 (weak)</span>
+      <span><strong class="text-amber-500">***</strong> p &lt; 0.001</span>
+      <span><strong class="text-amber-500">**</strong> p &lt; 0.01</span>
+      <span><strong class="text-amber-500">*</strong> p &lt; 0.05</span>
     </div>
 
     <!-- Scatter plot toggle -->
-    <div class="flex items-center gap-3 pt-2">
+    <div class="flex items-center gap-3 pt-2 flex-wrap">
       <button onclick={() => { showScatter = !showScatter; }}
         class="px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors
           {showScatter ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
         {showScatter ? 'Hide' : 'Show'} Scatter Plot
       </button>
+      {#if showScatter && hasIrrigationData}
+        <button onclick={() => { colorByIrrigation = !colorByIrrigation; }}
+          class="px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors
+            {colorByIrrigation ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+          {colorByIrrigation ? 'Clear' : 'Color by'} Irrigation
+        </button>
+      {/if}
       {#if showScatter}
         <span class="text-xs text-slate-400">
           {selectedLabel} vs Yield &mdash; {scatterData.length} point{scatterData.length !== 1 ? 's' : ''}

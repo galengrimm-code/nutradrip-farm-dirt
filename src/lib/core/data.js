@@ -8,7 +8,7 @@ import { CLIENT_ID, API_KEY, getSheetId, SHEET_NAMES } from './config.js';
 
 // ========== INDEXEDDB ==========
 const DB_NAME = 'SoilAppDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export function openDB() {
   return new Promise((resolve, reject) => {
@@ -22,6 +22,7 @@ export function openDB() {
       if (!db.objectStoreNames.contains('boundaries')) db.createObjectStore('boundaries', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('yield')) db.createObjectStore('yield', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('inSeasonAnalysis')) db.createObjectStore('inSeasonAnalysis', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('irrigationZones')) db.createObjectStore('irrigationZones', { keyPath: 'id' });
     };
   });
 }
@@ -107,6 +108,32 @@ export async function saveInSeasonToIndexedDB(inSeasonData) {
     db.close();
     return true;
   } catch (e) { console.error('IndexedDB in-season save error:', e); return false; }
+}
+
+export async function loadIrrigationZonesFromIndexedDB() {
+  try {
+    const db = await openDB();
+    if (!db.objectStoreNames.contains('irrigationZones')) { db.close(); return []; }
+    const tx = db.transaction(['irrigationZones'], 'readonly');
+    const data = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('irrigationZones').get('all');
+      req.onsuccess = () => resolve(req.result?.data || []);
+      req.onerror = reject;
+    });
+    db.close();
+    return data;
+  } catch (e) { return []; }
+}
+
+export async function saveIrrigationZonesToIndexedDB(zones) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(['irrigationZones'], 'readwrite');
+    tx.objectStore('irrigationZones').put({ id: 'all', data: zones });
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+    db.close();
+    return true;
+  } catch (e) { console.error('IndexedDB irrigation zones save error:', e); return false; }
 }
 
 // ========== SHEETS API ==========

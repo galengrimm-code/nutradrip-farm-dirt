@@ -408,6 +408,65 @@ export function deduplicateSamples(newSamples, existingSamples) {
   return { unique, duplicateCount: newSamples.length - unique.length };
 }
 
+// ========== IRRIGATION ZONE TAGGING ==========
+
+/**
+ * Tag samples with irrigation zone membership.
+ * For each sample with lat/lon, checks if it falls inside any zone.
+ * Sets sample.irrigated = true/false and sample.irrigationZone = zoneName.
+ */
+export function tagSamplesWithIrrigation(samples, zones) {
+  if (!zones || zones.length === 0) {
+    samples.forEach(s => { s.irrigated = false; s.irrigationZone = null; });
+    return;
+  }
+
+  samples.forEach(s => {
+    if (!s.lat || !s.lon) {
+      s.irrigated = false;
+      s.irrigationZone = null;
+      return;
+    }
+
+    let matched = false;
+    for (const zone of zones) {
+      if (zone.type === 'circle' && zone.center && zone.radius) {
+        const dist = haversineMeters(s.lat, s.lon, zone.center[0], zone.center[1]);
+        if (dist <= zone.radius) {
+          s.irrigated = true;
+          s.irrigationZone = zone.name;
+          matched = true;
+          break;
+        }
+      } else if (zone.type === 'rectangle' && zone.bounds) {
+        const [[swLat, swLng], [neLat, neLng]] = zone.bounds;
+        if (s.lat >= swLat && s.lat <= neLat && s.lon >= swLng && s.lon <= neLng) {
+          s.irrigated = true;
+          s.irrigationZone = zone.name;
+          matched = true;
+          break;
+        }
+      }
+    }
+
+    if (!matched) {
+      s.irrigated = false;
+      s.irrigationZone = null;
+    }
+  });
+}
+
+/** Haversine distance in meters between two lat/lon points */
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ========== YEAR PARSING ==========
 
 /** Extract a 4-digit year from various date formats */

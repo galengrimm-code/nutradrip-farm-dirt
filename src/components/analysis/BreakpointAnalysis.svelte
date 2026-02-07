@@ -1,6 +1,6 @@
 <script>
   import { samples } from '$lib/stores/samples.js';
-  import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit } from '$lib/core/config.js';
+  import { ALL_NUTRIENTS, getNutrientName, getNutrientUnit, getNutrientDecimals } from '$lib/core/config.js';
   import { findBreakpointBinning, classifyByBreakpoint, mean } from '$lib/core/utils.js';
 
   export let selectedNutrient = 'Zn';
@@ -11,6 +11,12 @@
   let hasRun = false;
   let showImpact = false;
   let showFieldBreakdown = false;
+
+  // Run All state
+  let runAllResults = [];
+  let runAllRunning = false;
+  let hasRunAll = false;
+  let viewMode = 'single'; // 'single' | 'summary'
 
   // Get samples that have yield correlation data
   $: yieldSamples = $samples.filter(s =>
@@ -36,6 +42,15 @@
     const val = parseFloat(p[selectedNutrient]);
     return !isNaN(val) && val !== null && val !== undefined;
   });
+
+  // Data quality assessment
+  $: dataQuality = getDataQuality(dataPoints.length);
+
+  function getDataQuality(n) {
+    if (n < 20) return { level: 'insufficient', color: 'bg-red-50 border-red-200 text-red-800', label: 'Not enough data', icon: '\u26D4' };
+    if (n < 50) return { level: 'limited', color: 'bg-amber-50 border-amber-200 text-amber-800', label: 'Limited confidence', icon: '\u26A0\uFE0F' };
+    return { level: 'good', color: 'bg-green-50 border-green-200 text-green-800', label: 'Good', icon: '\u2705' };
+  }
 
   function buildDataPoints(sampleList) {
     const points = [];
@@ -103,8 +118,8 @@
     hasRun = true;
     result = null;
     classified = [];
+    viewMode = 'single';
 
-    // Use setTimeout to allow UI to update with "running" state
     setTimeout(() => {
       const minPenalty = getMinPenalty(majorityCrop);
       const bpResult = findBreakpointBinning(nutrientDataPoints, selectedNutrient, {
@@ -119,6 +134,57 @@
 
       running = false;
     }, 50);
+  }
+
+  function runAllNutrients() {
+    runAllRunning = true;
+    hasRunAll = true;
+    runAllResults = [];
+    viewMode = 'summary';
+
+    setTimeout(() => {
+      const minPenalty = getMinPenalty(majorityCrop);
+      const results = [];
+
+      for (const nutrient of availableNutrients) {
+        const points = dataPoints.filter(p => {
+          const val = parseFloat(p[nutrient.key]);
+          return !isNaN(val) && val !== null && val !== undefined;
+        });
+
+        if (points.length < 10) continue;
+
+        const bpResult = findBreakpointBinning(points, nutrient.key, {
+          MIN_PENALTY: minPenalty
+        });
+
+        if (bpResult.breakpoint !== null) {
+          results.push({
+            nutrientKey: nutrient.key,
+            name: nutrient.name,
+            unit: nutrient.unit,
+            breakpoint: bpResult.breakpoint,
+            meanBelow: bpResult.meanBelow,
+            meanAbove: bpResult.meanAbove,
+            penalty: bpResult.penalty,
+            stabilityPct: bpResult.stabilityPct,
+            confidence: bpResult.confidence,
+            nBelow: bpResult.nBelow,
+            nAbove: bpResult.nAbove,
+            n: bpResult.nBelow + bpResult.nAbove
+          });
+        }
+      }
+
+      runAllResults = results.sort((a, b) => b.penalty - a.penalty);
+      runAllRunning = false;
+    }, 50);
+  }
+
+  function drillIntoNutrient(nutrientKey) {
+    selectedNutrient = nutrientKey;
+    viewMode = 'single';
+    runBreakpointAnalysis();
   }
 
   // Classification helpers
@@ -206,6 +272,12 @@
     return Number(value).toFixed(decimals);
   }
 
+  function formatBpValue(value, nutrientKey) {
+    if (value === null || value === undefined) return '-';
+    const decimals = getNutrientDecimals(nutrientKey);
+    return Number(value).toFixed(decimals);
+  }
+
   function formatNutrient(value) {
     if (value === null || value === undefined || isNaN(value)) return '-';
     const def = ALL_NUTRIENTS.find(n => n.key === selectedNutrient);
@@ -229,6 +301,25 @@
   </div>
 
   <div class="p-4 space-y-4">
+    <!-- Data Quality Banner -->
+    {#if dataPoints.length > 0}
+      <div class="flex items-center gap-3 px-3 py-2 rounded-lg border {dataQuality.color}">
+        <span class="text-base flex-shrink-0">{dataQuality.icon}</span>
+        <div class="flex-1">
+          <span class="text-sm font-medium">{dataPoints.length} yield-linked data points</span>
+          <span class="text-xs opacity-75 ml-2">
+            {#if dataQuality.level === 'insufficient'}
+              &mdash; Need 20+ for reliable breakpoints
+            {:else if dataQuality.level === 'limited'}
+              &mdash; 50+ recommended for high confidence
+            {:else}
+              &mdash; Sufficient for analysis
+            {/if}
+          </span>
+        </div>
+      </div>
+    {/if}
+
     <!-- Description -->
     <p class="text-sm text-slate-500 leading-relaxed">
       Breakpoint analysis identifies the soil nutrient level below which crop yield drops significantly.
@@ -245,7 +336,7 @@
         </p>
       </div>
     {:else}
-      <!-- Nutrient selector + Run button -->
+      <!-- Nutrient selector + Run buttons -->
       <div class="flex flex-wrap gap-3 items-end">
         <div class="flex flex-col gap-1">
           <span class="text-xs font-semibold text-slate-500 uppercase">Nutrient</span>
@@ -263,7 +354,7 @@
 
         <button
           onclick={runBreakpointAnalysis}
-          disabled={running || nutrientDataPoints.length < 10}
+          disabled={running || runAllRunning || nutrientDataPoints.length < 10}
           class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-lg cursor-pointer transition-colors
             {running ? 'bg-blue-300 text-white cursor-wait' : 'bg-blue-600 text-white hover:bg-blue-700'}
             disabled:opacity-50 disabled:cursor-not-allowed">
@@ -273,18 +364,109 @@
             Find Breakpoint
           {/if}
         </button>
+
+        <button
+          onclick={runAllNutrients}
+          disabled={running || runAllRunning || availableNutrients.length < 2}
+          class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-lg cursor-pointer transition-colors
+            {runAllRunning ? 'bg-emerald-300 text-white cursor-wait' : 'bg-emerald-600 text-white hover:bg-emerald-700'}
+            disabled:opacity-50 disabled:cursor-not-allowed">
+          {#if runAllRunning}
+            Scanning...
+          {:else}
+            Run All Nutrients
+          {/if}
+        </button>
       </div>
 
-      <!-- Results section -->
-      {#if hasRun && !running}
+      <!-- Run All Summary Table -->
+      {#if viewMode === 'summary' && hasRunAll && !runAllRunning}
+        {#if runAllResults.length > 0}
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <div class="bg-emerald-50 px-4 py-3 border-b border-slate-200">
+              <h4 class="text-sm font-bold text-slate-800">
+                All Nutrient Breakpoints
+                <span class="text-xs font-normal text-slate-500 ml-1">{runAllResults.length} found, sorted by yield penalty</span>
+              </h4>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm border-collapse">
+                <thead>
+                  <tr class="bg-slate-50">
+                    <th class="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Nutrient</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Breakpoint</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Yield Below</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Yield Above</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Penalty</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Stability</th>
+                    <th class="text-center py-2 px-3 text-xs font-semibold text-slate-500 uppercase">Confidence</th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold text-slate-500 uppercase">n</th>
+                    <th class="text-center py-2 px-3 text-xs font-semibold text-slate-500 uppercase"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each runAllResults as row}
+                    <tr class="border-t border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
+                      onclick={() => drillIntoNutrient(row.nutrientKey)}>
+                      <td class="py-2 px-3 font-medium text-slate-800">{row.name}</td>
+                      <td class="text-right py-2 px-3 font-mono text-slate-700">
+                        {formatBpValue(row.breakpoint, row.nutrientKey)}{row.unit ? ` ${row.unit}` : ''}
+                      </td>
+                      <td class="text-right py-2 px-3 font-mono text-red-600">{formatYield(row.meanBelow)}</td>
+                      <td class="text-right py-2 px-3 font-mono text-green-600">{formatYield(row.meanAbove)}</td>
+                      <td class="text-right py-2 px-3 font-mono font-bold text-red-700">+{row.penalty.toFixed(1)}</td>
+                      <td class="text-right py-2 px-3 font-mono text-slate-600">{row.stabilityPct.toFixed(0)}%</td>
+                      <td class="text-center py-2 px-3">
+                        <span class="px-2 py-0.5 text-xs font-bold rounded-full {getConfidenceColor(row.confidence)}">
+                          {row.confidence}
+                        </span>
+                      </td>
+                      <td class="text-right py-2 px-3 text-slate-400">{row.n}</td>
+                      <td class="text-center py-2 px-3">
+                        <span class="text-blue-500 text-xs">{'\u25B6'}</span>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="px-4 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-400">
+              Click any row to see full breakpoint details for that nutrient
+            </div>
+          </div>
+        {:else}
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div class="flex gap-3">
+              <span class="text-amber-500 text-lg flex-shrink-0">{'\u26A0\uFE0F'}</span>
+              <div>
+                <p class="text-sm font-medium text-amber-800">No breakpoints detected for any nutrient.</p>
+                <p class="text-xs text-amber-600 mt-1">
+                  This may indicate insufficient data or no clear yield-limiting thresholds in your dataset.
+                </p>
+              </div>
+            </div>
+          </div>
+        {/if}
+      {/if}
+
+      <!-- Single Nutrient Results section -->
+      {#if viewMode === 'single' && hasRun && !running}
         {#if result && result.breakpoint !== null}
           <!-- Breakpoint found -->
           <div class="border border-slate-200 rounded-xl overflow-hidden">
             <!-- Result header -->
-            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200">
+            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <h4 class="text-sm font-bold text-slate-800">
                 {getNutrientName(selectedNutrient)} Breakpoint Result
               </h4>
+              {#if hasRunAll}
+                <button onclick={() => viewMode = 'summary'}
+                  class="text-xs text-blue-600 hover:text-blue-800 cursor-pointer font-medium">
+                  {'\u2190'} Back to Summary
+                </button>
+              {/if}
             </div>
 
             <div class="p-4 space-y-4">
@@ -383,7 +565,6 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <!-- Below Breakpoint -->
                         <tr class="border-t border-slate-100 bg-red-50">
                           <td class="py-2 px-3 font-medium text-red-800">Below Breakpoint</td>
                           <td class="text-right py-2 px-3 font-mono text-slate-700">{belowPoints.length}</td>
@@ -394,7 +575,6 @@
                             -{result.penalty.toFixed(1)} bu/ac
                           </td>
                         </tr>
-                        <!-- Near Breakpoint -->
                         <tr class="border-t border-slate-100 bg-amber-50">
                           <td class="py-2 px-3 font-medium text-amber-800">Near Breakpoint</td>
                           <td class="text-right py-2 px-3 font-mono text-slate-700">{nearPoints.length}</td>
@@ -403,7 +583,6 @@
                           <td class="text-right py-2 px-3 font-mono text-slate-700">{formatYield(nearAvgYield)}</td>
                           <td class="text-right py-2 px-3 font-mono text-slate-500">&mdash;</td>
                         </tr>
-                        <!-- Above Breakpoint -->
                         <tr class="border-t border-slate-100 bg-green-50">
                           <td class="py-2 px-3 font-medium text-green-800">Above Breakpoint</td>
                           <td class="text-right py-2 px-3 font-mono text-slate-700">{abovePoints.length}</td>
@@ -416,7 +595,6 @@
                     </table>
                   </div>
 
-                  <!-- Yield opportunity callout -->
                   {#if belowPoints.length > 0 && Number(yieldOpportunity) > 0}
                     <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <p class="text-sm text-blue-800">
@@ -493,6 +671,12 @@
                     {result.error}
                   {/if}
                 </p>
+                {#if hasRunAll}
+                  <button onclick={() => viewMode = 'summary'}
+                    class="mt-2 text-xs text-blue-600 hover:text-blue-800 cursor-pointer font-medium">
+                    {'\u2190'} Back to Summary
+                  </button>
+                {/if}
               </div>
             </div>
           </div>

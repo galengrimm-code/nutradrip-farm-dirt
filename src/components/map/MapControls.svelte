@@ -8,6 +8,9 @@
 
   export let onaddsite = () => {};
   export let onprintlabels = () => {};
+  export let ondrawzone = (type) => {};
+
+  let showZoneMenu = false;
 
   const STABILITY_NUTRIENTS = ['pH', 'P', 'K', 'OM', 'CEC', 'Ca_sat', 'Mg_sat', 'Zn', 'S'];
 
@@ -165,6 +168,33 @@
   <div class="flex-1"></div>
 
   <!-- Add Site + Print Labels (desktop only, when signed in) -->
+  <!-- Draw Zone button (always visible) -->
+  <div class="flex items-end gap-2 relative">
+    <div class="relative">
+      <button
+        onclick={() => showZoneMenu = !showZoneMenu}
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-300 cursor-pointer transition-colors"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"/>
+        </svg>
+        Draw Zone
+      </button>
+      {#if showZoneMenu}
+        <div class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[140px] z-50">
+          <button onclick={() => { ondrawzone('circle'); showZoneMenu = false; }}
+            class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+            Circle
+          </button>
+          <button onclick={() => { ondrawzone('rectangle'); showZoneMenu = false; }}
+            class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer">
+            Rectangle
+          </button>
+        </div>
+      {/if}
+    </div>
+  </div>
+
   {#if $isSignedIn}
     <div class="flex items-end gap-2">
       <button

@@ -7,10 +7,12 @@ import { isSignedIn, userName, isLoading, isDemoMode, showToast } from '$lib/sto
 import { samples } from '$lib/stores/samples.js';
 import { boundaries } from '$lib/stores/boundaries.js';
 import { soilSettings } from '$lib/stores/settings.js';
+import { irrigationZones } from '$lib/stores/irrigationZones.js';
 import {
   SheetsAPI,
   loadFromIndexedDB,
   loadFieldBoundaries,
+  loadIrrigationZonesFromIndexedDB,
   migrateDataIfNeeded,
   needsMigration
 } from './data.js';
@@ -58,6 +60,15 @@ async function loadCachedData() {
       console.log(`[Init] Loaded ${Object.keys(localBoundaries).length} boundaries from localStorage`);
     }
   }
+
+  // Load irrigation zones from IndexedDB
+  try {
+    const zones = await loadIrrigationZonesFromIndexedDB();
+    if (zones && zones.length > 0) {
+      irrigationZones.set(zones);
+      console.log(`[Init] Loaded ${zones.length} irrigation zones from IndexedDB`);
+    }
+  } catch (e) { /* ignore */ }
 
   // Load soil settings from localStorage
   try {

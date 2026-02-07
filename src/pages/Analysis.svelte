@@ -6,6 +6,7 @@
   import YieldCorrelation from '../components/analysis/YieldCorrelation.svelte';
   import YieldBuckets from '../components/analysis/YieldBuckets.svelte';
   import BreakpointAnalysis from '../components/analysis/BreakpointAnalysis.svelte';
+  import MultivariateRegression from '../components/analysis/MultivariateRegression.svelte';
   import SpatialChange from '../components/analysis/SpatialChange.svelte';
   import InSeasonViewer from '../components/analysis/InSeasonViewer.svelte';
   import EmptyState from '../components/shared/EmptyState.svelte';
@@ -31,6 +32,7 @@
     { id: 'correlations', label: 'Correlations' },
     { id: 'buckets', label: 'Yield by Level' },
     { id: 'breakpoint', label: 'Breakpoint' },
+    { id: 'mvr', label: 'MVR' },
   ];
 </script>
 
@@ -78,6 +80,8 @@
           <YieldBuckets />
         {:else if yieldSubTab === 'breakpoint'}
           <BreakpointAnalysis {selectedNutrient} />
+        {:else if yieldSubTab === 'mvr'}
+          <MultivariateRegression />
         {/if}
       {:else if activeTab === 'spatial'}
         <SpatialChange {selectedField} {selectedNutrient} />

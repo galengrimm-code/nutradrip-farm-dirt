@@ -10,6 +10,7 @@
   <MapControls
     onaddsite={() => mapView?.triggerAddSite()}
     onprintlabels={() => mapView?.triggerPrintLabels()}
+    ondrawzone={(type) => mapView?.startDrawZone(type)}
   />
 
   <!-- Map fills remaining space -->

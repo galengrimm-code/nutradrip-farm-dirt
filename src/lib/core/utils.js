@@ -715,6 +715,186 @@ export function invertMatrix(matrix) {
   return aug.map(row => row.slice(n));
 }
 
+// ========== MATRIX OPERATIONS & STATISTICS ==========
+
+export function matrixMultiply(A, B) {
+  const rowsA = A.length, colsA = A[0].length, colsB = B[0].length;
+  const result = Array.from({ length: rowsA }, () => new Array(colsB).fill(0));
+  for (let i = 0; i < rowsA; i++) {
+    for (let j = 0; j < colsB; j++) {
+      for (let k = 0; k < colsA; k++) {
+        result[i][j] += A[i][k] * B[k][j];
+      }
+    }
+  }
+  return result;
+}
+
+export function matrixTranspose(A) {
+  const rows = A.length, cols = A[0].length;
+  const result = Array.from({ length: cols }, () => new Array(rows));
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      result[j][i] = A[i][j];
+    }
+  }
+  return result;
+}
+
+export function matrixInverseGauss(A) {
+  const n = A.length;
+  // Build augmented matrix [A | I]
+  const aug = A.map((row, i) => {
+    const r = [...row];
+    for (let j = 0; j < n; j++) r.push(i === j ? 1 : 0);
+    return r;
+  });
+  // Gaussian elimination with partial pivoting
+  for (let i = 0; i < n; i++) {
+    let maxRow = i;
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) maxRow = k;
+    }
+    [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+    if (Math.abs(aug[i][i]) < 1e-12) return null; // singular
+    const scale = aug[i][i];
+    for (let j = 0; j < 2 * n; j++) aug[i][j] /= scale;
+    for (let k = 0; k < n; k++) {
+      if (k !== i) {
+        const factor = aug[k][i];
+        for (let j = 0; j < 2 * n; j++) aug[k][j] -= factor * aug[i][j];
+      }
+    }
+  }
+  return aug.map(row => row.slice(n));
+}
+
+/**
+ * Approximate two-tailed p-value from t-statistic and degrees of freedom.
+ * Uses the regularized incomplete beta function approximation.
+ */
+export function calculatePValue(tStat, df) {
+  if (df <= 0 || !isFinite(tStat)) return 1;
+  const t2 = tStat * tStat;
+  const x = df / (df + t2);
+
+  // Regularized incomplete beta function via continued fraction (Lentz's method)
+  function betaIncomplete(a, b, x) {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    const lnBeta = lnGamma(a) + lnGamma(b) - lnGamma(a + b);
+    const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a;
+    // Lentz's continued fraction
+    let f = 1, c = 1, d = 1 - (a + b) * x / (a + 1);
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1 / d;
+    f = d;
+    for (let i = 1; i <= 200; i++) {
+      const m = i;
+      // Even step
+      let numerator = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+      d = 1 + numerator * d;
+      if (Math.abs(d) < 1e-30) d = 1e-30;
+      c = 1 + numerator / c;
+      if (Math.abs(c) < 1e-30) c = 1e-30;
+      d = 1 / d;
+      f *= c * d;
+      // Odd step
+      numerator = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+      d = 1 + numerator * d;
+      if (Math.abs(d) < 1e-30) d = 1e-30;
+      c = 1 + numerator / c;
+      if (Math.abs(c) < 1e-30) c = 1e-30;
+      d = 1 / d;
+      const delta = c * d;
+      f *= delta;
+      if (Math.abs(delta - 1) < 1e-10) break;
+    }
+    return front * f;
+  }
+
+  function lnGamma(z) {
+    // Lanczos approximation
+    const g = 7;
+    const coef = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if (z < 0.5) {
+      return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z);
+    }
+    z -= 1;
+    let x = coef[0];
+    for (let i = 1; i < g + 2; i++) x += coef[i] / (z + i);
+    const t = z + g + 0.5;
+    return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+  }
+
+  // I_x(a, b) where a = df/2, b = 0.5
+  const p = betaIncomplete(df / 2, 0.5, x);
+  return Math.max(0, Math.min(1, p)); // two-tailed
+}
+
+/**
+ * Calculate Variance Inflation Factor for each predictor variable.
+ * X is the design matrix (n x k, WITHOUT intercept column).
+ * Returns array of VIF values, one per column of X.
+ */
+export function calculateVIF(X, nVars) {
+  const n = X.length;
+  const k = nVars || X[0].length;
+  const vifs = [];
+
+  for (let j = 0; j < k; j++) {
+    // Regress X_j on all other X columns
+    const y = X.map(row => row[j]);
+    const otherCols = [];
+    for (let i = 0; i < n; i++) {
+      const row = [1]; // intercept
+      for (let c = 0; c < k; c++) {
+        if (c !== j) row.push(X[i][c]);
+      }
+      otherCols.push(row);
+    }
+    // OLS: compute R² of this regression
+    const Xt = matrixTranspose(otherCols);
+    const XtX = matrixMultiply(Xt, otherCols.map(r => r.map(v => [v]).flat().map((v, i) => [v])[0] ? [r] : [r]).flat().length ? matrixMultiply(Xt, otherCols) : null);
+    // Simpler approach: compute R² directly
+    const meanY = y.reduce((a, b) => a + b, 0) / n;
+    const ssTotal = y.reduce((s, v) => s + (v - meanY) ** 2, 0);
+    if (ssTotal === 0) { vifs.push(1); continue; }
+
+    // Build X'X and X'y for the auxiliary regression
+    const m = otherCols[0].length;
+    const xtx = Array.from({ length: m }, () => new Array(m).fill(0));
+    const xty = new Array(m).fill(0);
+    for (let i = 0; i < n; i++) {
+      for (let a = 0; a < m; a++) {
+        xty[a] += otherCols[i][a] * y[i];
+        for (let b = 0; b < m; b++) {
+          xtx[a][b] += otherCols[i][a] * otherCols[i][b];
+        }
+      }
+    }
+    const inv = matrixInverseGauss(xtx);
+    if (!inv) { vifs.push(Infinity); continue; }
+    const beta = new Array(m).fill(0);
+    for (let a = 0; a < m; a++) {
+      for (let b = 0; b < m; b++) {
+        beta[a] += inv[a][b] * xty[b];
+      }
+    }
+    let ssResid = 0;
+    for (let i = 0; i < n; i++) {
+      let predicted = 0;
+      for (let a = 0; a < m; a++) predicted += otherCols[i][a] * beta[a];
+      ssResid += (y[i] - predicted) ** 2;
+    }
+    const r2 = 1 - ssResid / ssTotal;
+    vifs.push(r2 >= 1 ? Infinity : 1 / (1 - r2));
+  }
+  return vifs;
+}
+
 export function runHingeMVR(points, config) {
   const { primaryNutrientKey, breakpoint, covariates = [] } = config;
   if (breakpoint === null || breakpoint === undefined) return { error: 'No breakpoint provided', r2: null };
